@@ -1,0 +1,13 @@
+{
+  "name": "stage7-dashboard",
+  "steps": [
+    {"action":"fill","label":"Usuário","valueFromEnv":"ARTISYS_QA_USERNAME","name":"fill-user"},
+    {"action":"fill","label":"Senha","valueFromEnv":"ARTISYS_QA_PASSWORD","name":"fill-password"},
+    {"action":"click","role":"button","name":"Entrar"},
+    {"action":"expectVisible","text":"Visão Geral","name":"dashboard-title"},
+    {"action":"expectVisible","selector":"#globalSearch","name":"global-search"},
+    {"action":"expectVisible","text":"Ordens por status","name":"orders-pipeline"},
+    {"action":"screenshot","name":"stage7-dashboard","fullPage":true},
+    {"action":"visualSnapshot","snapshot":"stage7-dashboard","fullPage":true,"baselineDir":"qa/visual-baselines","artifactDir":"qa-artifacts/visual"}
+  ]
+}
