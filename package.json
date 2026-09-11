@@ -14,6 +14,7 @@
     "test:e2e": "node --test tests/e2e.test.js",
     "lint": "node scripts/lint.mjs",
     "build": "node scripts/build.mjs",
+    "ci": "npm run lint && npm test && npm run build && npm run test:e2e",
     "db:migrate": "node src/migrate.js",
     "db:seed": "node src/seed.js",
     "desktop:dist": "powershell -ExecutionPolicy Bypass -File scripts/build-electron.ps1"

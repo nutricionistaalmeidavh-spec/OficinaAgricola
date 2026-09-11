@@ -23,14 +23,8 @@ jobs:
           cache: npm
       - name: Install
         run: npm ci
-      - name: Lint
-        run: npm run lint
-      - name: Test
-        run: npm test
-      - name: Build
-        run: npm run build
-      - name: Critical E2E
-        run: npm run test:e2e
+      - name: Quality gate
+        run: npm run ci
 
   artisys-qa:
     runs-on: ubuntu-latest
@@ -48,7 +42,7 @@ jobs:
           node-version: 22.16.0
           cache: npm
       - name: Run ArtiSys QA shell
-        uses: nutricionistaalmeidavh-spec/utilidades/.github/actions/artisys-qa@7702e351b5c1fc2eff2fd85be5084046f36ea5b3
+        uses: nutricionistaalmeidavh-spec/utilidades/.github/actions/artisys-qa@245ca2cef8678813eee83353beae91f6ad263c56
         with:
           config: qa/artisys-qa.config.json
           mode: run
