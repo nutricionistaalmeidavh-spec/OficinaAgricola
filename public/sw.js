@@ -1,5 +1,5 @@
-const CACHE_NAME = 'oficina-agro-shell-v1';
-const SHELL = ['/', '/index.html', '/styles.css', '/app-core.js', '/app-catalog.js', '/app-orders.js', '/app-operations.js', '/app-admin.js', '/pwa-register.js', '/manifest.webmanifest', '/icon.svg'];
+const CACHE_NAME = 'oficina-agro-shell-v2';
+const SHELL = ['/', '/index.html', '/styles.css', '/ui-stage7.css', '/app-core.js', '/app-catalog.js', '/app-orders.js', '/app-operations.js', '/app-stage7.js', '/app-admin.js', '/pwa-register.js', '/manifest.webmanifest', '/icon.svg'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));
