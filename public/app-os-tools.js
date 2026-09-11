@@ -4,10 +4,11 @@ openWorkOrder=async function(id){
   const os=await api(`/api/work-orders/${id}`);
   const host=$('#modalBody'); if(!host)return;
   const bar=document.createElement('div'); bar.className='detail-block'; bar.style.marginBottom='14px';
+  const canEdit=['ADMIN','ATENDIMENTO','TECNICO'].includes(state.user?.role);
   const canDuplicate=['ADMIN','ATENDIMENTO'].includes(state.user?.role);
-  bar.innerHTML=`<div class="card-head"><div><h3 style="margin:0">Ações da OS</h3><small class="muted">Correções ficam registradas no histórico</small></div><div class="action-row"><button class="btn sm primary" id="editFullOS">Editar OS</button>${canDuplicate?'<button class="btn sm" id="duplicateOS">Duplicar OS</button>':''}<button class="btn sm" id="historyOS">Histórico</button><button class="btn sm soft" id="pdfOS">Gerar PDF</button></div></div>`;
+  bar.innerHTML=`<div class="card-head"><div><h3 style="margin:0">Ações da OS</h3><small class="muted">Correções ficam registradas no histórico</small></div><div class="action-row">${canEdit?'<button class="btn sm primary" id="editFullOS">Editar OS</button>':''}${canDuplicate?'<button class="btn sm" id="duplicateOS">Duplicar OS</button>':''}<button class="btn sm" id="historyOS">Histórico</button><button class="btn sm soft" id="pdfOS">Gerar PDF</button></div></div>`;
   host.prepend(bar);
-  $('#editFullOS').onclick=()=>editFullWorkOrder(id);
+  if($('#editFullOS'))$('#editFullOS').onclick=()=>editFullWorkOrder(id);
   if($('#duplicateOS'))$('#duplicateOS').onclick=()=>duplicateWorkOrderUi(id);
   $('#historyOS').onclick=()=>showWorkOrderHistory(id);
   $('#pdfOS').onclick=()=>downloadWorkOrderPdf(id,os.os_number);
