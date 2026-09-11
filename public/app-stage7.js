@@ -100,7 +100,7 @@ async function runGlobalSearch(query){
   if(q.length<2){toast('Digite pelo menos 2 caracteres.',true);return}
   const [customers,machines,orders]=await Promise.all([api('/api/customers'),api('/api/machines'),api('/api/work-orders')]);
   const customerResults=customers.filter(item=>oaMatch(q,item.name,item.document,item.phone)).slice(0,6);
-  const machineResults=machines.filter(item=>oaMatch(q,item.brand,item.model,item.type,item.serial_number,item.identifier)).slice(0,6);
+  const machineResults=machines.filter(item=>oaMatch(q,item.brand,item.model,item.type,item.serial_number,item.internal_id)).slice(0,6);
   const orderResults=orders.filter(item=>oaMatch(q,item.os_number,item.customer_name,item.machine_brand,item.machine_model,item.problem_reported)).slice(0,8);
   const total=customerResults.length+machineResults.length+orderResults.length;
   const group=(title,items,render)=>items.length?`<section class="oa-search-group"><h3>${title}</h3>${items.map(render).join('')}</section>`:'';
@@ -108,7 +108,7 @@ async function runGlobalSearch(query){
   showModal(`Busca — ${q}`,total?`<div class="oa-search-results">
     ${group('Ordens de Serviço',orderResults,item=>`<div class="oa-search-result"><div><strong>OS #${item.os_number} · ${esc(item.customer_name)}</strong><small>${esc([item.machine_brand,item.machine_model].filter(Boolean).join(' '))}</small></div><button class="btn sm" data-search-os="${item.id}">Abrir</button></div>`)}
     ${group('Clientes',customerResults,item=>`<div class="oa-search-result"><div><strong>${esc(item.name)}</strong><small>${esc(item.document||item.phone||'')}</small></div><button class="btn sm" data-search-go="customers">Ver clientes</button></div>`)}
-    ${group('Máquinas',machineResults,item=>`<div class="oa-search-result"><div><strong>${esc([item.brand,item.model].filter(Boolean).join(' ')||item.type)}</strong><small>${esc(item.serial_number||item.identifier||'')}</small></div><button class="btn sm" data-search-go="machines">Ver máquinas</button></div>`)}
+    ${group('Máquinas',machineResults,item=>`<div class="oa-search-result"><div><strong>${esc([item.brand,item.model].filter(Boolean).join(' ')||item.type)}</strong><small>${esc(item.serial_number||item.internal_id||'')}</small></div><button class="btn sm" data-search-go="machines">Ver máquinas</button></div>`)}
   </div>`:'<div class="empty">Nenhum cliente, máquina ou OS encontrado.</div>');
 
   $$('[data-search-os]').forEach(button=>button.onclick=()=>{closeModal();openWorkOrder(button.dataset.searchOs)});
@@ -126,8 +126,6 @@ function bindGlobalSearch(){
     const tag=document.activeElement?.tagName;
     if(event.key==='/'&&!['INPUT','TEXTAREA','SELECT'].includes(tag)){event.preventDefault();input.focus()}
   });
-  const notice=$('#noticeBtn');
-  if(notice)notice.onclick=()=>toast('Notificações internas não fazem parte desta etapa.');
 }
 
 bindGlobalSearch();
