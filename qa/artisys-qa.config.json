@@ -3,17 +3,17 @@
   "systemId": "oficina-agro",
   "mode": "web",
   "defaultEnvironment": "local",
-  "defaultFlow": "stage7-shell",
+  "defaultFlow": "stage7-dashboard",
   "defaultViewport": "desktop",
   "capture": {
-    "video": false,
+    "video": true,
     "screenshotEachStep": true,
     "fps": 4
   },
   "environments": {
     "local": {
       "baseURL": "http://127.0.0.1:3333",
-      "startCommand": "npm --prefix .. run db:migrate && npm --prefix .. run db:seed && npm --prefix .. start",
+      "startCommand": "rm -rf .qa && node ../scripts/seed-qa-demo.mjs && npm --prefix .. start",
       "readyUrl": "http://127.0.0.1:3333/api/health",
       "readyTimeoutMs": 30000,
       "env": {

@@ -1,4 +1,4 @@
-name: ArtiSys QA · Integração 00-08
+name: ArtiSys QA · Demo + Release
 
 on:
   push:
@@ -27,6 +27,7 @@ jobs:
         run: npm run ci
 
   artisys-qa:
+    needs: core
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -41,19 +42,61 @@ jobs:
         with:
           node-version: 22.16.0
           cache: npm
-      - name: Run ArtiSys QA shell
+      - name: Run ArtiSys QA demo with video
         uses: nutricionistaalmeidavh-spec/utilidades/.github/actions/artisys-qa@245ca2cef8678813eee83353beae91f6ad263c56
         with:
           config: qa/artisys-qa.config.json
           mode: run
-          flow: stage7-shell
+          flow: stage7-dashboard
           viewport: ${{ matrix.viewport }}
           output: qa-artifacts-${{ matrix.viewport }}
-      - name: Upload QA evidence
+      - name: Upload QA video and evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: oficina-agro-00-08-${{ matrix.viewport }}-${{ github.run_number }}
+          name: oficina-agro-qa-${{ matrix.viewport }}-${{ github.run_number }}
           path: qa-artifacts-${{ matrix.viewport }}
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 7
+
+  windows-installer:
+    needs: [core, artisys-qa]
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Node 22.16
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Build application
+        run: npm run build
+      - name: Install Electron packager
+        shell: powershell
+        run: npm install --no-save --package-lock=false electron-builder@26.15.3
+      - name: Generate Windows x64 installer
+        shell: powershell
+        run: npx electron-builder --win nsis --x64
+      - name: Installer checksum
+        shell: powershell
+        run: |
+          $exe = Get-ChildItem '.\dist-electron\OficinaAgro-Setup-*-Windows-x64.exe' | Select-Object -First 1
+          if (-not $exe) { throw 'Instalador não encontrado.' }
+          $hash = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash
+          "FILE=$($exe.Name)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "SIZE=$($exe.Length)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "SHA256=$hash" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "$hash  $($exe.Name)" | Out-File -FilePath '.\dist-electron\SHA256.txt' -Encoding ascii
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: OficinaAgro-Windows-x64-${{ github.run_number }}
+          path: |
+            dist-electron/OficinaAgro-Setup-*-Windows-x64.exe
+            dist-electron/SHA256.txt
+          if-no-files-found: error
+          retention-days: 14
