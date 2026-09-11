@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   qa-demo:
+    if: ${{ !contains(github.event.head_commit.message, '[release-only]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -47,6 +48,7 @@ jobs:
 
   windows-installer:
     needs: qa-demo
+    if: ${{ always() && (needs.qa-demo.result == 'success' || contains(github.event.head_commit.message, '[release-only]')) }}
     runs-on: windows-2022
     timeout-minutes: 30
     steps:
@@ -66,7 +68,7 @@ jobs:
         run: npm install --no-save --package-lock=false electron-builder@26.15.3
       - name: Generate Windows x64 installer
         shell: powershell
-        run: npx electron-builder --win nsis --x64
+        run: npx electron-builder --win nsis --x64 --publish never
       - name: Installer checksum
         shell: powershell
         run: |
