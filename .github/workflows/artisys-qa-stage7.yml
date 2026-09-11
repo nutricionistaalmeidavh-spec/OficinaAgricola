@@ -1,0 +1,38 @@
+name: ArtiSys QA · Etapa 07
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'public/**'
+      - 'qa/**'
+      - 'tests/ui-stage7.test.js'
+      - '.github/workflows/artisys-qa-stage7.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  visual-shell:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout Oficina Agro
+        uses: actions/checkout@v4
+      - name: Run pinned ArtiSys QA shell flow
+        uses: nutricionistaalmeidavh-spec/utilidades/.github/actions/artisys-qa@7702e351b5c1fc2eff2fd85be5084046f36ea5b3
+        with:
+          config: qa/artisys-qa.config.json
+          mode: run
+          flow: stage7-shell
+          viewport: desktop
+          output: qa-artifacts
+      - name: Upload QA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oficina-agro-stage7-qa-${{ github.run_number }}
+          path: qa-artifacts
+          if-no-files-found: warn
+          retention-days: 7
