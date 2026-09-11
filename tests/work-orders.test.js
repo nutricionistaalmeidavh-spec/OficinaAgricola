@@ -33,7 +33,7 @@ test('records auditable status transitions and blocks invalid jumps',()=>{
   transitionWorkOrder(db,os.id,'DIAGNOSTICO',{changedBy:null});
   assert.throws(()=>transitionWorkOrder(db,os.id,'EM_SERVICO'),/Transição inválida/);
   const history=db.prepare('SELECT * FROM work_order_status_history WHERE work_order_id=? ORDER BY id').all(os.id);
-  assert.equal(history.length,2);
+  assert.equal(history.length,2); // creation + diagnosis
   assert.equal(history.at(-1).to_status,'DIAGNOSTICO');
   db.close();
 });
