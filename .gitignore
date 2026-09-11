@@ -4,3 +4,5 @@ data/*.sqlite*
 .env
 storage/uploads/*
 !storage/uploads/.gitkeep
+storage/audit/*
+storage/backups/*
