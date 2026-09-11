@@ -1,0 +1,10 @@
+{
+  "name": "ArtiSys Oficina Agrícola",
+  "short_name": "OficinaAgro",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f6f3",
+  "theme_color": "#07583b",
+  "lang": "pt-BR"
+}
