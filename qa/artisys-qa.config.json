@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "systemId": "oficina-agro",
+  "mode": "web",
+  "defaultEnvironment": "local",
+  "defaultFlow": "stage7-shell",
+  "defaultViewport": "desktop",
+  "capture": {
+    "video": false,
+    "screenshotEachStep": true,
+    "fps": 4
+  },
+  "environments": {
+    "local": {
+      "baseURL": "http://127.0.0.1:3333",
+      "startCommand": "npm --prefix .. run db:migrate && npm --prefix .. run db:seed && npm --prefix .. start",
+      "readyUrl": "http://127.0.0.1:3333/api/health",
+      "readyTimeoutMs": 30000,
+      "env": {
+        "HOST": "127.0.0.1",
+        "PORT": "3333",
+        "DATABASE_PATH": ".qa/oficina.sqlite",
+        "STORAGE_DIR": ".qa/uploads"
+      }
+    }
+  },
+  "flows": {
+    "stage7-shell": "flows/stage7-shell.json",
+    "stage7-dashboard": "flows/stage7-dashboard.json"
+  }
+}
