@@ -62,10 +62,12 @@ export function updateWorkOrder(db,id,input,{changedBy=null}={}){
     internal_notes:input.internalNotes===undefined?old.internal_notes:text(input.internalNotes)
   };
   const tracked=Object.keys(next); const t=nowIso();
+  const nextCustomerSnapshot=Number(customerId)===Number(old.customer_id)?old.snapshot_customer:customerSnapshot(customer);
+  const nextMachineSnapshot=Number(machineId)===Number(old.machine_id)?old.snapshot_machine:machineSnapshot(machine);
   return transaction(db,()=>{
     db.prepare(`UPDATE work_orders SET customer_id=?,machine_id=?,entered_at=?,problem_reported=?,diagnosis=?,technician_id=?,estimated_delivery=?,priority=?,internal_notes=?,snapshot_customer=?,snapshot_machine=?,updated_at=? WHERE id=?`).run(
       next.customer_id,next.machine_id,next.entered_at,next.problem_reported,next.diagnosis,next.technician_id,next.estimated_delivery,next.priority,next.internal_notes,
-      customerSnapshot(customer),machineSnapshot(machine),t,id);
+      nextCustomerSnapshot,nextMachineSnapshot,t,id);
     const insert=db.prepare('INSERT INTO work_order_change_history(work_order_id,field,old_value,new_value,changed_by,changed_at) VALUES(?,?,?,?,?,?)');
     for(const field of tracked){if(auditValue(old[field])!==auditValue(next[field]))insert.run(id,field,auditValue(old[field]),auditValue(next[field]),changedBy,t)}
     return getWorkOrder(db,id);
