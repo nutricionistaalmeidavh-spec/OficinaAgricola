@@ -6,3 +6,7 @@ storage/uploads/*
 !storage/uploads/.gitkeep
 storage/audit/*
 storage/backups/*
+.qa/
+qa-artifacts/
+qa-report/
+qa-results/
