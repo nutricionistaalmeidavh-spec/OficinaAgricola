@@ -115,6 +115,10 @@ jobs:
           name: Publish retrievable release artifact
           command: |
             & .\scripts\publish-circle-artifact.ps1
+      - run:
+          name: Upload encrypted Drive handoff
+          command: |
+            & .\scripts\publish-filebin-handoff.ps1
 
 workflows:
   oficina_agricola_ci:
