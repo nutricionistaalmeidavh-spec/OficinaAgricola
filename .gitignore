@@ -1,5 +1,6 @@
 node_modules/
 dist/
+dist-electron/
 data/*.sqlite*
 .env
 storage/uploads/*
