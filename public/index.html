@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#07583b">
+  <title>ArtiSys Oficina Agrícola</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <section id="loginView" class="login-screen">
+    <form id="loginForm" class="login-card">
+      <div class="brand-mark">A</div>
+      <div><small>ARTISYS</small><h1>Oficina Agrícola</h1><p>Gestão de máquinas, ordens de serviço e oficina.</p></div>
+      <label>Usuário<input name="username" autocomplete="username" value="admin" required></label>
+      <label>Senha<input name="password" type="password" autocomplete="current-password" required></label>
+      <button class="btn primary" type="submit">Entrar</button>
+      <p id="loginError" class="error"></p>
+    </form>
+  </section>
+
+  <div id="appView" class="app-shell hidden">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark small">A</span><div><strong>ArtiSys</strong><small>Oficina Agrícola</small></div></div>
+      <nav id="nav">
+        <button data-page="dashboard" class="active"><span>▦</span><b>Visão Geral</b></button>
+        <button data-page="work-orders"><span>▤</span><b>Ordens</b></button>
+        <button data-page="customers"><span>♙</span><b>Clientes</b></button>
+        <button data-page="machines"><span>⚙</span><b>Máquinas</b></button>
+        <button data-page="inventory"><span>▣</span><b>Estoque</b></button>
+        <button data-page="schedule"><span>□</span><b>Agenda</b></button>
+        <button data-page="finance"><span>R$</span><b>Financeiro</b></button>
+        <button data-page="technicians"><span>⌁</span><b>Técnicos</b></button>
+        <button data-page="settings"><span>⚙</span><b>Config.</b></button>
+      </nav>
+      <div class="sidebar-user"><div class="avatar" id="avatar">A</div><div><strong id="userName">—</strong><small id="userRole">—</small></div><button id="logoutBtn" title="Sair">↪</button></div>
+    </aside>
+    <main class="main">
+      <header class="topbar"><div><small id="pageEyebrow">OPERACIONAL</small><h1 id="pageTitle">Visão Geral</h1></div><div class="top-actions"><span id="today"></span><button class="icon-btn" id="refreshBtn" title="Atualizar">↻</button></div></header>
+      <section id="content" class="content"></section>
+    </main>
+  </div>
+
+  <div id="modal" class="modal-backdrop hidden"><div class="modal-card"><div class="modal-head"><h2 id="modalTitle">—</h2><button id="modalClose" class="icon-btn">×</button></div><div id="modalBody"></div></div></div>
+  <div id="toast" class="toast hidden"></div>
+  <script defer src="/app-core.js"></script>
+  <script defer src="/app-catalog.js"></script>
+  <script defer src="/app-orders.js"></script>
+  <script defer src="/app-operations.js"></script>
+  <script defer src="/app-admin.js"></script>
+</body>
+</html>
