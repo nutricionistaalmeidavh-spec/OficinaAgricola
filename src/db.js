@@ -85,6 +85,15 @@ export function migrate(db) {
       from_status TEXT, to_status TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '',
       changed_by INTEGER REFERENCES users(id), changed_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS work_order_change_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      work_order_id INTEGER NOT NULL REFERENCES work_orders(id),
+      field TEXT NOT NULL,
+      old_value TEXT,
+      new_value TEXT,
+      changed_by INTEGER REFERENCES users(id),
+      changed_at TEXT NOT NULL
+    );
 
     CREATE TABLE IF NOT EXISTS quotes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -181,6 +190,7 @@ export function migrate(db) {
 
     CREATE INDEX IF NOT EXISTS idx_work_orders_status ON work_orders(status);
     CREATE INDEX IF NOT EXISTS idx_work_orders_machine ON work_orders(machine_id);
+    CREATE INDEX IF NOT EXISTS idx_work_order_changes_os ON work_order_change_history(work_order_id);
     CREATE INDEX IF NOT EXISTS idx_inventory_part ON inventory_movements(part_id);
     CREATE INDEX IF NOT EXISTS idx_schedule_starts ON schedule_events(starts_at);
     CREATE INDEX IF NOT EXISTS idx_receipts_os ON receipts(work_order_id);
