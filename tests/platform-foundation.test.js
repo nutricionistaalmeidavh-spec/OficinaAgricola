@@ -77,7 +77,7 @@ test('configuração LAN usa 0.0.0.0 e lista IPv4 acessível', () => {
   assert.deepEqual(urls, ['http://192.168.0.50:4123']);
 });
 
-test('PWA mantém API fora do cache e registra shell', () => {
+test('PWA mantém API fora do cache e registra shell completo da Etapa 7', () => {
   const index = readFileSync('public/index.html', 'utf8');
   const manifest = JSON.parse(readFileSync('public/manifest.webmanifest', 'utf8'));
   const sw = readFileSync('public/sw.js', 'utf8');
@@ -87,4 +87,6 @@ test('PWA mantém API fora do cache e registra shell', () => {
   assert.ok(manifest.start_url);
   assert.match(sw, /pathname\.startsWith\('\/api\/'\)/);
   assert.match(sw, /networkResponse/);
+  assert.match(sw, /\/ui-stage7\.css/);
+  assert.match(sw, /\/app-stage7\.js/);
 });
