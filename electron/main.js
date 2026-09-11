@@ -1,9 +1,7 @@
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, dialog, shell } from 'electron';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { openDatabase } from '../dist/src/db.js';
-import { seed } from '../dist/src/seed.js';
-import { createAppServer } from '../dist/src/server.js';
+import { fileURLToPath } from 'node:url';
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) app.quit();
@@ -28,24 +26,36 @@ async function startLocalServer() {
 
   process.env.DATABASE_PATH = dbPath;
   process.env.STORAGE_DIR = storageDir;
-  process.env.HOST = '127.0.0.1';
+  process.env.HOST = '0.0.0.0';
+  process.env.PORT = '3333';
+
+  // Em builds Electron empacotados, process.argv[1] pode vir undefined.
+  // server.js usa esse argumento apenas para detectar execução direta;
+  // fornecemos um caminho válido antes do import para evitar ERR_INVALID_ARG_TYPE.
+  if (!process.argv[1]) process.argv[1] = fileURLToPath(import.meta.url);
+
+  const [{ openDatabase }, { seed }, { createAppServer }] = await Promise.all([
+    import('../dist/src/db.js'),
+    import('../dist/src/seed.js'),
+    import('../dist/src/server.js'),
+  ]);
 
   db = openDatabase(dbPath);
   seed(db);
   server = createAppServer({ db, storageDir });
 
+  const port = Number(process.env.PORT || 3333);
   await new Promise((resolve, reject) => {
     const onError = (error) => reject(error);
     server.once('error', onError);
-    server.listen(0, '127.0.0.1', () => {
+    server.listen(port, '0.0.0.0', () => {
       server.off('error', onError);
       resolve();
     });
   });
 
-  const address = server.address();
-  if (!address || typeof address === 'string') throw new Error('Falha ao iniciar servidor local');
-  serverUrl = `http://127.0.0.1:${address.port}`;
+  // A janela desktop usa loopback; tablets/celulares usam o IP LAN do PC na porta 3333.
+  serverUrl = `http://127.0.0.1:${port}`;
   return serverUrl;
 }
 
@@ -102,6 +112,7 @@ app.whenReady().then(async () => {
   });
 }).catch((error) => {
   console.error(error);
+  dialog.showErrorBox('Oficina Agro', `Falha ao iniciar o aplicativo:\n\n${error?.stack || error}`);
   app.quit();
 });
 
