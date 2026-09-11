@@ -1,0 +1,66 @@
+name: ArtiSys QA · Integração 00-08
+
+on:
+  push:
+    branches:
+      - qa/integracao-00-08-artisys
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Node 22.16
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Test
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Critical E2E
+        run: npm run test:e2e
+
+  artisys-qa:
+    needs: core
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        viewport: [desktop, mobile]
+    steps:
+      - name: Checkout Oficina Agro
+        uses: actions/checkout@v4
+      - name: Node 22.16
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+          cache: npm
+      - name: Run ArtiSys QA shell
+        uses: nutricionistaalmeidavh-spec/utilidades/.github/actions/artisys-qa@7702e351b5c1fc2eff2fd85be5084046f36ea5b3
+        with:
+          config: qa/artisys-qa.config.json
+          mode: run
+          flow: stage7-shell
+          viewport: ${{ matrix.viewport }}
+          output: qa-artifacts-${{ matrix.viewport }}
+      - name: Upload QA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oficina-agro-00-08-${{ matrix.viewport }}-${{ github.run_number }}
+          path: qa-artifacts-${{ matrix.viewport }}
+          if-no-files-found: warn
+          retention-days: 7
