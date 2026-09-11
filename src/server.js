@@ -7,7 +7,7 @@ import { login, logout, validateSession, createUser, hashPassword } from './auth
 import { createCustomer, listCustomers, updateCustomer, getCustomer, createMachine, listMachines, updateMachine, getMachine, createTechnician, listTechnicians, updateTechnician } from './services/catalog.js';
 import { createWorkOrder, listWorkOrders, getWorkOrder, updateWorkOrder, transitionWorkOrder, getWorkOrderHistory, machineHistory } from './services/work-orders.js';
 import { saveQuote, getQuote, submitQuote, approveQuote, rejectQuote } from './services/quotes.js';
-import { renderDocument } from './documents.js';
+import { renderDocument, renderPdfDocument } from './documents.js';
 import { createPart, listParts, updatePart, addInventoryMovement, consumePart, reverseWorkOrderPart, listWorkOrderParts, lowStockParts } from './services/inventory.js';
 import { createScheduleEvent, listSchedule, updateScheduleEvent, createChecklistTemplate, getChecklistTemplate, listChecklistTemplates, createWorkOrderChecklist, listWorkOrderChecklists, saveAttachment, listAttachments } from './services/operations.js';
 import { addReceipt, reverseReceipt, listReceipts, getPaymentSummary, createExpense, updateExpense, listExpenses, financeSummary } from './services/finance.js';
@@ -72,7 +72,7 @@ function createRouter({db,storageDir}){
   add('GET','/api/work-orders',ROLE_ALL,({url})=>listWorkOrders(db,{status:url.searchParams.get('status')||undefined,search:url.searchParams.get('search')||''}));
   add('POST','/api/work-orders',ROLE_OFFICE,({body,user})=>createWorkOrder(db,{...body,createdBy:user.id}));
   add('GET','/api/work-orders/:id',ROLE_ALL,({params})=>getWorkOrder(db,int(params.id)));
-  add('PATCH','/api/work-orders/:id',ROLE_TECH,({params,body})=>updateWorkOrder(db,int(params.id),body));
+  add('PATCH','/api/work-orders/:id',ROLE_TECH,({params,body,user})=>updateWorkOrder(db,int(params.id),body,{changedBy:user.id}));
   add('POST','/api/work-orders/:id/status',ROLE_TECH,({params,body,user})=>transitionWorkOrder(db,int(params.id),body.status,{reason:body.reason,changedBy:user.id}));
   add('GET','/api/work-orders/:id/history',ROLE_ALL,({params})=>getWorkOrderHistory(db,int(params.id)));
 
@@ -81,6 +81,7 @@ function createRouter({db,storageDir}){
   add('POST','/api/work-orders/:id/quote/submit',ROLE_OFFICE,({params})=>submitQuote(db,int(params.id)));
   add('POST','/api/work-orders/:id/quote/approve',ROLE_OFFICE,({params})=>approveQuote(db,int(params.id)));
   add('POST','/api/work-orders/:id/quote/reject',ROLE_OFFICE,({params,body})=>rejectQuote(db,int(params.id),body.reason));
+  add('GET','/api/work-orders/:id/documents/:kind/pdf',ROLE_ALL,({params})=>{const id=int(params.id),os=getWorkOrder(db,id);return {__binary:renderPdfDocument(db,id,params.kind),mimeType:'application/pdf',filename:`OS-${os.os_number}.pdf`}});
   add('GET','/api/work-orders/:id/documents/:kind',ROLE_ALL,({params})=>({__html:renderDocument(db,int(params.id),params.kind)}));
 
   add('GET','/api/parts',ROLE_ALL,({url})=>listParts(db,{includeInactive:url.searchParams.get('includeInactive')==='1',search:url.searchParams.get('search')||''}));
