@@ -33,7 +33,7 @@ async function editFullWorkOrder(id){
     <button class="btn primary" type="submit">Salvar alterações</button>
   </form>`,async fd=>{
     const o=formObj(fd); const body={customerId:Number(o.customerId),machineId:Number(o.machineId),problemReported:o.problemReported,diagnosis:o.diagnosis,technicianId:o.technicianId?Number(o.technicianId):null,priority:o.priority,enteredAt:new Date(o.enteredAt).toISOString(),estimatedDelivery:o.estimatedDelivery?new Date(o.estimatedDelivery).toISOString():null,internalNotes:o.internalNotes};
-    await api(`/api/work-orders/${id}`,{method:'PATCH',body}); toast('OS atualizada e alteração registrada'); await openWorkOrder(id);
+    await api(`/api/work-orders/${id}`,{method:'PATCH',body}); toast('OS atualizada e alteração registrada'); await renderWorkOrders();
   });
   $('#editOsCustomer').onchange=e=>{const opts=machineOptions(machines,e.target.value,null);$('#editOsMachine').innerHTML=opts||'<option value="">Nenhuma máquina deste cliente</option>'};
 }
