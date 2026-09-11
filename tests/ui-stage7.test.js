@@ -20,6 +20,8 @@ test('etapa 07 visual layer stays isolated from business rules', async () => {
   assert.match(css, /@media\(max-width:840px\)/);
   assert.match(js, /function renderReports/);
   assert.match(js, /function bindGlobalSearch/);
+  assert.match(js, /item\.internal_id/);
+  assert.doesNotMatch(js, /item\.identifier/);
   assert.doesNotMatch(js, /INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM/i);
 });
 
