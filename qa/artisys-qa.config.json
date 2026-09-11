@@ -3,7 +3,7 @@
   "systemId": "oficina-agro",
   "mode": "web",
   "defaultEnvironment": "local",
-  "defaultFlow": "stage7-dashboard",
+  "defaultFlow": "stage7-shell",
   "defaultViewport": "desktop",
   "capture": {
     "video": true,
