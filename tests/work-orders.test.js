@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { openDatabase, migrate } from '../src/db.js';
 import { createCustomer, createMachine, createTechnician } from '../src/services/catalog.js';
-import { createWorkOrder, transitionWorkOrder, updateWorkOrder, getWorkOrder, machineHistory } from '../src/services/work-orders.js';
+import { createWorkOrder, transitionWorkOrder, updateWorkOrder, getWorkOrder, getWorkOrderHistory, machineHistory } from '../src/services/work-orders.js';
 
 function setup(){
   const db=openDatabase(':memory:'); migrate(db);
@@ -35,6 +35,43 @@ test('records auditable status transitions and blocks invalid jumps',()=>{
   const history=db.prepare('SELECT * FROM work_order_status_history WHERE work_order_id=? ORDER BY id').all(os.id);
   assert.equal(history.length,2); // creation + diagnosis
   assert.equal(history.at(-1).to_status,'DIAGNOSTICO');
+  db.close();
+});
+
+test('allows correcting customer and machine and records field-level audit history',()=>{
+  const {db,c,m,t}=setup();
+  const os=createWorkOrder(db,{customerId:c.id,machineId:m.id,problemReported:'Falha original',createdBy:7});
+  const c2=createCustomer(db,{name:'Fazenda Horizonte'});
+  const m2=createMachine(db,{customerId:c2.id,type:'Colheitadeira',brand:'New Holland',model:'CR 7.90'});
+
+  const updated=updateWorkOrder(db,os.id,{
+    customerId:c2.id,
+    machineId:m2.id,
+    problemReported:'Falha corrigida',
+    technicianId:t.id,
+    priority:'ALTA'
+  },{changedBy:7});
+
+  assert.equal(updated.customer_id,c2.id);
+  assert.equal(updated.machine_id,m2.id);
+  assert.equal(updated.problem_reported,'Falha corrigida');
+  assert.match(updated.snapshot_customer,/Fazenda Horizonte/);
+  assert.match(updated.snapshot_machine,/CR 7.90/);
+
+  const history=getWorkOrderHistory(db,os.id);
+  const changes=history.filter(h=>h.type==='FIELD_CHANGE');
+  assert.ok(changes.some(h=>h.field==='customer_id'&&h.old_value===String(c.id)&&h.new_value===String(c2.id)));
+  assert.ok(changes.some(h=>h.field==='machine_id'&&h.old_value===String(m.id)&&h.new_value===String(m2.id)));
+  assert.ok(changes.some(h=>h.field==='problem_reported'&&h.old_value==='Falha original'&&h.new_value==='Falha corrigida'));
+  assert.ok(changes.every(h=>h.changed_by===7));
+  db.close();
+});
+
+test('rejects changing customer to one that does not own the selected machine',()=>{
+  const {db,c,m}=setup();
+  const os=createWorkOrder(db,{customerId:c.id,machineId:m.id,problemReported:'Falha'});
+  const other=createCustomer(db,{name:'Outro'});
+  assert.throws(()=>updateWorkOrder(db,os.id,{customerId:other.id},{changedBy:1}),/não pertence/);
   db.close();
 });
 
