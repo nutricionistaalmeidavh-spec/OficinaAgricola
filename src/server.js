@@ -128,7 +128,7 @@ export function createAppServer({db=openDatabase(),storageDir=process.env.STORAG
     try{
       if(route){let user=null,token=tokenFrom(req);if(!route.publicRoute){user=validateSession(db,token);roleGuard(user,route.roles)}const body=['POST','PUT','PATCH'].includes(req.method||'')?await readJson(req):{};
         const data=await route.handler({req,res,url,params:route.params,body,user,token,db}); if(res.writableEnded)return;
-        if(data&&Object.hasOwn(data,'__html'))return html(res,200,data.__html); if(data&&Object.hasOwn(data,'__binary')){res.writeHead(200,{'Content-Type':data.mimeType||'application/octet-stream','Content-Disposition':`inline; filename="${String(data.filename||'anexo').replace(/["\r\n]/g,'')}"`,'Cache-Control':'private, max-age=300'});return res.end(data.__binary)} return json(res,200,data??{ok:true});
+        if(data&&Object.hasOwn(data,'__html'))return html(res,200,data.__html); if(data&&Object.hasOwn(data,'__binary')){res.writeHead(200,{'Content-Type':data.mimeType||'application/octet-stream','Content-Disposition':`inline; filename=\"${String(data.filename||'anexo').replace(/[\"\r\n]/g,'')}\"`,'Cache-Control':'private, max-age=300'});return res.end(data.__binary)} return json(res,200,data??{ok:true});
       }
       if((req.method==='GET'||req.method==='HEAD')&&serveStatic(req,res,url.pathname))return;
       if(req.method==='GET'&&!url.pathname.startsWith('/api/')){if(serveStatic(req,res,'/'))return}
