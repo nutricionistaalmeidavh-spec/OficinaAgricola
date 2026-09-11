@@ -36,4 +36,6 @@ Write-Host "Arquivo: $($exe.FullName)"
 Write-Host "Tamanho: $([math]::Round($exe.Length / 1MB, 2)) MB"
 Write-Host "SHA256: $hash"
 
-explorer.exe $exe.DirectoryName
+if (-not $env:CI) {
+  explorer.exe $exe.DirectoryName
+}

@@ -81,17 +81,67 @@ jobs:
           path: qa-artifacts-<< parameters.viewport >>
           destination: artisys-qa/<< parameters.viewport >>
 
+  desktop_release:
+    resource_class: windows.medium
+    machine:
+      image: windows-server-2022-gui:current
+      shell: powershell.exe -ExecutionPolicy Bypass
+    steps:
+      - checkout
+      - add_ssh_keys
+      - run:
+          name: Ensure Node 22.16+
+          command: |
+            $required = [Version]"22.16.0"
+            try { $current = [Version](node -p "process.versions.node") } catch { $current = [Version]"0.0.0" }
+            if ($current -lt $required) {
+              choco install nodejs --version=22.16.0 -y --force --no-progress
+              Import-Module "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
+              Update-SessionEnvironment
+            }
+            node --version
+            npm --version
+            $current = [Version](node -p "process.versions.node")
+            if ($current -lt $required) { throw "Node 22.16.0 ou superior é obrigatório." }
+      - run:
+          name: Build Windows x64 installer
+          command: |
+            $env:CI = "true"
+            & .\scripts\build-electron.ps1
+      - store_artifacts:
+          path: dist-electron
+          destination: desktop-release
+      - run:
+          name: Publish retrievable release artifact
+          command: |
+            & .\scripts\publish-circle-artifact.ps1
+
 workflows:
   oficina_agricola_ci:
     jobs:
-      - quality
+      - quality:
+          filters:
+            branches:
+              ignore: circle-artifact
       - qa:
           name: qa-desktop
           viewport: desktop
           requires:
             - quality
+          filters:
+            branches:
+              ignore: circle-artifact
       - qa:
           name: qa-mobile
           viewport: mobile
           requires:
             - quality
+          filters:
+            branches:
+              ignore: circle-artifact
+      - desktop_release:
+          requires:
+            - quality
+          filters:
+            branches:
+              only: main
