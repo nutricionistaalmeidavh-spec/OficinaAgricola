@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "electron/main.js",
   "engines": {
     "node": ">=22.16.0"
   },
@@ -14,6 +15,7 @@
     "lint": "node scripts/lint.mjs",
     "build": "node scripts/build.mjs",
     "db:migrate": "node src/migrate.js",
-    "db:seed": "node src/seed.js"
+    "db:seed": "node src/seed.js",
+    "desktop:dist": "powershell -ExecutionPolicy Bypass -File scripts/build-electron.ps1"
   }
 }
