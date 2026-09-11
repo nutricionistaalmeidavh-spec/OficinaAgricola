@@ -1,0 +1,97 @@
+version: 2.1
+
+executors:
+  node_linux:
+    docker:
+      - image: cimg/node:22.16.0
+    resource_class: small
+    working_directory: ~/project
+
+commands:
+  install_consumer:
+    steps:
+      - restore_cache:
+          keys:
+            - oficina-npm-v1-{{ checksum "package-lock.json" }}
+            - oficina-npm-v1-
+      - run:
+          name: Install consumer dependencies
+          command: npm ci
+      - save_cache:
+          key: oficina-npm-v1-{{ checksum "package-lock.json" }}
+          paths:
+            - ~/.npm
+
+jobs:
+  quality:
+    executor: node_linux
+    steps:
+      - checkout
+      - install_consumer
+      - run:
+          name: Runtime versions
+          command: |
+            node --version
+            npm --version
+      - run:
+          name: Lint, tests, build and critical E2E
+          command: npm run ci
+
+  qa:
+    parameters:
+      viewport:
+        type: enum
+        enum: [desktop, mobile]
+        default: desktop
+    executor: node_linux
+    environment:
+      ARTISYS_QA_REF: "245ca2cef8678813eee83353beae91f6ad263c56"
+    steps:
+      - checkout
+      - add_ssh_keys
+      - install_consumer
+      - run:
+          name: Install QA system dependencies
+          command: |
+            sudo apt-get update -y
+            sudo apt-get install -y ffmpeg xvfb
+      - run:
+          name: Checkout pinned ArtiSys QA kit
+          command: |
+            rm -rf "$HOME/utilidades"
+            git clone git@github.com:nutricionistaalmeidavh-spec/utilidades.git "$HOME/utilidades"
+            git -C "$HOME/utilidades" checkout --detach "$ARTISYS_QA_REF"
+            test "$(git -C "$HOME/utilidades" rev-parse HEAD)" = "$ARTISYS_QA_REF"
+      - run:
+          name: Install ArtiSys QA 2.4.1
+          command: |
+            npm ci --prefix "$HOME/utilidades/modules/artisys-qa"
+            npx --prefix "$HOME/utilidades/modules/artisys-qa" playwright install --with-deps chromium
+      - run:
+          name: Run ArtiSys QA · << parameters.viewport >>
+          command: |
+            OUTPUT="$PWD/qa-artifacts-<< parameters.viewport >>"
+            xvfb-run -a node "$HOME/utilidades/modules/artisys-qa/src/cli.mjs" \
+              run \
+              --config "$PWD/qa/artisys-qa.config.json" \
+              --flow stage7-shell \
+              --viewport "<< parameters.viewport >>" \
+              --output "$OUTPUT"
+      - store_artifacts:
+          path: qa-artifacts-<< parameters.viewport >>
+          destination: artisys-qa/<< parameters.viewport >>
+
+workflows:
+  oficina_agricola_ci:
+    jobs:
+      - quality
+      - qa:
+          name: qa-desktop
+          viewport: desktop
+          requires:
+            - quality
+      - qa:
+          name: qa-mobile
+          viewport: mobile
+          requires:
+            - quality
