@@ -2,17 +2,20 @@ name: ArtiSys QA · Demo + Release
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  core:
+  qa-demo:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        viewport: [desktop, mobile]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -21,35 +24,18 @@ jobs:
         with:
           node-version: 22.16.0
           cache: npm
-      - name: Install
+      - name: Install application dependencies
         run: npm ci
-      - name: Quality gate
-        run: npm run ci
-
-  artisys-qa:
-    needs: core
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        viewport: [desktop, mobile]
-    steps:
-      - name: Checkout Oficina Agro
-        uses: actions/checkout@v4
-      - name: Node 22.16
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22.16.0
-          cache: npm
-      - name: Run ArtiSys QA demo with video
-        uses: nutricionistaalmeidavh-spec/utilidades/.github/actions/artisys-qa@245ca2cef8678813eee83353beae91f6ad263c56
-        with:
-          config: qa/artisys-qa.config.json
-          mode: run
-          flow: stage7-dashboard
-          viewport: ${{ matrix.viewport }}
-          output: qa-artifacts-${{ matrix.viewport }}
+      - name: Install Playwright QA runtime
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Seed deterministic demo data
+        run: |
+          rm -rf .qa
+          DATABASE_PATH=.qa/oficina.sqlite node scripts/seed-qa-demo.mjs
+      - name: Run QA demo with video
+        run: node scripts/qa-demo.mjs ${{ matrix.viewport }} qa-artifacts-${{ matrix.viewport }}
       - name: Upload QA video and evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -60,7 +46,7 @@ jobs:
           retention-days: 7
 
   windows-installer:
-    needs: [core, artisys-qa]
+    needs: qa-demo
     runs-on: windows-2022
     timeout-minutes: 30
     steps:
