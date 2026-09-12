@@ -6,7 +6,7 @@ const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
 test('CircleCI QA usa runner local sem clone privado do utilidades', async () => {
   const config = await read('.circleci/config.yml');
-  const qaJob = config.split('\n  qa:\n')[1]?.split('\n  desktop_release:\n')[0] || '';
+  const qaJob = config.split('\n  qa:\n')[1]?.split('\n  desktop_build:\n')[0] || '';
 
   assert.match(qaJob, /scripts\/seed-qa-demo\.mjs/);
   assert.match(qaJob, /scripts\/qa-demo\.mjs << parameters\.viewport >>/);
