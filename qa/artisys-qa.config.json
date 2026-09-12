@@ -13,7 +13,7 @@
   "environments": {
     "local": {
       "baseURL": "http://127.0.0.1:3333",
-      "startCommand": "rm -rf .qa && node ../scripts/seed-qa-demo.mjs && npm --prefix .. start",
+      "startCommand": "cd .. && rm -rf .qa && node scripts/seed-qa-demo.mjs && npm start",
       "readyUrl": "http://127.0.0.1:3333/api/health",
       "readyTimeoutMs": 30000,
       "env": {
