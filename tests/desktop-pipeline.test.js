@@ -27,9 +27,12 @@ test('desktop build gera instalador diretamente sem publicação nem workspace',
   assert.doesNotMatch(build, /add_ssh_keys/);
 });
 
-test('publicação desktop recompila o instalador e só roda por tag de release', async () => {
+test('build e publicação desktop só rodam por tag de release', async () => {
   const config = await read('.circleci/config.yml');
   const publish = jobBlock(config, 'desktop_publish', 'assistencia_quality');
+  const workflow = config.split('\nworkflows:\n')[1] || '';
+  const buildFilter = workflow.split('\n      - desktop_build:\n')[1]?.split('\n      - desktop_publish:\n')[0] || '';
+  const publishFilter = workflow.split('\n      - desktop_publish:\n')[1]?.split('\n      - assistencia_quality:\n')[0] || '';
 
   assert.match(publish, /npm run build/);
   assert.match(publish, /electron-builder --win nsis --x64 --publish never/);
@@ -38,6 +41,9 @@ test('publicação desktop recompila o instalador e só roda por tag de release'
   assert.match(publish, /add_ssh_keys/);
   assert.doesNotMatch(publish, /attach_workspace:/);
 
-  assert.match(config, /- desktop_build:[\s\S]*?branches:\s*\n\s*only: main/);
-  assert.match(config, /- desktop_publish:[\s\S]*?requires:[\s\S]*?- desktop_build[\s\S]*?branches:\s*\n\s*ignore: \/\.\*\/[\s\S]*?tags:\s*\n\s*only: \/\^v\.\*\//);
+  assert.match(buildFilter, /branches:\s*\n\s*ignore: \/\.\*\//);
+  assert.match(buildFilter, /tags:\s*\n\s*only: \/\^v\.\*\//);
+  assert.doesNotMatch(buildFilter, /only: main/);
+  assert.match(publishFilter, /branches:\s*\n\s*ignore: \/\.\*\//);
+  assert.match(publishFilter, /tags:\s*\n\s*only: \/\^v\.\*\//);
 });

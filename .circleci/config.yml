@@ -235,7 +235,7 @@ workflows:
             - quality
           filters:
             branches:
-              only: main
+              ignore: /.*/
             tags:
               only: /^v.*/
       - desktop_publish:
@@ -249,7 +249,7 @@ workflows:
       - assistencia_quality:
           filters:
             branches:
-              only: feature/assistencia-tecnica-00-08
+              only: feature/assistencia-entrega-10-local-offline
       - assistencia_windows_build:
           requires:
             - assistencia_quality

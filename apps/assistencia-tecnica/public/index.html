@@ -10,8 +10,11 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/ui-stage7.css">
+  <link rel="stylesheet" href="/local-runtime.css">
 </head>
 <body>
+  <div id="serverStatus" class="server-status checking" aria-live="polite"><i aria-hidden="true"></i><span>Verificando servidor local…</span></div>
+
   <section id="loginView" class="login-screen">
     <form id="loginForm" class="login-card">
       <div class="login-brand">
@@ -78,6 +81,7 @@
   <div id="toast" class="toast hidden"></div>
 
   <script defer src="/pwa-register.js"></script>
+  <script defer src="/local-runtime.js"></script>
   <script defer src="/app-core.js"></script>
   <script defer src="/app-catalog.js"></script>
   <script defer src="/app-orders.js"></script>
