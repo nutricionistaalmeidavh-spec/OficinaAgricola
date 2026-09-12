@@ -3,6 +3,7 @@ import { openDatabase, migrate } from './db.js';
 import { validateSession } from './auth.js';
 import { createAppServer } from './server.js';
 import { migrateAssistencia } from './assistencia-schema.js';
+import { attachHttpEventBridge } from './platform/http-event-bridge.js';
 import {
   addCashMovement,
   cancelSale,
@@ -145,12 +146,14 @@ async function handleAssistenciaApi({ req, res, url, db }) {
 export function createAssistenciaServer({
   db = openDatabase(process.env.DATABASE_PATH || './data/assistencia-tecnica.sqlite'),
   storageDir = process.env.STORAGE_DIR || './storage/assistencia-tecnica/uploads',
+  eventRuntime = null,
 } = {}) {
   migrate(db);
   migrateAssistencia(db);
   const baseServer = createAppServer({ db, storageDir });
 
   return createServer(async (req, res) => {
+    attachHttpEventBridge({ req, res, eventRuntime });
     const url = new URL(req.url || '/', 'http://localhost');
     if (!isAssistenciaApi(url.pathname)) {
       baseServer.emit('request', req, res);

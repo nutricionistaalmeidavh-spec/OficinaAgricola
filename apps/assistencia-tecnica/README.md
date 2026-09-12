@@ -8,6 +8,7 @@ Versão separada do sistema de oficina, mantida no mesmo repositório sem substi
 - porta padrão: `3344`;
 - banco local: `data/assistencia-tecnica.sqlite`;
 - anexos: `storage/assistencia-tecnica/uploads/`;
+- eventos/auditoria: `data/assistencia-events.jsonl`;
 - Electron: `%LOCALAPPDATA%/ArtiSys/AssistenciaTecnica`;
 - appId: `com.artisys.assistenciatecnica`;
 - instalador e atalho próprios.
@@ -78,6 +79,48 @@ A aplicação funciona sem internet externa, com o computador principal atuando 
 
 O acesso web pela rede local funciona por HTTP sem internet. Entretanto, navegadores modernos normalmente exigem HTTPS para instalar/ativar Service Worker fora de `localhost`. Portanto, em `http://IP-DO-COMPUTADOR:3344` o sistema continua utilizável no navegador enquanto o servidor local estiver ligado, mas a instalação PWA/offline do shell pode ser bloqueada pelo próprio navegador. Não foi introduzido certificado externo nem serviço pago para contornar essa restrição.
 
+## Entrega 11 — EventBus e integrações
+
+O EventBus agora participa do fluxo real da aplicação. Mutações concluídas com sucesso geram eventos de domínio para OS, mudança de status, aprovação de orçamento, estoque, recebimentos, venda e caixa.
+
+- o arquivo `data/assistencia-events.jsonl` mantém auditoria local dos eventos;
+- integrações adicionais são opt-in e recebem eventos por assinatura;
+- falha de integração opcional não desfaz nem bloqueia a operação local já concluída;
+- nenhum webhook, broker ou SaaS externo é necessário para o core.
+
+## Entrega 12 — QA e regressão
+
+A edição Assistência Técnica possui gate próprio de qualidade e QA visual no CircleCI.
+
+- `assistencia_quality`: lint, testes, build e E2E;
+- `assistencia-qa-desktop`: fluxo visual em Chromium desktop;
+- `assistencia-qa-mobile`: fluxo visual em viewport mobile;
+- seed e servidor usam a mesma pasta `.qa/`;
+- branches técnicas da Assistência não executam o QA da aplicação raiz, evitando gasto duplicado.
+
+## Entrega 13 — Build final
+
+A versão final é `1.0.0` e o instalador é gerado apenas na branch dedicada `release/assistencia-v1.0.0`, depois de quality + QA desktop + QA mobile.
+
+Artefato esperado:
+
+`AssistenciaTecnica-ArtiSys-Setup-1.0.0-Windows-x64.exe`
+
+O build usa `--publish never`; publicação externa não é requisito para considerar o instalador válido.
+
+## Entrega 14 — Entrega
+
+A entrega final consiste em:
+
+- código mergeado em `main`;
+- release branch criada a partir da `main` validada;
+- gates da Assistência verdes;
+- instalador Windows x64 armazenado como artefato do CircleCI;
+- SHA256 exibido no job de build;
+- documentação de operação local, QA e release atualizada.
+
+Detalhes adicionais estão em `RELEASE.md`.
+
 ## Execução local
 
 ```bash
@@ -109,4 +152,4 @@ npm run build
 npm run test:e2e
 ```
 
-O teste `tests/local-offline.test.js` cobre porta/rede local, indicador de disponibilidade, shell PWA, ausência de SaaS obrigatório e bloqueio de instaladores em entregas intermediárias.
+Os testes finais cobrem rede local/offline, EventBus integrado, isolamento de integrações opcionais, venda/caixa/estoque, fluxo crítico HTTP e os gates de release.
