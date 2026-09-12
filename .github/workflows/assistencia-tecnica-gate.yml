@@ -1,0 +1,77 @@
+name: Assistência Técnica · Gate 00-08
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/assistencia-tecnica/**'
+      - '.github/workflows/assistencia-tecnica-gate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    name: Assistência · lint + testes + build + e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/assistencia-tecnica
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Node 22.16
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+          cache: npm
+          cache-dependency-path: apps/assistencia-tecnica/package-lock.json
+      - name: Instalar dependências
+        run: npm ci
+      - name: Lint/sintaxe
+        run: npm run lint
+      - name: Testes de regressão
+        run: npm test
+      - name: Build local
+        run: npm run build
+      - name: E2E crítico
+        run: npm run test:e2e
+
+  windows-installer:
+    name: Assistência · instalador Windows x64
+    needs: regression
+    runs-on: windows-2022
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: apps/assistencia-tecnica
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Node 22.16
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+          cache: npm
+          cache-dependency-path: apps/assistencia-tecnica/package-lock.json
+      - name: Instalar dependências
+        run: npm ci
+      - name: Build da aplicação
+        run: npm run build
+      - name: Instalar empacotador temporariamente
+        shell: powershell
+        run: npm install --no-save --package-lock=false electron-builder@26.15.3
+      - name: Gerar instalador sem publicação externa
+        shell: powershell
+        run: npx electron-builder --win nsis --x64 --publish never
+      - name: Validar instalador
+        shell: powershell
+        run: |
+          $exe = Get-ChildItem '.\dist-electron\AssistenciaTecnicaArtiSys-Setup-*-Windows-x64.exe' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $exe) { throw 'Instalador final não encontrado.' }
+          if ($exe.Length -lt 1MB) { throw 'Instalador gerado com tamanho inválido.' }
+          $hash = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash
+          Write-Host "Arquivo: $($exe.Name)"
+          Write-Host "Tamanho: $([math]::Round($exe.Length / 1MB, 2)) MB"
+          Write-Host "SHA256: $hash"
