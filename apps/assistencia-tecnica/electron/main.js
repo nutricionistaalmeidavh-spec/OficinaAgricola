@@ -31,7 +31,7 @@ async function startLocalServer() {
 
   if (!process.argv[1]) process.argv[1] = fileURLToPath(import.meta.url);
 
-  const [{ openDatabase }, { seed }, { migrateAssistencia }, { createAssistenciaServer }] = await Promise.all([
+  const [{ openDatabase, migrate }, { seed }, { migrateAssistencia }, { createAssistenciaServer }] = await Promise.all([
     import('../dist/src/db.js'),
     import('../dist/src/seed.js'),
     import('../dist/src/assistencia-schema.js'),
@@ -39,6 +39,7 @@ async function startLocalServer() {
   ]);
 
   db = openDatabase(dbPath);
+  migrate(db);
   migrateAssistencia(db);
   seed(db);
   server = createAssistenciaServer({ db, storageDir });
