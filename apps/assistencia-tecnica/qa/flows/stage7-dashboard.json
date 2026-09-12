@@ -1,0 +1,23 @@
+{
+  "name": "stage7-dashboard",
+  "steps": [
+    {"action":"expectVisible","selector":"#loginForm","name":"login-ready","holdMs":300},
+    {"action":"fill","label":"Usuário","value":"admin","name":"fill-user"},
+    {"action":"fill","label":"Senha","value":"Admin@1234","name":"fill-password"},
+    {"action":"click","role":"button","name":"Entrar","holdMs":700},
+    {"action":"waitFor","selector":"#appView","state":"visible","name":"app-ready"},
+    {"action":"expectText","selector":"#pageTitle","expected":"Visão Geral","name":"dashboard-title"},
+    {"action":"expectText","selector":"#content","expected":"Fazenda Santa Clara","name":"demo-data-dashboard"},
+    {"action":"screenshot","name":"dashboard-demo","fullPage":true,"holdMs":900},
+    {"action":"click","selector":"[data-page=\"work-orders\"]","name":"open-orders","holdMs":600},
+    {"action":"expectText","selector":"#pageTitle","expected":"Ordens de Serviço","name":"orders-title"},
+    {"action":"waitFor","selector":".os-card","state":"visible","name":"orders-loaded"},
+    {"action":"expectText","selector":"#content","expected":"John Deere","name":"demo-orders-visible"},
+    {"action":"screenshot","name":"orders-demo","fullPage":true,"holdMs":900},
+    {"action":"click","selector":".os-card:first-of-type","name":"open-demo-order","holdMs":600},
+    {"action":"waitFor","selector":"#modalBody","state":"visible","name":"order-modal"},
+    {"action":"expectText","selector":"#modalBody","expected":"Gerar PDF","name":"pdf-action-visible"},
+    {"action":"expectText","selector":"#modalBody","expected":"Histórico","name":"history-action-visible"},
+    {"action":"screenshot","name":"order-detail-demo","fullPage":true,"holdMs":1200}
+  ]
+}
