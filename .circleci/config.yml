@@ -87,17 +87,26 @@ jobs:
             $current = [Version](node -p "process.versions.node")
             if ($current -lt $required) { throw "Node 22.16.0 ou superior é obrigatório." }
       - run:
-          name: Build Windows x64 installer
+          name: Install consumer dependencies
+          command: npm ci
+      - run:
+          name: Build application
+          command: npm run build
+      - run:
+          name: Build Windows x64 installer without external publish
           command: |
-            $env:CI = "true"
-            & .\scripts\build-electron.ps1
+            npm install --no-save --package-lock=false electron-builder@26.15.3
+            npx electron-builder --win nsis --x64 --publish never
+            $exe = Get-ChildItem '.\dist-electron\OficinaAgro-Setup-*-Windows-x64.exe' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+            if (-not $exe) { throw 'Instalador final não encontrado.' }
+            if ($exe.Length -lt 1MB) { throw 'Instalador gerado com tamanho inválido.' }
+            $hash = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash
+            Write-Host "Arquivo: $($exe.Name)"
+            Write-Host "Tamanho: $([math]::Round($exe.Length / 1MB, 2)) MB"
+            Write-Host "SHA256: $hash"
       - store_artifacts:
           path: dist-electron
           destination: desktop-build
-      - persist_to_workspace:
-          root: .
-          paths:
-            - dist-electron
 
   desktop_publish:
     resource_class: windows.medium
@@ -107,8 +116,27 @@ jobs:
     steps:
       - checkout
       - add_ssh_keys
-      - attach_workspace:
-          at: .
+      - run:
+          name: Ensure Node 22.16+
+          command: |
+            $required = [Version]"22.16.0"
+            try { $current = [Version](node -p "process.versions.node") } catch { $current = [Version]"0.0.0" }
+            if ($current -lt $required) {
+              choco install nodejs --version=22.16.0 -y --force --no-progress
+              Import-Module "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
+              Update-SessionEnvironment
+            }
+            $current = [Version](node -p "process.versions.node")
+            if ($current -lt $required) { throw "Node 22.16.0 ou superior é obrigatório." }
+      - run:
+          name: Rebuild release installer
+          command: |
+            npm ci
+            npm run build
+            npm install --no-save --package-lock=false electron-builder@26.15.3
+            npx electron-builder --win nsis --x64 --publish never
+            $exe = Get-ChildItem '.\dist-electron\OficinaAgro-Setup-*-Windows-x64.exe' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+            if (-not $exe) { throw 'Instalador de release não encontrado.' }
       - run:
           name: Upload encrypted release handoff
           command: |
