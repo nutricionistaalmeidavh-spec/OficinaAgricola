@@ -120,6 +120,65 @@ jobs:
           command: |
             & .\scripts\publish-filebin-handoff.ps1
 
+  assistencia_quality:
+    executor: node_linux
+    steps:
+      - checkout
+      - run:
+          name: Install Assistência Técnica dependencies
+          command: cd apps/assistencia-tecnica && npm ci
+      - run:
+          name: Assistência Técnica · lint, regression, build and E2E
+          command: cd apps/assistencia-tecnica && npm run ci
+
+  assistencia_windows_build:
+    resource_class: windows.medium
+    machine:
+      image: windows-server-2022-gui:current
+      shell: powershell.exe -ExecutionPolicy Bypass
+    steps:
+      - checkout
+      - run:
+          name: Ensure Node 22.16+
+          command: |
+            $required = [Version]"22.16.0"
+            try { $current = [Version](node -p "process.versions.node") } catch { $current = [Version]"0.0.0" }
+            if ($current -lt $required) {
+              choco install nodejs --version=22.16.0 -y --force --no-progress
+              Import-Module "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
+              Update-SessionEnvironment
+            }
+            node --version
+            npm --version
+            $current = [Version](node -p "process.versions.node")
+            if ($current -lt $required) { throw "Node 22.16.0 ou superior é obrigatório." }
+      - run:
+          name: Install Assistência Técnica dependencies
+          command: |
+            Set-Location 'apps\assistencia-tecnica'
+            npm ci
+      - run:
+          name: Build Assistência Técnica application
+          command: |
+            Set-Location 'apps\assistencia-tecnica'
+            npm run build
+      - run:
+          name: Build Windows x64 installer without external publish
+          command: |
+            Set-Location 'apps\assistencia-tecnica'
+            npm install --no-save --package-lock=false electron-builder@26.15.3
+            npx electron-builder --win nsis --x64 --publish never
+            $exe = Get-ChildItem '.\dist-electron\AssistenciaTecnica-ArtiSys-Setup-*-Windows-x64.exe' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+            if (-not $exe) { throw 'Instalador final não encontrado.' }
+            if ($exe.Length -lt 1MB) { throw 'Instalador gerado com tamanho inválido.' }
+            $hash = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash
+            Write-Host "Arquivo: $($exe.Name)"
+            Write-Host "Tamanho: $([math]::Round($exe.Length / 1MB, 2)) MB"
+            Write-Host "SHA256: $hash"
+      - store_artifacts:
+          path: apps/assistencia-tecnica/dist-electron
+          destination: assistencia-tecnica-gate
+
 workflows:
   oficina_agricola_ci:
     jobs:
@@ -149,3 +208,13 @@ workflows:
           filters:
             branches:
               only: main
+      - assistencia_quality:
+          filters:
+            branches:
+              only: feature/assistencia-tecnica-00-08
+      - assistencia_windows_build:
+          requires:
+            - assistencia_quality
+          filters:
+            branches:
+              only: feature/assistencia-tecnica-00-08

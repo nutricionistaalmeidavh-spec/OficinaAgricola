@@ -1,0 +1,9 @@
+{
+  "name": "stage7-shell",
+  "steps": [
+    {"action":"expectVisible","text":"Assistência Técnica","name":"brand-visible"},
+    {"action":"expectVisible","label":"Usuário","name":"username-visible"},
+    {"action":"expectVisible","label":"Senha","name":"password-visible"},
+    {"action":"screenshot","name":"assistencia-login","fullPage":true}
+  ]
+}

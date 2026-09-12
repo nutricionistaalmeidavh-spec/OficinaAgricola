@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#073f2d">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>Assistência Técnica · ArtiSys</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/ui-stage7.css">
+</head>
+<body>
+  <section id="loginView" class="login-screen">
+    <form id="loginForm" class="login-card">
+      <div class="login-brand">
+        <div class="brand-mark">AT</div>
+        <div><small>ARTISYS</small><h1>Assistência Técnica</h1><p>Ordens de serviço, equipamentos, estoque, vendas e caixa em uma operação local.</p></div>
+      </div>
+      <label>Usuário<input name="username" autocomplete="username" value="admin" required></label>
+      <label>Senha<input name="password" type="password" autocomplete="current-password" required></label>
+      <button class="btn primary" type="submit">Entrar</button>
+      <p id="loginError" class="error"></p>
+    </form>
+  </section>
+
+  <div id="appView" class="app-shell hidden">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark small">AT</span>
+        <div><strong>Assistência Técnica</strong><small>ArtiSys · Gestão de serviços</small></div>
+      </div>
+      <nav id="nav" aria-label="Navegação principal">
+        <button data-page="dashboard" class="active"><span class="nav-icon">⌂</span><b>Visão Geral</b></button>
+        <button data-page="work-orders"><span class="nav-icon">▤</span><b>Ordens de Serviço</b></button>
+        <button data-page="schedule"><span class="nav-icon">□</span><b>Agenda</b></button>
+        <button data-page="customers"><span class="nav-icon">◎</span><b>Clientes</b></button>
+        <button data-page="machines"><span class="nav-icon">◇</span><b>Equipamentos</b></button>
+        <button data-page="services"><span class="nav-icon">⌁</span><b>Serviços</b></button>
+        <button data-page="inventory"><span class="nav-icon">▣</span><b>Estoque</b></button>
+        <button data-page="sales"><span class="nav-icon">$</span><b>Vendas & Caixa</b></button>
+        <button data-page="finance"><span class="nav-icon">◫</span><b>Financeiro</b></button>
+        <button data-page="reports"><span class="nav-icon">▥</span><b>Relatórios</b></button>
+        <button data-page="technicians"><span class="nav-icon">◌</span><b>Técnicos</b></button>
+        <button data-page="settings"><span class="nav-icon">⚙</span><b>Configurações</b></button>
+      </nav>
+      <div class="sidebar-user">
+        <div class="avatar" id="avatar">A</div>
+        <div><strong id="userName">—</strong><small id="userRole">—</small></div>
+        <button id="logoutBtn" title="Sair" aria-label="Sair">↪</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="page-heading"><small id="pageEyebrow">OPERACIONAL</small><h1 id="pageTitle">Visão Geral</h1></div>
+        <div class="global-search-wrap">
+          <span class="search-icon" aria-hidden="true">⌕</span>
+          <input id="globalSearch" type="search" autocomplete="off" placeholder="Buscar cliente, equipamento, OS..." aria-label="Buscar cliente, equipamento ou ordem de serviço">
+          <kbd>/</kbd>
+        </div>
+        <div class="top-actions">
+          <span id="today"></span>
+          <button class="icon-btn" id="refreshBtn" title="Atualizar" aria-label="Atualizar">↻</button>
+        </div>
+      </header>
+      <section id="content" class="content"></section>
+    </main>
+  </div>
+
+  <div id="modal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-head"><h2 id="modalTitle">—</h2><button id="modalClose" class="icon-btn" aria-label="Fechar">×</button></div>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+  <div id="toast" class="toast hidden"></div>
+
+  <script defer src="/pwa-register.js"></script>
+  <script defer src="/app-core.js"></script>
+  <script defer src="/app-catalog.js"></script>
+  <script defer src="/app-orders.js"></script>
+  <script defer src="/app-os-tools.js"></script>
+  <script defer src="/app-operations.js"></script>
+  <script defer src="/app-stage7.js"></script>
+  <script defer src="/app-assistencia.js"></script>
+  <script defer src="/app-admin.js"></script>
+</body>
+</html>
