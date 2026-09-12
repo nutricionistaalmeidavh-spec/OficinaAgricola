@@ -20,7 +20,7 @@ import {
 } from './services/sales.js';
 
 const SALES_ROLES = new Set(['ADMIN', 'ATENDIMENTO', 'FINANCEIRO']);
-const CASH_ROLES = new Set(['ADMIN', 'FINANCEIRO']);
+const CASH_ROLES = new Set(['ADMIN', 'ATENDIMENTO', 'FINANCEIRO']);
 const SERVICE_WRITE_ROLES = new Set(['ADMIN', 'ATENDIMENTO']);
 
 function json(res, status, data) {
