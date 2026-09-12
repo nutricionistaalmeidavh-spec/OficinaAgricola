@@ -37,6 +37,17 @@ jobs:
           DATABASE_PATH=.qa/oficina.sqlite node scripts/seed-qa-demo.mjs
       - name: Run QA demo with video
         run: node scripts/qa-demo.mjs ${{ matrix.viewport }} qa-artifacts-${{ matrix.viewport }}
+      - name: Convert QA video to iOS-compatible MP4
+        run: |
+          command -v ffmpeg >/dev/null || (sudo apt-get update && sudo apt-get install -y ffmpeg)
+          ffmpeg -y \
+            -i qa-artifacts-${{ matrix.viewport }}/qa-video.webm \
+            -c:v libx264 \
+            -preset medium \
+            -crf 20 \
+            -pix_fmt yuv420p \
+            -movflags +faststart \
+            qa-artifacts-${{ matrix.viewport }}/qa-video.mp4
       - name: Upload QA video and evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -48,7 +59,7 @@ jobs:
 
   windows-installer:
     needs: qa-demo
-    if: ${{ always() && (needs.qa-demo.result == 'success' || contains(github.event.head_commit.message, '[release-only]')) }}
+    if: ${{ always() && !contains(github.event.head_commit.message, '[qa-video-only]') && (needs.qa-demo.result == 'success' || contains(github.event.head_commit.message, '[release-only]')) }}
     runs-on: windows-2022
     timeout-minutes: 30
     steps:
