@@ -23,7 +23,7 @@ test('CircleCI gera instalador somente em tag de release e mantém publicação 
   assert.match(buildFilter, /branches:\s*\n\s*ignore: \/\.\*\//);
   assert.match(buildFilter, /tags:\s*\n\s*only: \/\^v\.\*\//);
   assert.doesNotMatch(buildFilter, /only: main/);
-  assert.match(config, /ignore:\s+circle-artifact/);
+  assert.match(config, /ignore:\s*(?:\n\s*-\s*)?circle-artifact/);
   assert.match(publishScript, /Get-FileHash/);
   assert.match(publishScript, /45MB/);
   assert.match(publishScript, /HEAD:circle-artifact/);
