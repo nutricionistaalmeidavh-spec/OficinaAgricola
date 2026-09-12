@@ -1,5 +1,5 @@
-appId: com.artisys.oficinaagro
-productName: Oficina Agro
+appId: com.artisys.assistenciatecnica
+productName: Assistência Técnica ArtiSys
 electronVersion: 43.4.1
 asar: true
 directories:
@@ -13,7 +13,7 @@ win:
     - target: nsis
       arch:
         - x64
-  artifactName: OficinaAgro-Setup-${version}-Windows-${arch}.${ext}
+  artifactName: AssistenciaTecnica-ArtiSys-Setup-${version}-Windows-${arch}.${ext}
 nsis:
   oneClick: false
   perMachine: false
@@ -21,5 +21,5 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: Oficina Agro
+  shortcutName: Assistência Técnica ArtiSys
   deleteAppDataOnUninstall: false
