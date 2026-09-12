@@ -21,6 +21,7 @@ import {
 
 const SALES_ROLES = new Set(['ADMIN', 'ATENDIMENTO', 'FINANCEIRO']);
 const CASH_ROLES = new Set(['ADMIN', 'ATENDIMENTO', 'FINANCEIRO']);
+const SALE_CANCEL_ROLES = new Set(['ADMIN', 'FINANCEIRO']);
 const SERVICE_WRITE_ROLES = new Set(['ADMIN', 'ATENDIMENTO']);
 
 function json(res, status, data) {
@@ -109,7 +110,7 @@ async function handleAssistenciaApi({ req, res, url, db }) {
     return json(res, 200, getSale(db, positiveId(match[1])));
   }
   if ((match = path.match(/^\/api\/sales\/(\d+)\/cancel$/)) && method === 'POST') {
-    const user = requireUser(db, req, CASH_ROLES);
+    const user = requireUser(db, req, SALE_CANCEL_ROLES);
     return json(res, 200, cancelSale(db, positiveId(match[1]), { ...(await readJson(req)), userId: user.id }));
   }
 
