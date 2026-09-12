@@ -24,13 +24,13 @@ Write-Host '[6/6] Gerando instalador Electron Windows x64...'
 npx electron-builder --win nsis --x64
 if ($LASTEXITCODE -ne 0) { throw 'Empacotamento Electron falhou.' }
 
-$exe = Get-ChildItem '.\dist-electron\OficinaAgro-Setup-*-Windows-x64.exe' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+$exe = Get-ChildItem '.\dist-electron\AssistenciaTecnica-ArtiSys-Setup-*-Windows-x64.exe' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if (-not $exe) { throw 'Instalador final não encontrado.' }
 
 $hash = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash
 Write-Host ''
 Write-Host '============================================' -ForegroundColor Green
-Write-Host 'INSTALADOR ELECTRON GERADO' -ForegroundColor Green
+Write-Host 'INSTALADOR ASSISTENCIA TECNICA GERADO' -ForegroundColor Green
 Write-Host '============================================' -ForegroundColor Green
 Write-Host "Arquivo: $($exe.FullName)"
 Write-Host "Tamanho: $([math]::Round($exe.Length / 1MB, 2)) MB"
