@@ -168,7 +168,7 @@ jobs:
             Set-Location 'apps\assistencia-tecnica'
             npm install --no-save --package-lock=false electron-builder@26.15.3
             npx electron-builder --win nsis --x64 --publish never
-            $exe = Get-ChildItem '.\dist-electron\AssistenciaTecnicaArtiSys-Setup-*-Windows-x64.exe' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+            $exe = Get-ChildItem '.\dist-electron\AssistenciaTecnica-ArtiSys-Setup-*-Windows-x64.exe' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
             if (-not $exe) { throw 'Instalador final não encontrado.' }
             if ($exe.Length -lt 1MB) { throw 'Instalador gerado com tamanho inválido.' }
             $hash = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash
