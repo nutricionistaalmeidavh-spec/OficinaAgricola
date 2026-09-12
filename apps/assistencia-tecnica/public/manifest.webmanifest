@@ -1,6 +1,6 @@
 {
-  "name": "ArtiSys Oficina Agrícola",
-  "short_name": "OficinaAgro",
+  "name": "ArtiSys Assistência Técnica",
+  "short_name": "AssistTec",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
