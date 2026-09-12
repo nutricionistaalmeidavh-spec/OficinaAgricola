@@ -65,14 +65,13 @@ jobs:
           path: qa-artifacts-<< parameters.viewport >>
           destination: artisys-qa/<< parameters.viewport >>
 
-  desktop_release:
+  desktop_build:
     resource_class: windows.medium
     machine:
       image: windows-server-2022-gui:current
       shell: powershell.exe -ExecutionPolicy Bypass
     steps:
       - checkout
-      - add_ssh_keys
       - run:
           name: Ensure Node 22.16+
           command: |
@@ -94,15 +93,30 @@ jobs:
             & .\scripts\build-electron.ps1
       - store_artifacts:
           path: dist-electron
-          destination: desktop-release
+          destination: desktop-build
+      - persist_to_workspace:
+          root: .
+          paths:
+            - dist-electron
+
+  desktop_publish:
+    resource_class: windows.medium
+    machine:
+      image: windows-server-2022-gui:current
+      shell: powershell.exe -ExecutionPolicy Bypass
+    steps:
+      - checkout
+      - add_ssh_keys
+      - attach_workspace:
+          at: .
+      - run:
+          name: Upload encrypted release handoff
+          command: |
+            & .\scripts\publish-filebin-handoff.ps1
       - run:
           name: Publish retrievable release artifact
           command: |
             & .\scripts\publish-circle-artifact.ps1
-      - run:
-          name: Upload encrypted Drive handoff
-          command: |
-            & .\scripts\publish-filebin-handoff.ps1
 
   assistencia_quality:
     executor: node_linux
@@ -170,6 +184,8 @@ workflows:
           filters:
             branches:
               ignore: circle-artifact
+            tags:
+              only: /^v.*/
       - qa:
           name: qa-desktop
           viewport: desktop
@@ -186,12 +202,22 @@ workflows:
           filters:
             branches:
               ignore: circle-artifact
-      - desktop_release:
+      - desktop_build:
           requires:
             - quality
           filters:
             branches:
               only: main
+            tags:
+              only: /^v.*/
+      - desktop_publish:
+          requires:
+            - desktop_build
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /^v.*/
       - assistencia_quality:
           filters:
             branches:
