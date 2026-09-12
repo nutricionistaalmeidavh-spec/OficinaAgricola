@@ -1,6 +1,6 @@
 {
-  "name": "oficina-agricola",
-  "version": "0.1.0",
+  "name": "artisys-assistencia-tecnica",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
   "main": "electron/main.js",
