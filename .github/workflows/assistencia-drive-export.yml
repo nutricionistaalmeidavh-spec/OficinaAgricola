@@ -1,0 +1,57 @@
+name: Assistencia Tecnica · Export final
+
+on:
+  push:
+    branches: [release/assistencia-drive-export]
+
+permissions:
+  contents: read
+
+jobs:
+  build-installer:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Node 22.16
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+      - name: Install app dependencies
+        shell: powershell
+        run: |
+          Set-Location 'apps\assistencia-tecnica'
+          npm ci
+      - name: Build app
+        shell: powershell
+        run: |
+          Set-Location 'apps\assistencia-tecnica'
+          npm run build
+      - name: Install Electron packager
+        shell: powershell
+        run: |
+          Set-Location 'apps\assistencia-tecnica'
+          npm install --no-save --package-lock=false electron-builder@26.15.3
+      - name: Generate final Windows x64 installer
+        shell: powershell
+        run: |
+          Set-Location 'apps\assistencia-tecnica'
+          npx electron-builder --win nsis --x64 --publish never
+          $exe = Get-ChildItem '.\dist-electron\AssistenciaTecnica-ArtiSys-Setup-1.0.0-Windows-x64.exe' | Select-Object -First 1
+          if (-not $exe) { throw 'Instalador final v1.0.0 nao encontrado.' }
+          if ($exe.Length -lt 1MB) { throw 'Instalador com tamanho invalido.' }
+          $hash = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash
+          "$hash  $($exe.Name)" | Out-File -FilePath '.\dist-electron\SHA256.txt' -Encoding ascii
+          "FILE=$($exe.Name)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "SIZE=$($exe.Length)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "SHA256=$hash" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+      - name: Upload final installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: AssistenciaTecnica-ArtiSys-v1.0.0-Windows-x64
+          path: |
+            apps/assistencia-tecnica/dist-electron/AssistenciaTecnica-ArtiSys-Setup-1.0.0-Windows-x64.exe
+            apps/assistencia-tecnica/dist-electron/SHA256.txt
+          if-no-files-found: error
+          retention-days: 2
