@@ -1,5 +1,5 @@
-const CACHE_NAME = 'assistencia-tecnica-shell-v2';
-const SHELL = ['/', '/index.html', '/styles.css', '/ui-stage7.css', '/local-runtime.css', '/app-core.js', '/app-catalog.js', '/app-orders.js', '/app-os-tools.js', '/app-operations.js', '/app-stage7.js', '/app-assistencia.js', '/app-admin.js', '/local-runtime.js', '/pwa-register.js', '/manifest.webmanifest', '/icon.svg'];
+const CACHE_NAME = 'assistencia-tecnica-shell-v3';
+const SHELL = ['/', '/index.html', '/styles.css', '/ui-stage7.css', '/theme-lote-a.css', '/local-runtime.css', '/app-core.js', '/app-catalog.js', '/app-orders.js', '/app-os-tools.js', '/app-operations.js', '/app-stage7.js', '/app-assistencia.js', '/app-admin.js', '/local-runtime.js', '/pwa-register.js', '/manifest.webmanifest', '/icon.svg'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));
