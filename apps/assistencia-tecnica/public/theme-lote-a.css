@@ -1,0 +1,33 @@
+:root{
+  --green:#365314;
+  --green-2:#4d6b1f;
+  --green-3:#f1f6e8;
+  --lime:#84a94f;
+  --accent:#b45309;
+  --ink:#20251c;
+  --muted:#6f7569;
+  --line:#e4e8dd;
+  --bg:#f6f7f2;
+  --card:#fff;
+  --shadow:0 8px 30px rgba(46,64,20,.08);
+}
+
+.login-screen{background:radial-gradient(circle at 80% 18%,#edf4dc 0,transparent 34%),linear-gradient(135deg,#fafbf7,#f1f4e9)}
+.brand-mark{background:linear-gradient(145deg,#4d6b1f,#365314);box-shadow:0 10px 24px rgba(54,83,20,.24)}
+.sidebar{background:linear-gradient(180deg,#344e16 0%,#263b11 100%)}
+nav button:hover,nav button.active{background:rgba(255,255,255,.12)}
+nav button.active{box-shadow:inset 3px 0 #c28a38}
+.topbar small{color:#4d6b1f}
+.stat .accent{color:#4d6b1f}
+.btn.primary{border-color:#365314;background:#365314}
+.btn.primary:hover{background:#2f4912}
+.btn.soft{border-color:#dfe9cb;background:#f1f6e8;color:#365314}
+input:focus,select:focus,textarea:focus{border-color:#84a94f;box-shadow:0 0 0 3px rgba(77,107,31,.12)}
+.progress i{background:#4d6b1f}
+.pill.orange{background:#fff1e5;color:#9a4510}
+.os-card:hover{border-color:#c7d7a9}
+.toast{background:#2d4214}
+.server-status.available{color:#365314;border-color:#d6e5bd;background:#f8fbf3}
+.server-status.available i{background:#6f9639}
+@media(max-width:840px){.sidebar nav button.active{background:#f1f6e8;color:#365314}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
