@@ -4,6 +4,7 @@ import { validateSession } from './auth.js';
 import { createAppServer } from './server.js';
 import { migrateAssistencia } from './assistencia-schema.js';
 import {enqueueHttpEvent,dispatchOutbox} from './platform/outbox.js';
+import {runIdempotent} from './platform/idempotency.js';
 import {
   addCashMovement,
   cancelSale,
@@ -163,9 +164,11 @@ export function createAssistenciaServer({
     try {
       const mutation=['POST','PUT','PATCH','DELETE'].includes(req.method||'');
       const body=mutation?await readJson(req):{};
+      const actor=mutation?validateSession(db,tokenFrom(req)):null;
       const invoke=()=>handleAssistenciaApi({req,res,url,db,body});
       const answer=mutation?transaction(db,()=>{
-        const output=invoke();
+        const output=runIdempotent(db,`http:${req.method}:${url.pathname}:user:${actor.id}`,
+          body.requestId??req.headers['idempotency-key'],{body},invoke);
         if(output.status>=200&&output.status<300)enqueueHttpEvent(db,req.method,url.pathname,output.data);
         return output;
       }):invoke();
