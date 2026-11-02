@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { resolveDatabasePath, resolveStoragePath } from '../src/platform/data-location.js';
 import { openDatabase, migrate } from '../src/db.js';
 import { migrateAssistencia } from '../src/assistencia-schema.js';
@@ -13,13 +13,13 @@ test('nova instalação ignora completamente os bancos históricos mesmo se exis
     join(cwd,'data','assistencia-tecnica.sqlite'),
     join(cwd,'apps','assistencia-tecnica','data','assistencia-tecnica.sqlite'),
   ]);
-  assert.equal(resolveDatabasePath({cwd,env:{},exists:p=>legacy.has(p)}),join(cwd,'data','artisys-oficina.sqlite'));
+  assert.equal(resolveDatabasePath({cwd,env:{},exists:p=>legacy.has(p)}),resolve(cwd,'data','artisys-oficina.sqlite'));
 });
 
 test('nova instalação usa pasta de anexos exclusiva e ignora diretórios antigos', () => {
   const cwd='/app';
-  const db=join(cwd,'data','artisys-oficina.sqlite');
-  assert.equal(resolveStoragePath({cwd,env:{},databasePath:db,exists:()=>true}),join(cwd,'storage','uploads'));
+  const db=resolve(cwd,'data','artisys-oficina.sqlite');
+  assert.equal(resolveStoragePath({cwd,env:{},databasePath:db,exists:()=>true}),resolve(cwd,'storage','uploads'));
 });
 
 test('instalador novo tem identidade própria, nome e área de dados isolados', () => {
