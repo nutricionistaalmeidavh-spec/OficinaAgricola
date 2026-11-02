@@ -4,6 +4,7 @@ import { openDatabase, migrate } from '../src/db.js';
 import { createCustomer, createMachine } from '../src/services/catalog.js';
 import { createWorkOrder, listWorkOrders } from '../src/services/work-orders.js';
 import { dashboardData } from '../src/services/dashboard.js';
+import { createPart } from '../src/services/inventory.js';
 
 function fixture(){
   const db=openDatabase(':memory:'); migrate(db);
@@ -40,5 +41,14 @@ test('P0: histórico de OS encerradas permite filtro e paginação, sem limite f
     assert.equal(first[0].id,ids.at(-1));
     assert.equal(third.at(-1).id,ids[0]);
     assert.equal(listWorkOrders(db,{scope:'active'}).length,0);
+  }finally{db.close()}
+});
+
+test('P0: indicadores de estoque contam mais de oito itens abaixo do mínimo',()=>{
+  const {db}=fixture();
+  try{
+    for(let i=0;i<13;i++)createPart(db,{sku:'P0-'+i,description:'Peça QA '+i,minStock:4});
+    const dashboard=dashboardData(db,{now:new Date('2026-11-15T12:00:00.000Z')});
+    assert.equal(dashboard.lowStock.length,13);
   }finally{db.close()}
 });
