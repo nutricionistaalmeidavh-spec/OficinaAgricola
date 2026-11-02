@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { resolveServerConfig, listLanUrls } from '../src/platform/network.js';
 
 const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
-const readRepo = path => readFile(new URL(`../../../${path}`, import.meta.url), 'utf8');
+const readRepo = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
 test('Assistência Técnica usa 3344 e escuta a rede local por padrão', () => {
   assert.deepEqual(resolveServerConfig({}), { host: '0.0.0.0', port: 3344 });
@@ -56,14 +56,10 @@ test('núcleo local não exige API ou SaaS externo', async () => {
   assert.doesNotMatch(sw, /https?:\/\//);
 });
 
-test('instalador fica bloqueado em entregas intermediárias e só roda em tag v*', async () => {
-  const circle = await readRepo('.circleci/config.yml');
-  const workflow = circle.split('\nworkflows:\n')[1] || '';
-  const build = workflow.split('\n      - desktop_build:\n')[1]?.split('\n      - desktop_publish:\n')[0] || '';
-  const assistBuild = workflow.split('\n      - assistencia_windows_build:\n')[1] || '';
-
-  assert.match(build, /branches:\s*\n\s*ignore: \/\.\*\//);
-  assert.match(build, /tags:\s*\n\s*only: \/\^v\.\*\//);
-  assert.doesNotMatch(build, /only: main/);
-  assert.doesNotMatch(assistBuild, /feature\/assistencia-entrega-10-local-offline/);
+test('o pipeline unificado não publica instaladores automaticamente', async () => {
+  const circle=await readRepo('.circleci/config.yml');
+  assert.match(circle,/oficina_unificada:/);
+  assert.match(circle,/quality:/);
+  assert.match(circle,/qa:/);
+  assert.doesNotMatch(circle,/desktop_publish|publish-filebin|desktop_build/);
 });

@@ -1,118 +1,54 @@
-# ArtiSys Oficina Agrícola
+# ArtiSys Oficina — Sistema Único
 
-Sistema self-hosted para oficinas de máquinas agrícolas e pesadas. Esta V1 cobre as Entregas **00–06**: base/autenticação, cadastros, ordens de serviço, orçamento/documentos, peças/estoque, agenda/checklists/anexos e financeiro.
+Sistema local-first para **oficina mecânica, assistência técnica e manutenção de máquinas agrícolas**, com um único runtime Node.js/SQLite e interface web/Electron. Os tipos de equipamento são cadastráveis, sem criar instalações separadas.
 
-## Princípios desta versão
+## Único aplicativo
+- Backend: `src/start.js` → `src/server-assistencia.js` → `src/server.js`.
+- Interface: `public/`.
+- Desktop: `electron/main.js`.
+- SQLite: `src/db.js` + migração aditiva `src/assistencia-schema.js`.
+- Testes: `tests/`; `npm run ci` executa lint, testes, build e E2E.
+- Porta padrão: 3344, acessível na rede local configurada.
 
-- núcleo **R$ 0**, self-hosted e sem serviço SaaS obrigatório;
-- banco SQLite local e armazenamento local de anexos;
-- funciona sem internet depois de instalado;
-- interface responsiva para desktop e celular na mesma rede;
-- regras críticas auditáveis: status da OS, estoque e recebimentos não são apagados para “corrigir histórico”;
-- nenhuma alteração no PDV ArtiSys existente.
+## Rodar localmente
+Requer Node.js 22.16+.
 
-## Requisitos
-
-- Node.js **22.16 ou superior**;
-- Windows, macOS ou Linux com permissão de escrita nas pastas de dados;
-- navegador moderno.
-
-> Em Node 22, `node:sqlite` pode exibir um `ExperimentalWarning`. A API usada nesta versão é coberta pela suíte de testes do projeto. A decisão arquitetural está documentada em `docs/architecture/0001-zero-dependency-core.md`.
-
-## Primeira execução
-
-```bash
-cp .env.example .env
+```sh
+npm ci
 npm run db:migrate
 npm run db:seed
 npm start
 ```
 
-Acesse `http://127.0.0.1:3333`.
+No computador principal: http://127.0.0.1:3344. Para acesso local, utilize o IP do computador na porta 3344.
 
-Antes de usar em produção, altere `ADMIN_PASSWORD` no `.env`. Em `NODE_ENV=production`, o seed exige senha administrativa informada explicitamente e não cria credencial padrão silenciosa.
+O **core R$ 0** é self-hosted, funciona localmente/offline e não possui **nenhuma API ou SaaS pago obrigatório**. O desktop usa Electron; provedores pagos são opcionais, nunca pré-requisitos.
 
-### Uso em celular na rede local
+## Dados legados — atenção
+A unificação do repositório **não apaga nem mescla automaticamente bancos existentes**.
+O sistema detecta fontes históricas de execução por terminal (`data/oficina.sqlite`, `data/assistencia-tecnica.sqlite`, `apps/assistencia-tecnica/data/assistencia-tecnica.sqlite`) e Windows (`ArtiSys/OficinaAgro/data/oficina.sqlite`, `ArtiSys/AssistenciaTecnica/data/assistencia-tecnica.sqlite`).
+- Se houver uma única fonte conhecida, ela será reutilizada sem mover arquivos.
+- Se houver duas ou mais fontes, o sistema não inicia sem seleção explícita via `DATABASE_PATH`. Isso impede esconder dados de uma aplicação ou sobrescrever outra.
+- Se for instalação nova, usa `data/artisys-oficina.sqlite` (terminal) ou pasta de dados da Assistência Técnica (Windows).
+- Anexos seguem a pasta associada ao banco histórico quando disponível.
+- Para mesclar **dois bancos com dados distintos**, será necessária migração conciliada com mapeamento de IDs e relatório de conflitos. Não use cópia por cima de outro banco.
 
-No `.env`:
+O código histórico da Oficina Agrícola permanece recuperável pelo histórico Git, mas **não existe uma segunda aplicação executável neste checkout**.
 
-```env
-HOST=0.0.0.0
-PORT=3333
-```
+## P0 — segurança e transações
+- Vendas validam consumo agregado de peças repetidas e atualizam estoque atomicamente.
+- Vendas só finalizam com caixa aberto; cancelamento exige caixa corrente para registrar estorno sem alterar o fechamento antigo.
+- Formulário de venda envia identificador idempotente; reenvios do mesmo pedido não baixam estoque nem registram caixa novamente.
+- Backup com SQLite `VACUUM INTO` gera snapshot consistente, incluindo mudanças ainda no WAL.
+- Integração fiscal real permanece **desativada**. Nada é transmitido à SEFAZ pela oficina.
 
-Abra no celular `http://IP-DO-COMPUTADOR:3333`. O computador servidor precisa permanecer ligado e a porta deve estar permitida no firewall da rede local.
-
-## Perfis
-
-- `ADMIN`: acesso geral, usuários, configurações e autorizações críticas;
-- `ATENDIMENTO`: clientes, máquinas e operação de OS;
-- `TECNICO`: consulta/operação técnica conforme rotas permitidas;
-- `FINANCEIRO`: recebimentos, despesas e visão financeira.
-
-## Entregas implementadas
-
-### 00 — Base
-
-Autenticação local com senha protegida por `scrypt`, sessões persistidas por hash, configurações da empresa, healthcheck, migrations e seed.
-
-### 01 — Cadastros
-
-Clientes, máquinas vinculadas ao proprietário e técnicos. Registros com histórico são inativados em vez de removidos fisicamente.
-
-### 02 — Ordens de serviço
-
-Fluxo auditável:
-
-```text
-ENTRADA → DIAGNOSTICO → ORCAMENTO → AGUARDANDO_APROVACAO
-→ APROVADA → EM_SERVICO → PRONTA → ENTREGUE
-```
-
-Também existem `CANCELADA` e `REPROVADA` conforme as regras de transição.
-
-### 03 — Orçamento e documentos
-
-Múltiplos itens de peça, mão de obra e terceiros; desconto; aprovação/reprovação; documentos imprimíveis de orçamento, OS, entrega e recibo.
-
-### 04 — Peças e estoque
-
-Cadastro de peças, entrada, saída manual, consumo em OS, ajuste, estorno e alerta de estoque mínimo. Movimentações permanecem auditáveis.
-
-### 05 — Agenda, checklist e anexos
-
-Agenda por cliente/OS/técnico, modelos de checklist com resposta por item (`OK`, `ATENCAO`, `NAO_SE_APLICA`) e fotos/PDFs armazenados localmente.
-
-### 06 — Financeiro
-
-Recebimentos parciais/totais por OS, estorno auditável, despesas e resumo por período com faturado, recebido, pendente, despesas e resultado simples.
-
-## Backup
-
-Faça backup conjunto do banco e dos anexos:
-
-```text
-data/oficina.sqlite
-storage/uploads/
-```
-
-Para cópia manual consistente, pare o processo da aplicação, copie os dois caminhos e inicie novamente. Restauração deve usar banco e pasta de anexos da mesma data.
-
-## Testes e build
-
-```bash
+## Qualidade
+```sh
 npm run lint
 npm test
 npm run build
 npm run test:e2e
 ```
+Instalador Windows é opcional via `npm run desktop:dist`, sem publicação automática.
 
-O `test:e2e` percorre via HTTP o fluxo crítico completo: login, cliente, máquina, OS, diagnóstico, orçamento, aprovação, estoque, checklist/anexo, conclusão, pagamento, entrega e histórico.
-
-## Build
-
-`npm run build` gera `dist/` contendo servidor, interface e código necessário para execução. Banco e anexos não entram no build.
-
-## Fora desta fase
-
-Não são dependências da V1: NF-e/NFS-e, integração bancária/Open Finance, WhatsApp automático, IA, aplicativo móvel nativo, multiempresa avançada e portal externo do cliente.
+Consulte `docs/P0-CONSOLIDACAO.md` para limites, cenários e validação da unificação.

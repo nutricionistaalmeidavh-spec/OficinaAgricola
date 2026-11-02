@@ -4,11 +4,11 @@ import { mkdtempSync, rmSync, mkdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { openDatabase, migrate } from '../apps/assistencia-tecnica/src/db.js';
-import { migrateAssistencia } from '../apps/assistencia-tecnica/src/assistencia-schema.js';
-import { createPart, addInventoryMovement } from '../apps/assistencia-tecnica/src/services/inventory.js';
-import { createService, openCashSession, closeCashSession, createSale, cancelSale, cashSummary } from '../apps/assistencia-tecnica/src/services/sales.js';
-import { createBackup, verifyBackup } from '../apps/assistencia-tecnica/src/platform/backup.js';
+import { openDatabase, migrate } from '../src/db.js';
+import { migrateAssistencia } from '../src/assistencia-schema.js';
+import { createPart, addInventoryMovement } from '../src/services/inventory.js';
+import { createService, openCashSession, closeCashSession, createSale, cancelSale, cashSummary } from '../src/services/sales.js';
+import { createBackup, verifyBackup } from '../src/platform/backup.js';
 
 function setup() {
   const db=openDatabase(':memory:');
