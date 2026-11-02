@@ -1,5 +1,6 @@
 import { nowIso, transaction } from '../db.js';
 import { getWorkOrder } from './work-orders.js';
+import {runIdempotent} from '../platform/idempotency.js';
 
 const TYPES=new Set(['ENTRADA','SAIDA_MANUAL','CONSUMO_OS','ESTORNO','AJUSTE']);
 const text=(v)=>v==null?'':String(v).trim();
@@ -63,14 +64,20 @@ export function reconcileStock(db,partId){
     difference:Number((Number(part.quantity)-ledgerQuantity).toFixed(8))};
 }
 
-export function addInventoryMovement(db,partId,input){return transaction(db,()=>postStockMovement(db,partId,input))}
+export function addInventoryMovement(db,partId,input){
+  const {requestId,...command}=input;
+  return runIdempotent(db,`inventory:movement:${partId}`,requestId,{partId,...command},
+    ()=>postStockMovement(db,partId,command));
+}
 
 export function consumePart(db,workOrderId,partId,input){
-  return transaction(db,()=>{
+  const {requestId,...command}=input;
+  return runIdempotent(db,`work-order:${workOrderId}:part`,requestId,
+    {workOrderId,partId,...command},()=>{
     const os=getWorkOrder(db,workOrderId); if(!['APROVADA','EM_SERVICO'].includes(os.status)) throw new Error('OS precisa estar aprovada ou em serviço');
-    const q=Number(input.quantity); if(!Number.isFinite(q)||q<=0) throw new Error('Quantidade inválida'); const part=getPart(db,partId);
-    const movement=postStockMovement(db,partId,{type:'CONSUMO_OS',quantity:q,workOrderId,note:input.note,createdBy:input.createdBy,allowNegative:input.allowNegative,userRole:input.userRole});
-    const r=db.prepare('INSERT INTO work_order_parts(work_order_id,part_id,quantity,unit_price_cents,movement_id) VALUES(?,?,?,?,?)').run(workOrderId,partId,q,input.unitPriceCents??part.sale_price_cents,movement.id);
+    const q=Number(command.quantity); if(!Number.isFinite(q)||q<=0) throw new Error('Quantidade inválida'); const part=getPart(db,partId);
+    const movement=postStockMovement(db,partId,{type:'CONSUMO_OS',quantity:q,workOrderId,note:command.note,createdBy:command.createdBy,allowNegative:command.allowNegative,userRole:command.userRole});
+    const r=db.prepare('INSERT INTO work_order_parts(work_order_id,part_id,quantity,unit_price_cents,movement_id) VALUES(?,?,?,?,?)').run(workOrderId,partId,q,command.unitPriceCents??part.sale_price_cents,movement.id);
     return db.prepare('SELECT * FROM work_order_parts WHERE id=?').get(Number(r.lastInsertRowid));
   });
 }
