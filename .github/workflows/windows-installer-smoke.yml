@@ -14,6 +14,10 @@ on:
       - 'tests/**'
       - '.github/workflows/windows-installer-smoke.yml'
 
+concurrency:
+  group: windows-install-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
