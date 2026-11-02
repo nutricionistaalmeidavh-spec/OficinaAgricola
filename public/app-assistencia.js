@@ -29,7 +29,7 @@ function serviceModal(service = {}) {
     if (service.id) body.active = data.active === '1';
     await api(service.id ? `/api/services/${service.id}` : '/api/services', { method: service.id ? 'PATCH' : 'POST', body });
     toast('Serviço salvo');
-    await renderServices();
+    await refreshCurrentPage();
   });
 }
 
@@ -100,7 +100,7 @@ async function saleModal() {
       items,
     }});
     toast('Venda concluída e estoque atualizado');
-    await renderSales();
+    await refreshCurrentPage();
   });
   const addRow = () => {
     const row = document.createElement('div');
@@ -121,27 +121,27 @@ async function saleDetails(id) {
   if (cancel) cancel.onclick = async () => {
     const reason = prompt('Motivo do cancelamento:') || '';
     await api(`/api/sales/${id}/cancel`, { method: 'POST', body: { reason } });
-    toast('Venda cancelada e estoque estornado'); closeModal(); await renderSales();
+    toast('Venda cancelada e estoque estornado'); closeModal(); await refreshCurrentPage();
   };
 }
 
 function openCashModal() {
   showModal('Abrir caixa', `<form class="form-stack"><label>Saldo inicial (R$)<input name="opening" type="number" min="0" step="0.01" value="0"></label><label>Observação<input name="note"></label><button class="btn primary" type="submit">Abrir caixa</button></form>`, async fd => {
     await api('/api/cash/open', { method: 'POST', body: { openingCents: Math.round(Number(fd.get('opening') || 0) * 100), note: fd.get('note') } });
-    toast('Caixa aberto'); await renderSales();
+    toast('Caixa aberto'); await refreshCurrentPage();
   });
 }
 
 function cashMoveModal() {
   showModal('Movimentar caixa', `<form class="form-stack"><label>Tipo<select name="type"><option value="SUPRIMENTO">Suprimento</option><option value="SANGRIA">Sangria</option><option value="AJUSTE">Ajuste positivo</option></select></label><label>Valor (R$)<input name="amount" type="number" min="0.01" step="0.01" required></label><label>Observação<input name="note"></label><button class="btn primary" type="submit">Registrar</button></form>`, async fd => {
     await api('/api/cash/current/movements', { method: 'POST', body: { type: fd.get('type'), amountCents: Math.round(Number(fd.get('amount')) * 100), note: fd.get('note') } });
-    toast('Movimentação registrada'); await renderSales();
+    toast('Movimentação registrada'); await refreshCurrentPage();
   });
 }
 
 function closeCashModal(expectedCents) {
   showModal('Fechar caixa', `<form class="form-stack"><p>Valor esperado em dinheiro: <strong>${money(expectedCents)}</strong></p><label>Valor contado (R$)<input name="closing" type="number" min="0" step="0.01" value="${(expectedCents / 100).toFixed(2)}" required></label><label>Observação<input name="note"></label><button class="btn primary" type="submit">Fechar caixa</button></form>`, async fd => {
     const result = await api('/api/cash/current/close', { method: 'POST', body: { closingCents: Math.round(Number(fd.get('closing')) * 100), note: fd.get('note') } });
-    toast(`Caixa fechado. Diferença: ${money(result.difference_cents)}`); await renderSales();
+    toast(`Caixa fechado. Diferença: ${money(result.difference_cents)}`); await refreshCurrentPage();
   });
 }
