@@ -42,7 +42,7 @@ test('ArtiSys QA fica configurado como consumidor opcional da assistência', asy
 
 test('QA visual usa runner local que encerra o servidor após gerar evidências', async () => {
   const workflow = await read('.github/workflows/artisys-qa-stage7.yml');
-  assert.match(workflow, /node scripts\/qa-demo\.mjs desktop/);
+  assert.match(workflow, /node scripts\/qa-demo\.mjs \$\{\{ matrix\.viewport \}\}/);
   assert.match(workflow, /actions\/upload-artifact@v4/);
   assert.doesNotMatch(workflow, /uses:\s*nutricionistaalmeidavh-spec\/utilidades\/\.github\/actions\/artisys-qa@/);
 });

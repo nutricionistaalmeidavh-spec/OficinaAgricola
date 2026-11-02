@@ -54,7 +54,9 @@ export function migrate(db) {
       customer_id INTEGER NOT NULL REFERENCES customers(id),
       type TEXT NOT NULL, brand TEXT NOT NULL DEFAULT '', model TEXT NOT NULL DEFAULT '',
       year INTEGER, serial_number TEXT NOT NULL DEFAULT '', internal_id TEXT NOT NULL DEFAULT '',
-      hour_meter REAL NOT NULL DEFAULT 0 CHECK(hour_meter >= 0), notes TEXT NOT NULL DEFAULT '',
+      hour_meter REAL NOT NULL DEFAULT 0 CHECK(hour_meter >= 0),
+      license_plate TEXT, vin TEXT, odometer_km REAL CHECK(odometer_km >= 0),
+      notes TEXT NOT NULL DEFAULT '',
       active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
       created_at TEXT NOT NULL, updated_at TEXT NOT NULL
     );
@@ -79,6 +81,20 @@ export function migrate(db) {
       quote_total_cents INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL, updated_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS vehicle_maintenance_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      machine_id INTEGER NOT NULL REFERENCES machines(id),
+      work_order_id INTEGER REFERENCES work_orders(id),
+      kind TEXT NOT NULL CHECK(kind IN ('REVISAO','GARANTIA')),
+      performed_at TEXT,
+      next_due_date TEXT,
+      next_due_km REAL CHECK(next_due_km >= 0),
+      warranty_until TEXT,
+      notes TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_vehicle_maintenance_machine ON vehicle_maintenance_records(machine_id,created_at);
+
     CREATE TABLE IF NOT EXISTS work_order_status_history (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       work_order_id INTEGER NOT NULL REFERENCES work_orders(id),
@@ -126,7 +142,8 @@ export function migrate(db) {
       part_id INTEGER NOT NULL REFERENCES parts(id),
       type TEXT NOT NULL CHECK(type IN ('ENTRADA','SAIDA_MANUAL','CONSUMO_OS','ESTORNO','AJUSTE')),
       quantity_delta REAL NOT NULL, work_order_id INTEGER REFERENCES work_orders(id),
-      note TEXT NOT NULL DEFAULT '', created_by INTEGER REFERENCES users(id), created_at TEXT NOT NULL
+      note TEXT NOT NULL DEFAULT '', created_by INTEGER REFERENCES users(id), created_at TEXT NOT NULL,
+      source_type TEXT, source_item_id INTEGER
     );
     CREATE TABLE IF NOT EXISTS work_order_parts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -178,7 +195,19 @@ export function migrate(db) {
       work_order_id INTEGER NOT NULL REFERENCES work_orders(id),
       amount_cents INTEGER NOT NULL CHECK(amount_cents > 0), method TEXT NOT NULL,
       received_at TEXT NOT NULL, note TEXT NOT NULL DEFAULT '',
-      created_by INTEGER REFERENCES users(id), reversed_at TEXT, reversal_note TEXT NOT NULL DEFAULT ''
+      created_by INTEGER REFERENCES users(id), reversed_at TEXT, reversal_note TEXT NOT NULL DEFAULT '',
+      request_id TEXT, request_payload_hash TEXT
+    );
+    CREATE TABLE IF NOT EXISTS payment_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      source_type TEXT NOT NULL CHECK(source_type IN ('SALE','OS_RECEIPT')),
+      source_id INTEGER NOT NULL,
+      event_type TEXT NOT NULL CHECK(event_type IN ('PAID','REFUNDED')),
+      amount_cents INTEGER NOT NULL CHECK(amount_cents != 0),
+      method TEXT NOT NULL,
+      cash_session_id INTEGER,
+      created_at TEXT NOT NULL,
+      UNIQUE(source_type,source_id,event_type)
     );
     CREATE TABLE IF NOT EXISTS expenses (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -194,6 +223,28 @@ export function migrate(db) {
     CREATE INDEX IF NOT EXISTS idx_inventory_part ON inventory_movements(part_id);
     CREATE INDEX IF NOT EXISTS idx_schedule_starts ON schedule_events(starts_at);
     CREATE INDEX IF NOT EXISTS idx_receipts_os ON receipts(work_order_id);
+  `);
+  // Migrate older local SQLite files additively; never truncate or rewrite balances.
+  const machineCols=new Set(db.prepare("PRAGMA table_info('machines')").all().map(c=>c.name));
+  if(!machineCols.has('license_plate'))db.exec('ALTER TABLE machines ADD COLUMN license_plate TEXT');
+  if(!machineCols.has('vin'))db.exec('ALTER TABLE machines ADD COLUMN vin TEXT');
+  if(!machineCols.has('odometer_km'))db.exec('ALTER TABLE machines ADD COLUMN odometer_km REAL CHECK(odometer_km >= 0)');
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_machines_plate ON machines(license_plate) WHERE license_plate IS NOT NULL AND license_plate<>''");
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_machines_vin ON machines(vin) WHERE vin IS NOT NULL AND vin<>''");
+  const inventoryCols=new Set(db.prepare("PRAGMA table_info('inventory_movements')").all().map(c=>c.name));
+  if(!inventoryCols.has('source_type'))db.exec('ALTER TABLE inventory_movements ADD COLUMN source_type TEXT');
+  if(!inventoryCols.has('source_item_id'))db.exec('ALTER TABLE inventory_movements ADD COLUMN source_item_id INTEGER');
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_inventory_source_unique ON inventory_movements(source_type,source_item_id) WHERE source_type IS NOT NULL AND source_item_id IS NOT NULL');
+  const receiptCols=new Set(db.prepare("PRAGMA table_info('receipts')").all().map(c=>c.name));
+  if(!receiptCols.has('request_id'))db.exec('ALTER TABLE receipts ADD COLUMN request_id TEXT');
+  if(!receiptCols.has('request_payload_hash'))db.exec('ALTER TABLE receipts ADD COLUMN request_payload_hash TEXT');
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_receipts_request_id ON receipts(request_id) WHERE request_id IS NOT NULL');
+  // Backfill only ledger rows: never touch settled receipts or bank balances.
+  db.exec(`
+    INSERT OR IGNORE INTO payment_events(source_type,source_id,event_type,amount_cents,method,cash_session_id,created_at)
+    SELECT 'OS_RECEIPT',id,'PAID',amount_cents,method,NULL,received_at FROM receipts;
+    INSERT OR IGNORE INTO payment_events(source_type,source_id,event_type,amount_cents,method,cash_session_id,created_at)
+    SELECT 'OS_RECEIPT',id,'REFUNDED',-amount_cents,method,NULL,reversed_at FROM receipts WHERE reversed_at IS NOT NULL;
   `);
 }
 

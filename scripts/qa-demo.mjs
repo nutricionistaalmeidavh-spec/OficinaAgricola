@@ -41,8 +41,8 @@ try{
   video=page.video();
 
   await page.goto('http://127.0.0.1:3344',{waitUntil:'domcontentloaded'});
-  await page.getByLabel('Usuário').fill('admin');
-  await page.getByLabel('Senha').fill('Admin@1234');
+  await page.locator('#loginForm input[name="username"]').fill('admin');
+  await page.locator('#loginForm input[name="password"]').fill('Admin@1234');
   await page.getByRole('button',{name:'Entrar'}).click();
   await page.locator('#appView').waitFor({state:'visible'});
   await page.locator('#pageTitle').filter({hasText:'Visão Geral'}).waitFor({state:'visible'});
@@ -64,7 +64,100 @@ try{
   await sleep(1000);
   await page.screenshot({path:path.join(outputDir,'03-os-detalhe.png'),fullPage:true});
 
-  await writeFile(path.join(outputDir,'qa-summary.json'),`${JSON.stringify({status:'passed',viewport:viewportName,checks:['login','dashboard','demo-data','work-orders','os-detail','edit-action','pdf-action','history-action']},null,2)}\n`);
+  // Pós-save: a seção da lista deve manter o mesmo nó e não receber rerender total.
+  await page.locator('#modalClose').click();
+  await page.locator('[data-page="customers"]').click();
+  await page.locator('#newCustomer').waitFor({state:'visible'});
+  await page.evaluate(()=>{window.__qaCustomerHeader=document.querySelector('#content .section-head')});
+  await page.locator('#newCustomer').click();
+  await page.locator('#modalBody input[name="name"]').fill('Cliente QA Canônico');
+  await page.locator('#modalBody button[type="submit"]').click();
+  await page.locator('#content').filter({hasText:'Cliente QA Canônico'}).waitFor({state:'visible'});
+  const preserved=await page.evaluate(
+    ()=>window.__qaCustomerHeader===document.querySelector('#content .section-head')
+  );
+  if(!preserved)throw new Error('Pós-save recriou o DOM da lista de clientes');
+  await page.screenshot({path:path.join(outputDir,'04-cliente-sem-rerender.png'),fullPage:true});
+
+
+  // Draft settings form: a background refresh must preserve the node, focus and user edit.
+  await page.locator('[data-page="settings"]').click();
+  const companyName=page.locator('#companyForm input[name="name"]');
+  await companyName.waitFor({state:'visible'});
+  await companyName.fill('Rascunho QA não salvo');
+  await page.evaluate(()=>{window.__qaSettingsInput=document.querySelector('#companyForm input[name="name"]')});
+  await page.evaluate(()=>refreshCurrentPage());
+  const settingsStable=await page.evaluate(()=>({
+    same:window.__qaSettingsInput===document.querySelector('#companyForm input[name="name"]'),
+    draft:document.querySelector('#companyForm input[name="name"]').value,
+    focused:document.activeElement===document.querySelector('#companyForm input[name="name"]')
+  }));
+  if(!settingsStable.same||!settingsStable.focused||settingsStable.draft!=='Rascunho QA não salvo')
+    throw new Error('Atualização parcial descartou campo, foco ou nó de formulário não salvo');
+
+  // Automotivo: criação e leitura real de placa/VIN/km, revisão e garantia.
+  await page.locator('[data-page="machines"]').click();
+  await page.locator('#newMachine').click();
+  await page.locator('#modalBody select[name="customerId"]').selectOption({index:1});
+  await page.locator('#modalBody input[name="type"]').fill('Carro');
+  await page.locator('#modalBody input[name="brand"]').fill('VW');
+  await page.locator('#modalBody input[name="model"]').fill('Gol QA');
+  await page.locator('#modalBody input[name="plate"]').fill('QAB2C34');
+  await page.locator('#modalBody input[name="vin"]').fill('9BWZZZ377VT004251');
+  await page.locator('#modalBody input[name="odometerKm"]').fill('10520');
+  await page.locator('#modalBody button[type="submit"]').click();
+  await page.locator('#content').filter({hasText:'QAB2C34'}).waitFor({state:'visible'});
+  await page.locator('[data-history]').first().click();
+  await page.locator('#newReview').click();
+  await page.locator('#modalBody input[name="performedAt"]').fill('2026-11-02');
+  await page.locator('#modalBody input[name="nextDueKm"]').fill('20000');
+  await page.locator('#modalBody button[type="submit"]').click();
+  await page.locator('#modalBody').filter({hasText:'Revisão'}).waitFor({state:'visible'});
+  await page.locator('#newWarranty').click();
+  await page.locator('#modalBody input[name="warrantyUntil"]').fill('2027-11-02');
+  await page.locator('#modalBody button[type="submit"]').click();
+  await page.locator('#modalBody').filter({hasText:'Garantia'}).waitFor({state:'visible'});
+  await page.screenshot({path:path.join(outputDir,'05-historico-automotivo.png'),fullPage:true});
+
+
+  // Fresh installation browser flow. This server uses its own disposable SQLite file.
+  const setupPort=viewportName==='desktop'?3355:3356;
+  const setupFile=`.qa/onboarding-${viewportName}.sqlite`;
+  await rm(setupFile,{force:true});
+  const setupProcess=spawn(process.execPath,['src/start.js'],{
+    env:{...process.env,HOST:'127.0.0.1',PORT:String(setupPort),
+      DATABASE_PATH:setupFile,STORAGE_DIR:`.qa/onboarding-${viewportName}-uploads`,
+      NODE_ENV:'production',ADMIN_PASSWORD:''},
+    stdio:['ignore','pipe','pipe']
+  });
+  try{
+    let ready=false;
+    for(let i=0;i<120;i++){
+      if(setupProcess.exitCode!==null)throw new Error('Servidor de primeiro acesso encerrou');
+      try{const r=await fetch(`http://127.0.0.1:${setupPort}/api/health`);if(r.ok){ready=true;break}}catch{}
+      await sleep(250);
+    }
+    if(!ready)throw new Error('Servidor de primeiro acesso não iniciou');
+    const first=await context.newPage();
+    try{
+      await first.goto(`http://127.0.0.1:${setupPort}`,{waitUntil:'domcontentloaded'});
+      await first.locator('#setupForm').waitFor({state:'visible'});
+      await first.locator('#loginForm').waitFor({state:'hidden'});
+      await first.locator('#setupForm input[name="name"]').fill('Gestor Primeiro Acesso');
+      await first.locator('#setupForm input[name="username"]').fill('gestorqa');
+      await first.locator('#setupForm input[name="password"]').fill('PrimeiroAcessoQA2026!');
+      await first.locator('#setupForm input[name="confirmPassword"]').fill('PrimeiroAcessoQA2026!');
+      await first.locator('#setupForm button[type="submit"]').click();
+      await first.locator('#loginForm').waitFor({state:'visible'});
+      await first.locator('#loginForm input[name="username"]').fill('gestorqa');
+      await first.locator('#loginForm input[name="password"]').fill('PrimeiroAcessoQA2026!');
+      await first.locator('#loginForm button[type="submit"]').click();
+      await first.locator('#appView').waitFor({state:'visible'});
+      await first.screenshot({path:path.join(outputDir,'06-primeiro-acesso-seguro.png')});
+    }finally{await first.close()}
+  }finally{setupProcess.kill('SIGTERM')}
+
+  await writeFile(path.join(outputDir,'qa-summary.json'),`${JSON.stringify({status:'passed',viewport:viewportName,checks:['login','dashboard','demo-data','work-orders','os-detail','edit-action','pdf-action','history-action','client-save-without-rerender','settings-draft-focus-preserved','vehicle-identity','review-and-warranty','first-run-admin-browser']},null,2)}\n`);
 } catch(error){
   if(page)await page.screenshot({path:path.join(outputDir,'failure.png'),fullPage:true}).catch(()=>{});
   await writeFile(path.join(outputDir,'qa-summary.json'),`${JSON.stringify({status:'failed',viewport:viewportName,error:error.message},null,2)}\n`).catch(()=>{});

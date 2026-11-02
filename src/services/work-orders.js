@@ -89,17 +89,19 @@ export function duplicateWorkOrder(db,id,input={}){
   });
 }
 
-export function transitionWorkOrder(db,id,toStatus,{reason='',changedBy=null}={}){
-  return transaction(db,()=>{
-    const old=getWorkOrder(db,id); assertTransition(old.status,toStatus); const t=nowIso();
-    let completed=old.completed_at, delivered=old.delivered_at;
-    if(toStatus==='PRONTA') completed=t;
-    if(toStatus==='ENTREGUE') delivered=t;
-    if(toStatus==='EM_SERVICO' && old.status==='PRONTA') completed=null;
-    db.prepare('UPDATE work_orders SET status=?,completed_at=?,delivered_at=?,updated_at=? WHERE id=?').run(toStatus,completed,delivered,t,id);
-    db.prepare(`INSERT INTO work_order_status_history(work_order_id,from_status,to_status,reason,changed_by,changed_at) VALUES(?,?,?,?,?,?)`).run(id,old.status,toStatus,text(reason),changedBy,t);
-    return getWorkOrder(db,id);
-  });
+// Única autoridade para mudanças de estado da OS; chamador mantém a transação.
+export function transitionWorkOrderInTransaction(db,id,toStatus,{reason='',changedBy=null}={}){
+  const old=getWorkOrder(db,id); assertTransition(old.status,toStatus); const t=nowIso();
+  let completed=old.completed_at, delivered=old.delivered_at;
+  if(toStatus==='PRONTA') completed=t;
+  if(toStatus==='ENTREGUE') delivered=t;
+  if(toStatus==='EM_SERVICO' && old.status==='PRONTA') completed=null;
+  db.prepare('UPDATE work_orders SET status=?,completed_at=?,delivered_at=?,updated_at=? WHERE id=?').run(toStatus,completed,delivered,t,id);
+  db.prepare(`INSERT INTO work_order_status_history(work_order_id,from_status,to_status,reason,changed_by,changed_at) VALUES(?,?,?,?,?,?)`).run(id,old.status,toStatus,text(reason),changedBy,t);
+  return getWorkOrder(db,id);
+}
+export function transitionWorkOrder(db,id,toStatus,options={}){
+  return transaction(db,()=>transitionWorkOrderInTransaction(db,id,toStatus,options));
 }
 
 export function getWorkOrderHistory(db,id){

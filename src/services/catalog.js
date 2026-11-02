@@ -34,19 +34,37 @@ export function updateCustomer(db,id,input){
   return getCustomer(db,id);
 }
 
+function normalizePlate(value){
+  const plate=text(value).toUpperCase().replace(/[\s-]/g,'');
+  if(plate&&!/^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(plate))throw new Error('Placa inválida (7 caracteres)');
+  return plate||null;
+}
+function normalizeVin(value){
+  const vin=text(value).toUpperCase().replace(/\s/g,'');
+  if(vin&&!/^[A-HJ-NPR-Z0-9]{17}$/.test(vin))throw new Error('VIN/chassi inválido (17 caracteres)');
+  return vin||null;
+}
+function parseOdometer(value){
+  if(value===undefined||value===null||value==='')return null;
+  const n=Number(value);
+  if(!Number.isFinite(n)||n<0)throw new Error('Quilometragem inválida');
+  return n;
+}
 export function createMachine(db,input){
   const owner=db.prepare('SELECT id FROM customers WHERE id=?').get(input.customerId); if(!owner) throw new Error('Cliente não encontrado');
   const hour=Number(input.hourMeter??0); if(!Number.isFinite(hour)||hour<0) throw new Error('Horímetro inválido');
   const year=input.year==null||input.year===''?null:Number(input.year); if(year!==null && (!Number.isInteger(year)||year<1900||year>2200)) throw new Error('Ano inválido');
-  const t=nowIso(); const result=db.prepare(`INSERT INTO machines(customer_id,type,brand,model,year,serial_number,internal_id,hour_meter,notes,active,created_at,updated_at)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(input.customerId,requireName(input.type,'Tipo da máquina'),text(input.brand),text(input.model),year,text(input.serialNumber),text(input.internalId),hour,text(input.notes),boolInt(input.active),t,t);
+  const t=nowIso(); const result=db.prepare(`INSERT INTO machines(customer_id,type,brand,model,year,serial_number,internal_id,hour_meter,license_plate,vin,odometer_km,notes,active,created_at,updated_at)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(input.customerId,requireName(input.type,'Tipo da máquina'),text(input.brand),text(input.model),year,text(input.serialNumber),text(input.internalId),hour,
+      normalizePlate(input.plate),normalizeVin(input.vin),parseOdometer(input.odometerKm),
+      text(input.notes),boolInt(input.active),t,t);
   return getMachine(db,Number(result.lastInsertRowid));
 }
 export function getMachine(db,id){ const row=db.prepare('SELECT * FROM machines WHERE id=?').get(id); if(!row) throw new Error('Máquina não encontrada'); return row; }
 export function listMachines(db,{customerId,includeInactive=false,search=''}={}){
   const clauses=['(?=1 OR m.active=1)']; const params=[includeInactive?1:0];
   if(customerId){clauses.push('m.customer_id=?');params.push(customerId)}
-  if(search){clauses.push('(m.type LIKE ? OR m.brand LIKE ? OR m.model LIKE ? OR m.serial_number LIKE ? OR c.name LIKE ?)'); const q=`%${text(search)}%`;params.push(q,q,q,q,q)}
+  if(search){clauses.push('(m.type LIKE ? OR m.brand LIKE ? OR m.model LIKE ? OR m.serial_number LIKE ? OR m.license_plate LIKE ? OR m.vin LIKE ? OR c.name LIKE ?)'); const q=`%${text(search)}%`;params.push(q,q,q,q,q,q,q)}
   return db.prepare(`SELECT m.*, c.name customer_name FROM machines m JOIN customers c ON c.id=m.customer_id WHERE ${clauses.join(' AND ')} ORDER BY m.id DESC`).all(...params);
 }
 export function listCustomerMachines(db,customerId){ getCustomer(db,customerId); return listMachines(db,{customerId,includeInactive:true}); }
@@ -54,10 +72,16 @@ export function updateMachine(db,id,input){
   const old=getMachine(db,id); const customerId=input.customerId??old.customer_id; getCustomer(db,customerId);
   const hour=input.hourMeter===undefined?old.hour_meter:Number(input.hourMeter); if(!Number.isFinite(hour)||hour<0) throw new Error('Horímetro inválido');
   const t=nowIso();
-  db.prepare(`UPDATE machines SET customer_id=?,type=?,brand=?,model=?,year=?,serial_number=?,internal_id=?,hour_meter=?,notes=?,active=?,updated_at=? WHERE id=?`).run(
+  const year=input.year===undefined?old.year:(input.year==null||input.year===''?null:Number(input.year));
+  if(year!==null&&(!Number.isInteger(year)||year<1900||year>2200))throw new Error('Ano inválido');
+  db.prepare(`UPDATE machines SET customer_id=?,type=?,brand=?,model=?,year=?,serial_number=?,internal_id=?,hour_meter=?,license_plate=?,vin=?,odometer_km=?,notes=?,active=?,updated_at=? WHERE id=?`).run(
     customerId,input.type===undefined?old.type:requireName(input.type,'Tipo da máquina'),input.brand===undefined?old.brand:text(input.brand),input.model===undefined?old.model:text(input.model),
-    input.year===undefined?old.year:(input.year==null||input.year===''?null:Number(input.year)),input.serialNumber===undefined?old.serial_number:text(input.serialNumber),
-    input.internalId===undefined?old.internal_id:text(input.internalId),hour,input.notes===undefined?old.notes:text(input.notes),boolInt(input.active,old.active),t,id);
+    year,input.serialNumber===undefined?old.serial_number:text(input.serialNumber),
+    input.internalId===undefined?old.internal_id:text(input.internalId),hour,
+    input.plate===undefined?old.license_plate:normalizePlate(input.plate),
+    input.vin===undefined?old.vin:normalizeVin(input.vin),
+    input.odometerKm===undefined?old.odometer_km:parseOdometer(input.odometerKm),
+    input.notes===undefined?old.notes:text(input.notes),boolInt(input.active,old.active),t,id);
   return getMachine(db,id);
 }
 

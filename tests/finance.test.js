@@ -1,13 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { openDatabase, migrate } from '../src/db.js';
+import { migrateAssistencia } from '../src/assistencia-schema.js';
+import { openCashSession } from '../src/services/sales.js';
 import { createCustomer, createMachine } from '../src/services/catalog.js';
 import { createWorkOrder, transitionWorkOrder } from '../src/services/work-orders.js';
 import { saveQuote, approveQuote } from '../src/services/quotes.js';
 import { addReceipt, reverseReceipt, getPaymentSummary, createExpense, financeSummary } from '../src/services/finance.js';
 
 function setup(){
- const db=openDatabase(':memory:'); migrate(db); const c=createCustomer(db,{name:'Fazenda'}); const m=createMachine(db,{customerId:c.id,type:'Trator'});
+ const db=openDatabase(':memory:'); migrate(db); migrateAssistencia(db); openCashSession(db,{openingCents:0}); const c=createCustomer(db,{name:'Fazenda'}); const m=createMachine(db,{customerId:c.id,type:'Trator'});
  const os=createWorkOrder(db,{customerId:c.id,machineId:m.id,problemReported:'Falha'}); transitionWorkOrder(db,os.id,'DIAGNOSTICO'); saveQuote(db,os.id,{items:[{kind:'MAO_DE_OBRA',description:'Serviço',quantity:1,unitPriceCents:10000}]}); approveQuote(db,os.id);
  return {db,os};
 }

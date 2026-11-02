@@ -89,5 +89,36 @@ export function migrateAssistencia(db) {
   if(!columns.has('request_id'))db.exec('ALTER TABLE sales ADD COLUMN request_id TEXT');
   if(!columns.has('request_payload_hash'))db.exec('ALTER TABLE sales ADD COLUMN request_payload_hash TEXT');
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_sales_request_id ON sales(request_id) WHERE request_id IS NOT NULL;');
+  const cashCols=new Set(db.prepare("PRAGMA table_info('cash_movements')").all().map(c=>c.name));
+  if(!cashCols.has('receipt_id'))db.exec('ALTER TABLE cash_movements ADD COLUMN receipt_id INTEGER REFERENCES receipts(id)');
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_cash_receipt_action ON cash_movements(receipt_id,type) WHERE receipt_id IS NOT NULL");
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_cash_sale_action ON cash_movements(sale_id,type) WHERE sale_id IS NOT NULL");
+
+  // Receitas de balcão legadas entram apenas no ledger lógico, sem duplicar
+  // movimentações de caixa já persistidas.
+  db.exec(`
+    INSERT OR IGNORE INTO payment_events(source_type,source_id,event_type,amount_cents,method,cash_session_id,created_at)
+    SELECT 'SALE',id,'PAID',total_cents,payment_method,cash_session_id,created_at
+    FROM sales WHERE total_cents>0;
+    INSERT OR IGNORE INTO payment_events(source_type,source_id,event_type,amount_cents,method,cash_session_id,created_at)
+    SELECT 'SALE',id,'REFUNDED',-total_cents,payment_method,NULL,COALESCE(canceled_at,created_at)
+    FROM sales WHERE status='CANCELADA' AND total_cents>0;
+  `);
+
+  // Um único livro de estoque: inventory_movements. Histórico sale_stock_movements
+  // é migrado uma única vez, SEM reaplicar o delta ao saldo materializado.
+  const inventoryCols=new Set(db.prepare("PRAGMA table_info('inventory_movements')").all().map(c=>c.name));
+  if(!inventoryCols.has('source_type'))db.exec('ALTER TABLE inventory_movements ADD COLUMN source_type TEXT');
+  if(!inventoryCols.has('source_item_id'))db.exec('ALTER TABLE inventory_movements ADD COLUMN source_item_id INTEGER');
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_inventory_source_unique ON inventory_movements(source_type,source_item_id) WHERE source_type IS NOT NULL AND source_item_id IS NOT NULL");
+  db.exec(`
+    INSERT OR IGNORE INTO inventory_movements(part_id,type,quantity_delta,work_order_id,note,created_by,created_at,source_type,source_item_id)
+    SELECT sm.part_id,'SAIDA_MANUAL',sm.quantity_delta,NULL,'Migração venda legada',NULL,sm.created_at,'SALE_ITEM',sm.sale_item_id
+    FROM sale_stock_movements sm;
+    INSERT OR IGNORE INTO inventory_movements(part_id,type,quantity_delta,work_order_id,note,created_by,created_at,source_type,source_item_id)
+    SELECT sm.part_id,'ESTORNO',-sm.quantity_delta,NULL,'Migração estorno legado',NULL,sm.reversed_at,'SALE_RETURN',sm.sale_item_id
+    FROM sale_stock_movements sm WHERE sm.reversed_at IS NOT NULL;
+  `);
+
 
 }

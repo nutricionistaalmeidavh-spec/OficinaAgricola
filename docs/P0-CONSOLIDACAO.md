@@ -23,7 +23,7 @@ Anexos Windows: `%LOCALAPPDATA%\\ArtiSys\\Oficina\\storage\\uploads`.
 - **Premissa de implantação:** computadores novos, sem instalações anteriores.
 
 ## Gates
-`npm run ci`, QA desktop/mobile CircleCI, suíte HTTP E2E, testes P0 e build manual Windows. Não realizar merge nem publicação sem todos os gates confirmados.
+`npm run ci`, GitHub Actions CI e QA visual desktop/mobile (Playwright), suíte HTTP E2E, testes de C0/C1 e build manual Windows. CircleCI não faz parte da configuração do projeto. Não realizar merge nem publicação sem todos os gates confirmados.
 
 ## Limites
 - Módulo fiscal não foi conectado à oficina nesta fase.

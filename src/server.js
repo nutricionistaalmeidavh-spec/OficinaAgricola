@@ -13,6 +13,8 @@ import { createScheduleEvent, listSchedule, updateScheduleEvent, createChecklist
 import { addReceipt, reverseReceipt, listReceipts, getPaymentSummary, createExpense, updateExpense, listExpenses, financeSummary } from './services/finance.js';
 import { dashboardData } from './services/dashboard.js';
 import { seed } from './seed.js';
+import {listServiceRecords,createServiceRecord} from './services/vehicle-maintenance.js';
+import {isSetupRequired,initializeAdmin} from './setup.js';
 
 const __dirname=fileURLToPath(new URL('.',import.meta.url));
 const publicDir=resolve(__dirname,'../public');
@@ -46,6 +48,8 @@ const int=(v)=>{const n=Number(v);if(!Number.isInteger(n)||n<=0)throw new Error(
 function createRouter({db,storageDir}){
   const r=new Router(); const add=(m,p,roles,h,o)=>r.add(m,p,roles,h,o);
   add('GET','/api/health',null,()=>({ok:true}),{publicRoute:true});
+  add('GET','/api/setup/status',null,()=>({required:isSetupRequired(db)}),{publicRoute:true});
+  add('POST','/api/setup/initialize',null,({req,body})=>initializeAdmin(db,req,body),{publicRoute:true});
   add('POST','/api/auth/login',null,({body})=>login(db,body.username,body.password),{publicRoute:true});
   add('POST','/api/auth/logout',ROLE_ALL,({token})=>{logout(db,token);return {ok:true}});
   add('GET','/api/auth/me',ROLE_ALL,({user})=>user);
@@ -65,6 +69,8 @@ function createRouter({db,storageDir}){
   add('GET','/api/machines/:id',ROLE_ALL,({params})=>getMachine(db,int(params.id)));
   add('PATCH','/api/machines/:id',ROLE_OFFICE,({params,body})=>updateMachine(db,int(params.id),body));
   add('GET','/api/machines/:id/history',ROLE_ALL,({params})=>machineHistory(db,int(params.id)));
+  add('GET','/api/machines/:id/maintenance',ROLE_ALL,({params})=>listServiceRecords(db,int(params.id)));
+  add('POST','/api/machines/:id/maintenance',ROLE_OFFICE,({params,body})=>createServiceRecord(db,int(params.id),body));
   add('GET','/api/technicians',ROLE_ALL,()=>listTechnicians(db,{includeInactive:true}));
   add('POST','/api/technicians',['ADMIN'],({body})=>createTechnician(db,body));
   add('PATCH','/api/technicians/:id',['ADMIN'],({params,body})=>updateTechnician(db,int(params.id),body));

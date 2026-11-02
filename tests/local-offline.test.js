@@ -56,10 +56,10 @@ test('núcleo local não exige API ou SaaS externo', async () => {
   assert.doesNotMatch(sw, /https?:\/\//);
 });
 
-test('o pipeline unificado não publica instaladores automaticamente', async () => {
-  const circle=await readRepo('.circleci/config.yml');
-  assert.match(circle,/oficina_unificada:/);
-  assert.match(circle,/quality:/);
-  assert.match(circle,/qa:/);
-  assert.doesNotMatch(circle,/desktop_publish|publish-filebin|desktop_build/);
+test('o pipeline GitHub Actions não publica instaladores automaticamente', async () => {
+  const ci=await readRepo('.github/workflows/ci.yml');
+  const qa=await readRepo('.github/workflows/artisys-qa-stage7.yml');
+  assert.match(ci,/pull_request:/);
+  assert.match(qa,/matrix:/);
+  assert.doesNotMatch(ci+qa,/desktop_publish|publish-filebin|desktop_build/);
 });

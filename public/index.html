@@ -27,6 +27,20 @@
       <button class="btn primary" type="submit">Entrar</button>
       <p id="loginError" class="error"></p>
     </form>
+    <form id="setupForm" class="login-card hidden" autocomplete="off">
+      <div class="login-brand">
+        <div class="brand-mark">AO</div>
+        <div><small>PRIMEIRA INSTALAÇÃO</small><h1>Configurar administrador</h1>
+          <p>Crie o primeiro acesso diretamente na máquina principal. Não existe senha padrão.</p></div>
+      </div>
+      <label>Nome do responsável<input name="name" autocomplete="name" minlength="3" required></label>
+      <label>Usuário administrador<input name="username" autocomplete="username" minlength="3" maxlength="40" required></label>
+      <label>Senha forte<input name="password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required></label>
+      <label>Confirmar senha<input name="confirmPassword" type="password" autocomplete="new-password" minlength="12" maxlength="128" required></label>
+      <small>Use ao menos 12 caracteres, incluindo maiúscula, minúscula, número e símbolo.</small>
+      <button class="btn primary" type="submit">Criar administrador</button>
+      <p id="setupError" class="error" role="alert"></p>
+    </form>
   </section>
 
   <div id="appView" class="app-shell hidden">

@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 import { nowIso, transaction } from '../db.js';
+import { postStockMovement } from './inventory.js';
+import { postCashMovement, postPaymentEvent } from './payment-ledger.js';
 
 const text = (value) => value == null ? '' : String(value).trim();
 const positiveNumber = (value, label = 'Quantidade') => {
@@ -80,9 +82,10 @@ export function addCashMovement(db, { type, amountCents, note = '', userId = nul
   const value = cents(amountCents);
   if (value <= 0) throw new Error('Valor deve ser maior que zero');
   const signed = type === 'SANGRIA' ? -value : value;
-  const result = db.prepare(`INSERT INTO cash_movements(cash_session_id,type,amount_cents,payment_method,note,created_by,created_at)
-    VALUES(?,?,?,'DINHEIRO',?,?,?)`).run(session.id, type, signed, text(note), userId, nowIso());
-  return db.prepare('SELECT * FROM cash_movements WHERE id=?').get(Number(result.lastInsertRowid));
+  return db.prepare('SELECT * FROM cash_movements WHERE id=?').get(
+    postCashMovement(db,{cashSessionId:session.id,type,amountCents:signed,
+      paymentMethod:'DINHEIRO',note,createdBy:userId})
+  );
 }
 
 function normalizeSaleItem(db, input) {
@@ -123,6 +126,7 @@ function saleFingerprint(input,items) {
 }
 
 export function createSale(db, input, { userId = null } = {}) {
+  if(input.workOrderId!=null)throw new Error('Recebimentos de OS devem ser registrados no financeiro da ordem de serviço; venda balcão separada');
   const rawItems = Array.isArray(input.items) ? input.items : [];
   if (!rawItems.length) throw new Error('A venda precisa ter ao menos um item');
   const requestId=text(input.requestId);
@@ -164,17 +168,19 @@ export function createSale(db, input, { userId = null } = {}) {
       const itemResult = db.prepare(`INSERT INTO sale_items(sale_id,kind,part_id,service_id,description,quantity,unit_price_cents,total_cents)
         VALUES(?,?,?,?,?,?,?,?)`).run(saleId, item.kind, item.partId, item.serviceId, item.description, item.quantity, item.unitPriceCents, item.totalCents);
       if (item.partId) {
-        const updated=db.prepare('UPDATE parts SET quantity=quantity-?,updated_at=? WHERE id=? AND quantity>=?').run(item.quantity,createdAt,item.partId,item.quantity);
-        if(updated.changes!==1)throw new Error('Estoque insuficiente para os itens da venda');
-        db.prepare(`INSERT INTO sale_stock_movements(sale_item_id,part_id,quantity_delta,created_at) VALUES(?,?,?,?)`)
-          .run(Number(itemResult.lastInsertRowid), item.partId, -item.quantity, createdAt);
+        postStockMovement(db,item.partId,{
+          type:'SAIDA_MANUAL',quantity:item.quantity,originType:'SALE_ITEM',
+          originItemId:Number(itemResult.lastInsertRowid),
+          note:`Venda #${saleNumber}`,createdBy:userId
+        });
       }
     }
 
-    if (total > 0) {
-      db.prepare(`INSERT INTO cash_movements(cash_session_id,sale_id,type,amount_cents,payment_method,note,created_by,created_at)
-        VALUES(?,?,'VENDA',?,?,?,?,?)`).run(cash.id, saleId, total, paymentMethod, `Venda #${saleNumber}`, userId, createdAt);
-    }
+    if(total>0)postPaymentEvent(db,{
+      sourceType:'SALE',sourceId:saleId,eventType:'PAID',
+      amountCents:total,method:paymentMethod,cashSessionId:cash.id,
+      createdBy:userId,note:`Venda #${saleNumber}`,createdAt
+    });
     return getSale(db, saleId);
   });
 }
@@ -202,15 +208,27 @@ export function cancelSale(db, id, { reason = '', userId = null } = {}) {
     const currentCash=getOpenCashSession(db);
     if(sale.total_cents>0&&!currentCash)throw new Error('Abra o caixa para registrar o estorno da venda');
     const t = nowIso();
-    const stock = db.prepare(`SELECT ssm.* FROM sale_stock_movements ssm JOIN sale_items si ON si.id=ssm.sale_item_id WHERE si.sale_id=? AND ssm.reversed_at IS NULL`).all(id);
-    for (const movement of stock) {
-      const part = db.prepare('SELECT * FROM parts WHERE id=?').get(movement.part_id);
-      db.prepare('UPDATE parts SET quantity=?,updated_at=? WHERE id=?').run(Number(part.quantity) - Number(movement.quantity_delta), t, movement.part_id);
-      db.prepare('UPDATE sale_stock_movements SET reversed_at=? WHERE id=?').run(t, movement.id);
+    const stock=db.prepare(`SELECT im.* FROM inventory_movements im
+      JOIN sale_items si ON si.id=im.source_item_id
+      WHERE im.source_type='SALE_ITEM' AND si.sale_id=?
+        AND NOT EXISTS (
+          SELECT 1 FROM inventory_movements reversal
+          WHERE reversal.source_type='SALE_RETURN' AND reversal.source_item_id=im.source_item_id
+        )`).all(id);
+    for(const movement of stock){
+      postStockMovement(db,movement.part_id,{
+        type:'ESTORNO',quantity:-Number(movement.quantity_delta),
+        originType:'SALE_RETURN',originItemId:Number(movement.source_item_id),
+        note:`Estorno venda #${sale.sale_number}`,createdBy:userId,
+      });
     }
     db.prepare(`UPDATE sales SET status='CANCELADA',canceled_at=?,cancel_reason=? WHERE id=?`).run(t, text(reason), id);
-    if(currentCash&&sale.total_cents>0)db.prepare(`INSERT INTO cash_movements(cash_session_id,sale_id,type,amount_cents,payment_method,note,created_by,created_at)
-        VALUES(?,?,'ESTORNO',?,?,?,?,?)`).run(currentCash.id,id,-sale.total_cents,sale.payment_method,`Estorno venda #${sale.sale_number}`,userId,t);
+    if(currentCash&&sale.total_cents>0)postPaymentEvent(db,{
+      sourceType:'SALE',sourceId:id,eventType:'REFUNDED',
+      amountCents:sale.total_cents,method:sale.payment_method,
+      cashSessionId:currentCash.id,createdBy:userId,
+      note:`Estorno venda #${sale.sale_number}`,createdAt:t
+    });
     return getSale(db, id);
   });
 }
