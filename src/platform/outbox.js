@@ -17,6 +17,8 @@ function identity(method,path,data,descriptor,db){
  return type+':'+String(ref??JSON.stringify(payload));
 }
 export function enqueueHttpEvent(db,method,path,data,{requestId=null,actorId=null}={}){
+ // Autenticação tem auditoria própria; não gravar resposta de login ou token.
+ if(['/api/auth/login','/api/auth/logout'].includes(path))return null;
  const known=describeHttpMutation(method,path,data);
  // O evento genérico não inclui o payload original: pode conter senhas,
  // tokens e outros dados privados. Registra somente o recurso alterado.
