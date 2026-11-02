@@ -37,7 +37,7 @@ jobs:
           name: Deterministic seed
           command: |
             rm -rf .qa
-            DATABASE_PATH=.qa/assistencia-tecnica.sqlite STORAGE_DIR=.qa/uploads node scripts/seed-qa-demo.mjs
+            DATABASE_PATH=.qa/artisys-oficina.sqlite STORAGE_DIR=.qa/uploads node scripts/seed-qa-demo.mjs
       - run:
           name: Validate UI in << parameters.viewport >>
           command: |
