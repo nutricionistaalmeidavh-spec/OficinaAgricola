@@ -4,6 +4,7 @@ import { join, resolve, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openDatabase, migrate, nowIso, transaction } from './db.js';
 import {enqueueHttpEvent,dispatchOutbox} from './platform/outbox.js';
+import {runIdempotent} from './platform/idempotency.js';
 import {auditInvariants} from './services/reconciliation.js';
 import { login, logout, validateSession, createUser, hashPassword } from './auth.js';
 import { createCustomer, listCustomers, updateCustomer, getCustomer, createMachine, listMachines, updateMachine, getMachine, createTechnician, listTechnicians, updateTechnician } from './services/catalog.js';
@@ -141,7 +142,9 @@ export function createAppServer({db=openDatabase(),storageDir=process.env.STORAG
         const invoke=()=>route.handler({req,res,url,params:route.params,body,user,token,db});
         // Uma confirmação: comando de negócio + registro de evento imutável.
         const data=isMutation?transaction(db,()=>{
-          const output=invoke();
+          const output=runIdempotent(db,
+            `http:${req.method}:${url.pathname}:user:${user?.id??'public'}`,
+            body.requestId??req.headers['idempotency-key'],{body},invoke);
           if(!res.writableEnded)enqueueHttpEvent(db,req.method,url.pathname,output);
           return output;
         }):invoke();
