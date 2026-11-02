@@ -116,6 +116,10 @@ try{
   await page.locator('#newWarranty').click();
   await page.locator('#modalBody input[name="warrantyUntil"]').fill('2027-11-02');
   await page.locator('#modalBody button[type="submit"]').click();
+  // Aguardar a gravação concluir e o formulário ser substituído pelo histórico.
+  // Verificar apenas o texto 'Garantia' aqui cria corrida: o formulário já contém a palavra.
+  await page.locator('#modalTitle').filter({hasText:'Histórico'}).waitFor({state:'visible'});
+  await page.locator('#newWarranty').waitFor({state:'visible'});
   await page.locator('#modalBody').filter({hasText:'Garantia'}).waitFor({state:'visible'});
   await page.screenshot({path:path.join(outputDir,'05-historico-automotivo.png'),fullPage:true});
 
