@@ -1,8 +1,9 @@
+import { resolveDatabasePath, resolveStoragePath } from './platform/data-location.js';
 import { openDatabase, migrate } from './db.js';
 import { migrateAssistencia } from './assistencia-schema.js';
 import { seed } from './seed.js';
 
-process.env.DATABASE_PATH ||= './data/assistencia-tecnica.sqlite';
+process.env.DATABASE_PATH = resolveDatabasePath();
 
 const db = openDatabase();
 try {
