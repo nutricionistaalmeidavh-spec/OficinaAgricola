@@ -16,15 +16,23 @@ function identity(method,path,data,descriptor,db){
  if(type==='QUOTE_APPROVED')return type+':'+(payload.quoteId??data?.id);
  return type+':'+String(ref??JSON.stringify(payload));
 }
-export function enqueueHttpEvent(db,method,path,data){
- const descriptor=describeHttpMutation(method,path,data);
- if(!descriptor)return null;
- const eventKey=identity(method,path,data,descriptor,db);
+export function enqueueHttpEvent(db,method,path,data,{requestId=null,actorId=null}={}){
+ const known=describeHttpMutation(method,path,data);
+ // O evento genérico não inclui o payload original: pode conter senhas,
+ // tokens e outros dados privados. Registra somente o recurso alterado.
+ const descriptor=known||{
+   type:'ENTITY_MUTATED',
+   payload:{method:String(method||''),path:String(path||''),resourceId:data?.id??null},
+   meta:{correlationId:String(path||'')}
+ };
+ const eventKey=known?identity(method,path,data,descriptor,db):
+   requestId?`ENTITY_MUTATED:${method}:${path}:${actorId??'system'}:${requestId}`:
+   `ENTITY_MUTATED:${randomUUID()}`;
  const eventId=randomUUID();
  db.prepare(`INSERT OR IGNORE INTO domain_outbox(
    event_key,event_id,event_type,payload_json,meta_json,created_at
  ) VALUES(?,?,?,?,?,?)`).run(eventKey,eventId,descriptor.type,
-   JSON.stringify(descriptor.payload),JSON.stringify(descriptor.meta||{}),nowIso());
+   JSON.stringify(descriptor.payload),JSON.stringify({...descriptor.meta,actorId:actorId??null}),nowIso());
  return db.prepare('SELECT * FROM domain_outbox WHERE event_key=?').get(eventKey);
 }
 export function unpublishedOutbox(db,limit=100){
