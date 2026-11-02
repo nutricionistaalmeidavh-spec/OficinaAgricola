@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "systemId": "assistencia-tecnica",
+  "systemId": "artisys-oficina",
   "mode": "web",
   "defaultEnvironment": "local",
   "defaultFlow": "stage7-shell",
@@ -19,7 +19,7 @@
       "env": {
         "HOST": "127.0.0.1",
         "PORT": "3344",
-        "DATABASE_PATH": ".qa/assistencia-tecnica.sqlite",
+        "DATABASE_PATH": ".qa/artisys-oficina.sqlite",
         "STORAGE_DIR": ".qa/uploads",
         "EVENT_LOG_PATH": ".qa/events.jsonl"
       }
