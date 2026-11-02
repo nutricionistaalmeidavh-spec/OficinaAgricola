@@ -32,7 +32,7 @@ async function editFullWorkOrder(id){
     <button class="btn primary" type="submit">Salvar alterações</button>
   </form>`,async fd=>{
     const o=formObj(fd); const body={customerId:Number(o.customerId),machineId:Number(o.machineId),problemReported:o.problemReported,diagnosis:o.diagnosis,technicianId:o.technicianId?Number(o.technicianId):null,priority:o.priority,enteredAt:new Date(o.enteredAt).toISOString(),estimatedDelivery:o.estimatedDelivery?new Date(o.estimatedDelivery).toISOString():null,internalNotes:o.internalNotes};
-    await api(`/api/work-orders/${id}`,{method:'PATCH',body}); toast('OS atualizada e alteração registrada'); await renderWorkOrders();
+    await api(`/api/work-orders/${id}`,{method:'PATCH',body}); toast('OS atualizada e alteração registrada'); await refreshCurrentPage();
   });
   $('#editOsCustomer').onchange=e=>{const opts=machineOptions(machines,e.target.value,null);$('#editOsMachine').innerHTML=opts||'<option value="">Nenhuma equipamento deste cliente</option>'};
 }
@@ -72,7 +72,7 @@ async function duplicateWorkOrderUi(id){
       await api(`/api/work-orders/${created.id}/status`,{method:'POST',body:{status:'DIAGNOSTICO',reason:'Preparação de orçamento reutilizado'}});
       await api(`/api/work-orders/${created.id}/quote`,{method:'PUT',body:{discountCents:quote.discount_cents,validUntil:null,notes:quote.notes,items:quote.items.map(i=>({kind:i.kind,description:i.description,quantity:i.quantity,unitPriceCents:i.unit_price_cents}))}});
     }
-    toast(`Nova OS #${created.os_number} criada`); await renderWorkOrders();
+    toast(`Nova OS #${created.os_number} criada`); await refreshCurrentPage();
   });
   $('#dupCustomer').onchange=e=>{const opts=machineOptions(machines,e.target.value,null);$('#dupMachine').innerHTML=opts||'<option value="">Nenhuma equipamento deste cliente</option>'};
 }
