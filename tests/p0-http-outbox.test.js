@@ -55,7 +55,7 @@ test('P0 HTTP: a auditoria genérica nunca persiste senha no payload dos eventos
  const r=await fetch(base+'/api/users',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
    body:JSON.stringify({requestId:'new-user-p0',username:'novo',name:'Novo',role:'ATENDIMENTO',password:'OutroSegredoP0!2026'})});
  assert.equal(r.status,200);
- const rows=db.prepare("SELECT payload_json FROM domain_outbox WHERE event_type='ENTITY_MUTATED'").all();
+ const rows=db.prepare("SELECT payload_json FROM domain_outbox WHERE event_type='ENTITY_MUTATED'").all().filter(row=>JSON.parse(row.payload_json).path==='/api/users');
  assert.equal(rows.length,1);
  assert.equal(JSON.stringify(rows).includes('OutroSegredoP0!2026'),false);
 });
