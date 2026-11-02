@@ -41,8 +41,8 @@ try{
   video=page.video();
 
   await page.goto('http://127.0.0.1:3344',{waitUntil:'domcontentloaded'});
-  await page.getByLabel('Usuário').fill('admin');
-  await page.getByLabel('Senha').fill('Admin@1234');
+  await page.locator('#loginForm input[name="username"]').fill('admin');
+  await page.locator('#loginForm input[name="password"]').fill('Admin@1234');
   await page.getByRole('button',{name:'Entrar'}).click();
   await page.locator('#appView').waitFor({state:'visible'});
   await page.locator('#pageTitle').filter({hasText:'Visão Geral'}).waitFor({state:'visible'});
