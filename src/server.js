@@ -6,6 +6,7 @@ import { openDatabase, migrate, nowIso, transaction } from './db.js';
 import {enqueueHttpEvent,dispatchOutbox} from './platform/outbox.js';
 import {runIdempotent} from './platform/idempotency.js';
 import {auditInvariants} from './services/reconciliation.js';
+import {duplicateWorkOrderWithQuote} from './services/work-order-duplication.js';
 import { login, logout, validateSession, createUser, hashPassword } from './auth.js';
 import { createCustomer, listCustomers, updateCustomer, getCustomer, createMachine, listMachines, updateMachine, getMachine, createTechnician, listTechnicians, updateTechnician } from './services/catalog.js';
 import { createWorkOrder, listWorkOrders, getWorkOrder, updateWorkOrder, transitionWorkOrder, getWorkOrderHistory, machineHistory } from './services/work-orders.js';
@@ -80,6 +81,8 @@ function createRouter({db,storageDir}){
 
   add('GET','/api/work-orders',ROLE_ALL,({url})=>listWorkOrders(db,{status:url.searchParams.get('status')||undefined,search:url.searchParams.get('search')||''}));
   add('POST','/api/work-orders',ROLE_OFFICE,({body,user})=>createWorkOrder(db,{...body,createdBy:user.id}));
+  add('POST','/api/work-orders/:id/duplicate',ROLE_OFFICE,({params,body,user})=>
+    duplicateWorkOrderWithQuote(db,int(params.id),body,{createdBy:user.id}));
   add('GET','/api/work-orders/:id',ROLE_ALL,({params})=>getWorkOrder(db,int(params.id)));
   add('PATCH','/api/work-orders/:id',ROLE_TECH,({params,body,user})=>updateWorkOrder(db,int(params.id),body,{changedBy:user.id}));
   add('POST','/api/work-orders/:id/status',ROLE_TECH,({params,body,user})=>transitionWorkOrder(db,int(params.id),body.status,{reason:body.reason,changedBy:user.id}));
