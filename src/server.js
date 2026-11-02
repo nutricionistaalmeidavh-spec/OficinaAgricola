@@ -145,7 +145,9 @@ export function createAppServer({db=openDatabase(),storageDir=process.env.STORAG
         const invoke=()=>route.handler({req,res,url,params:route.params,body,user,token,db});
         // Uma confirmação: comando de negócio + registro de evento imutável.
         const data=isMutation?transaction(db,()=>{
-          const output=runIdempotent(db,
+          // Nunca persistir tokens de login/segredos no cache de respostas idempotentes.
+          const securityRoute=['/api/auth/login','/api/auth/logout','/api/setup/initialize'].includes(url.pathname);
+          const output=securityRoute?invoke():runIdempotent(db,
             `http:${req.method}:${url.pathname}:user:${user?.id??'public'}`,
             body.requestId??req.headers['idempotency-key'],{body},invoke);
           if(!res.writableEnded)enqueueHttpEvent(db,req.method,url.pathname,output,{requestId:body.requestId??req.headers['idempotency-key'],actorId:user?.id??null});
