@@ -28,7 +28,7 @@ export function renderDocument(db,workOrderId,kind='work-order'){
     body{font-family:Arial,sans-serif;color:#1b2a22;max-width:900px;margin:32px auto;padding:0 24px} header{border-bottom:3px solid #075b3a;padding-bottom:16px;margin-bottom:24px} h1{color:#075b3a;margin:0} h2{margin-top:28px} .meta{display:grid;grid-template-columns:1fr 1fr;gap:10px} table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border-bottom:1px solid #ddd;padding:9px;text-align:left}.totals{text-align:right;margin-top:16px}small{color:#667}</style></head><body>
     <header><h1>${esc(company.name)}</h1><div>${esc(company.document)} ${esc(company.phone)}</div><h2>${titles[kind]} — OS #${os.os_number}</h2></header>
     <section class="meta"><div><strong>Cliente</strong><br>${esc(customer.name)}<br>${esc(customer.document)}</div><div><strong>Equipamento</strong><br>${esc(machine.type)} ${esc(machine.brand)} ${esc(machine.model)}<br>Série: ${esc(machine.serialNumber)||'—'}</div><div><strong>Entrada</strong><br>${date(os.entered_at)}</div><div><strong>Status</strong><br>${esc(os.status)}</div></section>
-    ${body}<footer><p><small>Documento gerado localmente pelo ArtiSys Assistência Técnica.</small></p></footer></body></html>`;
+    ${body}<footer><p><small>Documento gerado localmente pelo ArtiSys Oficina.</small></p></footer></body></html>`;
 }
 
 const pdfSafe=(value)=>String(value??'').replace(/[\u2010-\u2015]/g,'-').replace(/\u00a0/g,' ').replace(/[^\x20-\xFF]/g,'?').replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)');
@@ -69,6 +69,6 @@ export function renderPdfDocument(db,workOrderId,kind='work-order'){
   if(quote?.items?.length){section('Serviços e itens do orçamento');for(const item of quote.items){field(item.kind.replaceAll('_',' '),`${item.description} | ${item.quantity} x ${money(item.unit_price_cents)} = ${money(item.total_cents)}`)}textLine(`Subtotal: ${money(quote.subtotal_cents)}`,{bold:true});textLine(`Desconto: ${money(quote.discount_cents)}`);textLine(`TOTAL: ${money(quote.total_cents)}`,{size:12,bold:true,gap:18})}
   if(parts.length){section('Peças utilizadas');for(const p of parts)field('Peça',`${p.description} | Qtd. ${p.quantity}`)}
   section('Assinaturas');y-=18;textLine('________________________________________        ________________________________________',{size:9,gap:14});textLine('Cliente / responsável                                      Responsável técnico',{size:9,gap:18});
-  rule();textLine('Documento gerado localmente pelo ArtiSys Assistência Técnica.',{size:8,gap:10});
+  rule();textLine('Documento gerado localmente pelo ArtiSys Oficina.',{size:8,gap:10});
   if(commands.length)pages.push(commands.join('\n'));return buildPdf(pages);
 }
