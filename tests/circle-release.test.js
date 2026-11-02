@@ -4,16 +4,17 @@ import { readFile } from 'node:fs/promises';
 
 const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('build desktop da assistência é independente e não exige publicação externa', async () => {
+test('instalador ArtiSys Oficina tem ID e nome próprios e não faz publicação externa', async () => {
   const [builder, buildScript, pkg] = await Promise.all([
     read('electron-builder.yml'),
     read('scripts/build-electron.ps1'),
     read('package.json'),
   ]);
-
-  assert.match(builder, /appId: com\.artisys\.assistenciatecnica/);
-  assert.match(builder, /productName: ArtiSys Oficina/);
-  assert.match(builder, /ArtiSys-Oficina-Setup-/);
-  assert.match(buildScript, /ArtiSys-Oficina-Setup-/);
+  assert.ok(builder.includes('appId: com.artisys.oficina'));
+  assert.ok(builder.includes('productName: ArtiSys Oficina'));
+  assert.ok(builder.includes('ArtiSys-Oficina-Setup-'));
+  assert.ok(builder.includes('shortcutName: ArtiSys Oficina'));
+  assert.ok(buildScript.includes('ArtiSys-Oficina-Setup-'));
+  assert.ok(buildScript.includes('--publish never'));
   assert.doesNotMatch(pkg, /publish|filebin|circleci/i);
 });
