@@ -126,7 +126,8 @@ export function migrate(db) {
       part_id INTEGER NOT NULL REFERENCES parts(id),
       type TEXT NOT NULL CHECK(type IN ('ENTRADA','SAIDA_MANUAL','CONSUMO_OS','ESTORNO','AJUSTE')),
       quantity_delta REAL NOT NULL, work_order_id INTEGER REFERENCES work_orders(id),
-      note TEXT NOT NULL DEFAULT '', created_by INTEGER REFERENCES users(id), created_at TEXT NOT NULL
+      note TEXT NOT NULL DEFAULT '', created_by INTEGER REFERENCES users(id), created_at TEXT NOT NULL,
+      source_type TEXT, source_item_id INTEGER
     );
     CREATE TABLE IF NOT EXISTS work_order_parts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -195,6 +196,11 @@ export function migrate(db) {
     CREATE INDEX IF NOT EXISTS idx_schedule_starts ON schedule_events(starts_at);
     CREATE INDEX IF NOT EXISTS idx_receipts_os ON receipts(work_order_id);
   `);
+  // Migrate older local SQLite files additively; never truncate or rewrite balances.
+  const inventoryCols=new Set(db.prepare("PRAGMA table_info('inventory_movements')").all().map(c=>c.name));
+  if(!inventoryCols.has('source_type'))db.exec('ALTER TABLE inventory_movements ADD COLUMN source_type TEXT');
+  if(!inventoryCols.has('source_item_id'))db.exec('ALTER TABLE inventory_movements ADD COLUMN source_item_id INTEGER');
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_inventory_source_unique ON inventory_movements(source_type,source_item_id) WHERE source_type IS NOT NULL AND source_item_id IS NOT NULL');
 }
 
 export function transaction(db, fn) {
