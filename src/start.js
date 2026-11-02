@@ -8,7 +8,7 @@ import { listLanUrls, resolveServerConfig } from './platform/network.js';
 
 process.env.DATABASE_PATH = resolveDatabasePath();
 process.env.STORAGE_DIR = resolveStoragePath({databasePath:process.env.DATABASE_PATH});
-process.env.EVENT_LOG_PATH ||= './data/assistencia-events.jsonl';
+process.env.EVENT_LOG_PATH ||= './data/oficina-events.jsonl';
 process.env.PORT ||= '3344';
 
 const db = openDatabase();
@@ -20,7 +20,7 @@ const server = createAssistenciaServer({ db, storageDir: process.env.STORAGE_DIR
 const { port, host } = resolveServerConfig(process.env);
 
 server.listen(port, host, () => {
-  console.log(`Assistência Técnica ArtiSys em http://${host}:${port}`);
+  console.log(`ArtiSys Oficina em http://${host}:${port}`);
   for (const url of listLanUrls({ port })) console.log(`Rede local: ${url}`);
 });
 
