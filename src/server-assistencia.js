@@ -169,7 +169,7 @@ export function createAssistenciaServer({
       const answer=mutation?transaction(db,()=>{
         const output=runIdempotent(db,`http:${req.method}:${url.pathname}:user:${actor.id}`,
           body.requestId??req.headers['idempotency-key'],{body},invoke);
-        if(output.status>=200&&output.status<300)enqueueHttpEvent(db,req.method,url.pathname,output.data);
+        if(output.status>=200&&output.status<300)enqueueHttpEvent(db,req.method,url.pathname,output.data,{requestId:body.requestId??req.headers['idempotency-key'],actorId:actor.id});
         return output;
       }):invoke();
       json(res,answer.status,answer.data);
