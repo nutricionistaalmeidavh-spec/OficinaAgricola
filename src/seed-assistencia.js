@@ -11,8 +11,8 @@ try {
   migrateAssistencia(db);
   const result = seed(db);
   console.log(result.demoPasswordUsed
-    ? 'Seed Assistência Técnica concluído. DEV: senha padrão Admin@1234; altere antes de uso real.'
-    : 'Seed Assistência Técnica concluído.');
+    ? 'Seed ArtiSys Oficina concluído. DEV: senha padrão Admin@1234; altere antes de uso real.'
+    : 'Seed ArtiSys Oficina concluído.');
 } finally {
   db.close();
 }
