@@ -6,7 +6,7 @@ const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
 test('shell definitivo identifica a edição Assistência Técnica', async () => {
   const html = await read('public/index.html');
-  assert.match(html, /Assistência Técnica/);
+  assert.match(html, /ArtiSys Oficina/);
   assert.match(html, /id="globalSearch"/);
   assert.match(html, /data-page="reports"/);
   assert.match(html, /data-page="services"/);
@@ -31,7 +31,7 @@ test('camada visual base permanece isolada das regras de negócio', async () => 
 test('ArtiSys QA fica configurado como consumidor opcional da assistência', async () => {
   const manifest = JSON.parse(await read('qa/artisys-qa.config.json'));
   const pkg = JSON.parse(await read('package.json'));
-  assert.equal(manifest.systemId, 'assistencia-tecnica');
+  assert.equal(manifest.systemId, 'artisys-oficina');
   assert.equal(manifest.mode, 'web');
   assert.equal(manifest.defaultFlow, 'stage7-shell');
   assert.equal(manifest.environments.local.baseURL, 'http://127.0.0.1:3344');
