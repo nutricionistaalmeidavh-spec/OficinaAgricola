@@ -22,5 +22,5 @@ test('modal pode abrir conteúdo atualizado sem destruir formulário ou fechar m
  const core=readFileSync('public/app-core.js','utf8');
  assert.match(core,/state\.modalToken/);
  assert.match(core,/if\s*\(state\.modalToken===token\)/);
- assert.match(core,/reconcileChildren\(body/);
+ assert.match(core,/renderRegion\(body,html\)/);
 });
