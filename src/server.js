@@ -13,6 +13,7 @@ import { createScheduleEvent, listSchedule, updateScheduleEvent, createChecklist
 import { addReceipt, reverseReceipt, listReceipts, getPaymentSummary, createExpense, updateExpense, listExpenses, financeSummary } from './services/finance.js';
 import { dashboardData } from './services/dashboard.js';
 import { seed } from './seed.js';
+import {isSetupRequired,initializeAdmin} from './setup.js';
 
 const __dirname=fileURLToPath(new URL('.',import.meta.url));
 const publicDir=resolve(__dirname,'../public');
@@ -46,6 +47,8 @@ const int=(v)=>{const n=Number(v);if(!Number.isInteger(n)||n<=0)throw new Error(
 function createRouter({db,storageDir}){
   const r=new Router(); const add=(m,p,roles,h,o)=>r.add(m,p,roles,h,o);
   add('GET','/api/health',null,()=>({ok:true}),{publicRoute:true});
+  add('GET','/api/setup/status',null,()=>({required:isSetupRequired(db)}),{publicRoute:true});
+  add('POST','/api/setup/initialize',null,({req,body})=>initializeAdmin(db,req,body),{publicRoute:true});
   add('POST','/api/auth/login',null,({body})=>login(db,body.username,body.password),{publicRoute:true});
   add('POST','/api/auth/logout',ROLE_ALL,({token})=>{logout(db,token);return {ok:true}});
   add('GET','/api/auth/me',ROLE_ALL,({user})=>user);
