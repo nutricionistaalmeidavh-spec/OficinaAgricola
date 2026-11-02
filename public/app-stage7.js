@@ -60,21 +60,18 @@ function oaStatusCounts(orders){
 async function renderReports(){
   pageTitle('Relatórios','VISÃO OPERACIONAL');
   const now=new Date();
-  const from=new Date(now.getFullYear(),now.getMonth(),1,0,0,0,0);
-  const to=new Date(now.getFullYear(),now.getMonth()+1,0,23,59,59,999);
+  const from=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),1));
+  const to=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth()+1,1)-1);
   const qs=`from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`;
   const financeAllowed=['ADMIN','FINANCEIRO'].includes(state.user.role);
-  const [dashboard,orders,finance]=await Promise.all([
+  const [dashboard,finance]=await Promise.all([
     api('/api/dashboard'),
-    api('/api/work-orders'),
     financeAllowed?api(`/api/finance/summary?${qs}`):Promise.resolve(null),
   ]);
-  const status=oaStatusCounts(orders);
+  const status=OA_PIPELINE.map(column=>({label:column.label,count:column.statuses.reduce((sum,s)=>sum+(dashboard.counts[s]||0),0)}));
   const max=Math.max(1,...status.map(item=>item.count));
-  const monthStart=new Date(now.getFullYear(),now.getMonth(),1).getTime();
-  const monthEnd=new Date(now.getFullYear(),now.getMonth()+1,1).getTime();
-  const completed=orders.filter(order=>order.status==='ENTREGUE'&&new Date(order.updated_at||order.entered_at).getTime()>=monthStart&&new Date(order.updated_at||order.entered_at).getTime()<monthEnd).length;
-  const active=orders.filter(order=>!['ENTREGUE','CANCELADA','REPROVADA'].includes(order.status)).length;
+  const completed=dashboard.counts.ENTREGUES_MES;
+  const active=dashboard.counts.ABERTAS;
 
   setContent(`
     <div class="section-head"><div><h2>Resumo operacional</h2><span class="muted">OS em fluxo e estoque atuais; entregas do mês</span></div></div>
