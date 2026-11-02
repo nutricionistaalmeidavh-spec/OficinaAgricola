@@ -179,7 +179,19 @@ export function migrate(db) {
       work_order_id INTEGER NOT NULL REFERENCES work_orders(id),
       amount_cents INTEGER NOT NULL CHECK(amount_cents > 0), method TEXT NOT NULL,
       received_at TEXT NOT NULL, note TEXT NOT NULL DEFAULT '',
-      created_by INTEGER REFERENCES users(id), reversed_at TEXT, reversal_note TEXT NOT NULL DEFAULT ''
+      created_by INTEGER REFERENCES users(id), reversed_at TEXT, reversal_note TEXT NOT NULL DEFAULT '',
+      request_id TEXT, request_payload_hash TEXT
+    );
+    CREATE TABLE IF NOT EXISTS payment_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      source_type TEXT NOT NULL CHECK(source_type IN ('SALE','OS_RECEIPT')),
+      source_id INTEGER NOT NULL,
+      event_type TEXT NOT NULL CHECK(event_type IN ('PAID','REFUNDED')),
+      amount_cents INTEGER NOT NULL CHECK(amount_cents != 0),
+      method TEXT NOT NULL,
+      cash_session_id INTEGER,
+      created_at TEXT NOT NULL,
+      UNIQUE(source_type,source_id,event_type)
     );
     CREATE TABLE IF NOT EXISTS expenses (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -201,6 +213,17 @@ export function migrate(db) {
   if(!inventoryCols.has('source_type'))db.exec('ALTER TABLE inventory_movements ADD COLUMN source_type TEXT');
   if(!inventoryCols.has('source_item_id'))db.exec('ALTER TABLE inventory_movements ADD COLUMN source_item_id INTEGER');
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_inventory_source_unique ON inventory_movements(source_type,source_item_id) WHERE source_type IS NOT NULL AND source_item_id IS NOT NULL');
+  const receiptCols=new Set(db.prepare("PRAGMA table_info('receipts')").all().map(c=>c.name));
+  if(!receiptCols.has('request_id'))db.exec('ALTER TABLE receipts ADD COLUMN request_id TEXT');
+  if(!receiptCols.has('request_payload_hash'))db.exec('ALTER TABLE receipts ADD COLUMN request_payload_hash TEXT');
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_receipts_request_id ON receipts(request_id) WHERE request_id IS NOT NULL');
+  // Backfill only ledger rows: never touch settled receipts or bank balances.
+  db.exec(`
+    INSERT OR IGNORE INTO payment_events(source_type,source_id,event_type,amount_cents,method,cash_session_id,created_at)
+    SELECT 'OS_RECEIPT',id,'PAID',amount_cents,method,NULL,received_at FROM receipts;
+    INSERT OR IGNORE INTO payment_events(source_type,source_id,event_type,amount_cents,method,cash_session_id,created_at)
+    SELECT 'OS_RECEIPT',id,'REFUNDED',-amount_cents,method,NULL,reversed_at FROM receipts WHERE reversed_at IS NOT NULL;
+  `);
 }
 
 export function transaction(db, fn) {
