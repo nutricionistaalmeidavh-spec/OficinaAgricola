@@ -4,6 +4,7 @@ import { join, resolve, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openDatabase, migrate, nowIso, transaction } from './db.js';
 import {enqueueHttpEvent,dispatchOutbox} from './platform/outbox.js';
+import {auditInvariants} from './services/reconciliation.js';
 import { login, logout, validateSession, createUser, hashPassword } from './auth.js';
 import { createCustomer, listCustomers, updateCustomer, getCustomer, createMachine, listMachines, updateMachine, getMachine, createTechnician, listTechnicians, updateTechnician } from './services/catalog.js';
 import { createWorkOrder, listWorkOrders, getWorkOrder, updateWorkOrder, transitionWorkOrder, getWorkOrderHistory, machineHistory } from './services/work-orders.js';
@@ -120,6 +121,7 @@ function createRouter({db,storageDir}){
   add('POST','/api/expenses',ROLE_FIN,({body})=>createExpense(db,body));
   add('PATCH','/api/expenses/:id',ROLE_FIN,({params,body})=>updateExpense(db,int(params.id),body));
   add('GET','/api/finance/summary',ROLE_FIN,({url})=>financeSummary(db,{from:url.searchParams.get('from')||undefined,to:url.searchParams.get('to')||undefined}));
+  add('GET','/api/admin/reconciliation',['ADMIN'],()=>auditInvariants(db));
   add('GET','/api/dashboard',ROLE_ALL,()=>dashboardData(db));
   return r;
 }
