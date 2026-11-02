@@ -79,7 +79,47 @@ try{
   if(!preserved)throw new Error('Pós-save recriou o DOM da lista de clientes');
   await page.screenshot({path:path.join(outputDir,'04-cliente-sem-rerender.png'),fullPage:true});
 
-  await writeFile(path.join(outputDir,'qa-summary.json'),`${JSON.stringify({status:'passed',viewport:viewportName,checks:['login','dashboard','demo-data','work-orders','os-detail','edit-action','pdf-action','history-action','client-save-without-rerender']},null,2)}\n`);
+
+  // Draft settings form: a background refresh must preserve the node, focus and user edit.
+  await page.locator('[data-page="settings"]').click();
+  const companyName=page.locator('#companyForm input[name="name"]');
+  await companyName.waitFor({state:'visible'});
+  await companyName.fill('Rascunho QA não salvo');
+  await page.evaluate(()=>{window.__qaSettingsInput=document.querySelector('#companyForm input[name="name"]')});
+  await page.evaluate(()=>refreshCurrentPage());
+  const settingsStable=await page.evaluate(()=>({
+    same:window.__qaSettingsInput===document.querySelector('#companyForm input[name="name"]'),
+    draft:document.querySelector('#companyForm input[name="name"]').value,
+    focused:document.activeElement===document.querySelector('#companyForm input[name="name"]')
+  }));
+  if(!settingsStable.same||!settingsStable.focused||settingsStable.draft!=='Rascunho QA não salvo')
+    throw new Error('Atualização parcial descartou campo, foco ou nó de formulário não salvo');
+
+  // Automotivo: criação e leitura real de placa/VIN/km, revisão e garantia.
+  await page.locator('[data-page="machines"]').click();
+  await page.locator('#newMachine').click();
+  await page.locator('#modalBody select[name="customerId"]').selectOption({index:1});
+  await page.locator('#modalBody input[name="type"]').fill('Carro');
+  await page.locator('#modalBody input[name="brand"]').fill('VW');
+  await page.locator('#modalBody input[name="model"]').fill('Gol QA');
+  await page.locator('#modalBody input[name="plate"]').fill('QAB2C34');
+  await page.locator('#modalBody input[name="vin"]').fill('9BWZZZ377VT004251');
+  await page.locator('#modalBody input[name="odometerKm"]').fill('10520');
+  await page.locator('#modalBody button[type="submit"]').click();
+  await page.locator('#content').filter({hasText:'QAB2C34'}).waitFor({state:'visible'});
+  await page.locator('[data-history]').first().click();
+  await page.locator('#newReview').click();
+  await page.locator('#modalBody input[name="performedAt"]').fill('2026-11-02');
+  await page.locator('#modalBody input[name="nextDueKm"]').fill('20000');
+  await page.locator('#modalBody button[type="submit"]').click();
+  await page.locator('#modalBody').filter({hasText:'Revisão'}).waitFor({state:'visible'});
+  await page.locator('#newWarranty').click();
+  await page.locator('#modalBody input[name="warrantyUntil"]').fill('2027-11-02');
+  await page.locator('#modalBody button[type="submit"]').click();
+  await page.locator('#modalBody').filter({hasText:'Garantia'}).waitFor({state:'visible'});
+  await page.screenshot({path:path.join(outputDir,'05-historico-automotivo.png'),fullPage:true});
+
+  await writeFile(path.join(outputDir,'qa-summary.json'),`${JSON.stringify({status:'passed',viewport:viewportName,checks:['login','dashboard','demo-data','work-orders','os-detail','edit-action','pdf-action','history-action','client-save-without-rerender','settings-draft-focus-preserved','vehicle-identity','review-and-warranty']},null,2)}\n`);
 } catch(error){
   if(page)await page.screenshot({path:path.join(outputDir,'failure.png'),fullPage:true}).catch(()=>{});
   await writeFile(path.join(outputDir,'qa-summary.json'),`${JSON.stringify({status:'failed',viewport:viewportName,error:error.message},null,2)}\n`).catch(()=>{});
