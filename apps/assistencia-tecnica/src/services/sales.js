@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { nowIso, transaction } from '../db.js';
 
 const text = (value) => value == null ? '' : String(value).trim();
@@ -107,37 +108,70 @@ function normalizeSaleItem(db, input) {
   return { kind: 'OUTRO', partId: null, serviceId: null, description, quantity, unitPriceCents: unit, totalCents: Math.round(quantity * unit) };
 }
 
+function saleFingerprint(input,items) {
+  return createHash('sha256').update(JSON.stringify({
+    customerId:idOrNull(input.customerId),
+    paymentMethod:text(input.paymentMethod)||'DINHEIRO',
+    discountCents:cents(input.discountCents??0,'Desconto'),
+    note:text(input.note),
+    items:items.map(i=>({
+      partId:idOrNull(i.partId),serviceId:idOrNull(i.serviceId),
+      quantity:Number(i.quantity),unitPriceCents:i.unitPriceCents==null?null:cents(i.unitPriceCents,'Preço unitário'),
+      description:text(i.description),
+    })),
+  })).digest('hex');
+}
+
 export function createSale(db, input, { userId = null } = {}) {
   const rawItems = Array.isArray(input.items) ? input.items : [];
   if (!rawItems.length) throw new Error('A venda precisa ter ao menos um item');
+  const requestId=text(input.requestId);
+  if(requestId.length>128)throw new Error('Identificador da venda excede o limite');
+  const fingerprint=requestId?saleFingerprint(input,rawItems):null;
   return transaction(db, () => {
+    if(requestId){
+      const previous=db.prepare('SELECT id,request_payload_hash FROM sales WHERE request_id=?').get(requestId);
+      if(previous){
+        if(previous.request_payload_hash!==fingerprint)throw new Error('Identificador de venda já utilizado com dados diferentes');
+        return getSale(db,previous.id);
+      }
+    }
+    const cash = input.cashSessionId
+      ? db.prepare("SELECT * FROM cash_sessions WHERE id=? AND status='ABERTO'").get(Number(input.cashSessionId))
+      : getOpenCashSession(db);
+    if (!cash) throw new Error('Abra o caixa antes de concluir uma venda');
     const items = rawItems.map(item => normalizeSaleItem(db, item));
+    const requiredByPart=new Map();
+    for(const item of items)if(item.partId)requiredByPart.set(item.partId,(requiredByPart.get(item.partId)||0)+item.quantity);
+    for(const [partId,quantity] of requiredByPart){
+      const stock=Number(db.prepare('SELECT quantity FROM parts WHERE id=?').get(partId)?.quantity||0);
+      if(stock+1e-9<quantity)throw new Error('Estoque insuficiente para os itens da venda');
+    }
     const subtotal = items.reduce((sum, item) => sum + item.totalCents, 0);
     const discount = cents(input.discountCents, 'Desconto');
     if (discount > subtotal) throw new Error('Desconto não pode ser maior que o subtotal');
     const total = subtotal - discount;
     const customerId = idOrNull(input.customerId);
     if (customerId && !db.prepare('SELECT 1 FROM customers WHERE id=?').get(customerId)) throw new Error('Cliente não encontrado');
-    const cash = input.cashSessionId ? db.prepare("SELECT * FROM cash_sessions WHERE id=? AND status='ABERTO'").get(Number(input.cashSessionId)) : getOpenCashSession(db);
     const paymentMethod = text(input.paymentMethod) || 'DINHEIRO';
     const saleNumber = Number(db.prepare('SELECT COALESCE(MAX(sale_number),0)+1 n FROM sales').get().n);
     const createdAt = nowIso();
-    const saleResult = db.prepare(`INSERT INTO sales(sale_number,customer_id,cash_session_id,subtotal_cents,discount_cents,total_cents,payment_method,status,note,created_by,created_at)
-      VALUES(?,?,?,?,?,?,?,'CONCLUIDA',?,?,?)`).run(saleNumber, customerId, cash?.id || null, subtotal, discount, total, paymentMethod, text(input.note), userId, createdAt);
+    const saleResult = db.prepare(`INSERT INTO sales(sale_number,customer_id,cash_session_id,subtotal_cents,discount_cents,total_cents,payment_method,status,note,created_by,created_at,request_id,request_payload_hash)
+      VALUES(?,?,?,?,?,?,?,'CONCLUIDA',?,?,?,?,?)`).run(saleNumber, customerId, cash.id, subtotal, discount, total, paymentMethod, text(input.note), userId, createdAt, requestId||null, fingerprint);
     const saleId = Number(saleResult.lastInsertRowid);
 
     for (const item of items) {
       const itemResult = db.prepare(`INSERT INTO sale_items(sale_id,kind,part_id,service_id,description,quantity,unit_price_cents,total_cents)
         VALUES(?,?,?,?,?,?,?,?)`).run(saleId, item.kind, item.partId, item.serviceId, item.description, item.quantity, item.unitPriceCents, item.totalCents);
       if (item.partId) {
-        const nextQuantity = Number(item.part.quantity) - item.quantity;
-        db.prepare('UPDATE parts SET quantity=?,updated_at=? WHERE id=?').run(nextQuantity, createdAt, item.partId);
+        const updated=db.prepare('UPDATE parts SET quantity=quantity-?,updated_at=? WHERE id=? AND quantity>=?').run(item.quantity,createdAt,item.partId,item.quantity);
+        if(updated.changes!==1)throw new Error('Estoque insuficiente para os itens da venda');
         db.prepare(`INSERT INTO sale_stock_movements(sale_item_id,part_id,quantity_delta,created_at) VALUES(?,?,?,?)`)
           .run(Number(itemResult.lastInsertRowid), item.partId, -item.quantity, createdAt);
       }
     }
 
-    if (cash && total > 0) {
+    if (total > 0) {
       db.prepare(`INSERT INTO cash_movements(cash_session_id,sale_id,type,amount_cents,payment_method,note,created_by,created_at)
         VALUES(?,?,'VENDA',?,?,?,?,?)`).run(cash.id, saleId, total, paymentMethod, `Venda #${saleNumber}`, userId, createdAt);
     }
@@ -165,6 +199,8 @@ export function cancelSale(db, id, { reason = '', userId = null } = {}) {
   return transaction(db, () => {
     const sale = getSale(db, id);
     if (sale.status === 'CANCELADA') throw new Error('Venda já cancelada');
+    const currentCash=getOpenCashSession(db);
+    if(sale.total_cents>0&&!currentCash)throw new Error('Abra o caixa para registrar o estorno da venda');
     const t = nowIso();
     const stock = db.prepare(`SELECT ssm.* FROM sale_stock_movements ssm JOIN sale_items si ON si.id=ssm.sale_item_id WHERE si.sale_id=? AND ssm.reversed_at IS NULL`).all(id);
     for (const movement of stock) {
@@ -173,11 +209,8 @@ export function cancelSale(db, id, { reason = '', userId = null } = {}) {
       db.prepare('UPDATE sale_stock_movements SET reversed_at=? WHERE id=?').run(t, movement.id);
     }
     db.prepare(`UPDATE sales SET status='CANCELADA',canceled_at=?,cancel_reason=? WHERE id=?`).run(t, text(reason), id);
-    if (sale.cash_session_id) {
-      const session = db.prepare("SELECT * FROM cash_sessions WHERE id=? AND status='ABERTO'").get(sale.cash_session_id);
-      if (session) db.prepare(`INSERT INTO cash_movements(cash_session_id,sale_id,type,amount_cents,payment_method,note,created_by,created_at)
-        VALUES(?,?,'ESTORNO',?,?,?,?,?)`).run(session.id, id, -sale.total_cents, sale.payment_method, `Estorno venda #${sale.sale_number}`, userId, t);
-    }
+    if(currentCash&&sale.total_cents>0)db.prepare(`INSERT INTO cash_movements(cash_session_id,sale_id,type,amount_cents,payment_method,note,created_by,created_at)
+        VALUES(?,?,'ESTORNO',?,?,?,?,?)`).run(currentCash.id,id,-sale.total_cents,sale.payment_method,`Estorno venda #${sale.sale_number}`,userId,t);
     return getSale(db, id);
   });
 }
