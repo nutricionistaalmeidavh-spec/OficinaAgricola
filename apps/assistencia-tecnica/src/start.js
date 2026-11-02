@@ -1,3 +1,4 @@
+import { resolveDatabasePath, resolveStoragePath } from './platform/data-location.js';
 import { openDatabase, migrate } from './db.js';
 import { seed } from './seed.js';
 import { migrateAssistencia } from './assistencia-schema.js';
@@ -5,8 +6,8 @@ import { createAssistenciaServer } from './server-assistencia.js';
 import { createEventRuntime } from './platform/event-runtime.js';
 import { listLanUrls, resolveServerConfig } from './platform/network.js';
 
-process.env.DATABASE_PATH ||= './data/assistencia-tecnica.sqlite';
-process.env.STORAGE_DIR ||= './storage/assistencia-tecnica/uploads';
+process.env.DATABASE_PATH = resolveDatabasePath();
+process.env.STORAGE_DIR = resolveStoragePath({databasePath:process.env.DATABASE_PATH});
 process.env.EVENT_LOG_PATH ||= './data/assistencia-events.jsonl';
 process.env.PORT ||= '3344';
 
