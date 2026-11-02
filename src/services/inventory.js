@@ -30,22 +30,46 @@ function movementDelta(type, quantity){
   if(type==='SAIDA_MANUAL'||type==='CONSUMO_OS') return -q;
   throw new Error('Tipo de movimentação inválido');
 }
-function applyMovement(db,partId,{type,quantity,workOrderId=null,note='',createdBy=null,allowNegative=false,userRole=''}){
+// Autoridade única do saldo e do livro de estoque. Chamar DENTRO de transaction().
+export function postStockMovement(db,partId,{
+  type,quantity,workOrderId=null,note='',createdBy=null,allowNegative=false,
+  userRole='',originType=null,originItemId=null,
+}={}){
   if(!TYPES.has(type))throw new Error('Tipo de movimentação inválido');
-  const part=getPart(db,partId),delta=movementDelta(type,quantity),next=Number(part.quantity)+delta;
-  if(next<0 && !(allowNegative&&userRole==='ADMIN')) throw new Error('Estoque insuficiente');
-  const t=nowIso(); const r=db.prepare(`INSERT INTO inventory_movements(part_id,type,quantity_delta,work_order_id,note,created_by,created_at) VALUES(?,?,?,?,?,?,?)`)
-    .run(partId,type,delta,workOrderId,text(note),createdBy,t);
-  db.prepare('UPDATE parts SET quantity=?,updated_at=? WHERE id=?').run(next,t,partId);
-  return {id:Number(r.lastInsertRowid),partId,type,quantityDelta:delta,newQuantity:next};
+  if(originType!=null&&(!String(originType).trim()||!Number.isSafeInteger(Number(originItemId))||Number(originItemId)<=0))
+    throw new Error('Origem canônica de estoque inválida');
+  const delta=movementDelta(type,quantity);
+  const allowBelowZero=allowNegative&&userRole==='ADMIN';
+  const now=nowIso();
+  const changed=db.prepare(`UPDATE parts SET quantity=quantity+?,updated_at=? WHERE id=? AND (quantity+?>=-0.00000001 OR ?=1)`)
+    .run(delta,now,partId,delta,allowBelowZero?1:0);
+  if(changed.changes!==1){
+    getPart(db,partId);
+    throw new Error('Estoque insuficiente');
+  }
+  const result=db.prepare(`INSERT INTO inventory_movements(
+    part_id,type,quantity_delta,work_order_id,note,created_by,created_at,source_type,source_item_id
+  ) VALUES(?,?,?,?,?,?,?,?,?)`).run(partId,type,delta,workOrderId,text(note),createdBy,now,originType,originItemId);
+  const part=getPart(db,partId);
+  return {id:Number(result.lastInsertRowid),partId,type,quantityDelta:delta,newQuantity:Number(part.quantity)};
 }
-export function addInventoryMovement(db,partId,input){return transaction(db,()=>applyMovement(db,partId,input))}
+
+// Saldo em parts é projeção do livro de movimentos, e não um segundo livro independente.
+export function reconcileStock(db,partId){
+  const part=getPart(db,partId);
+  const sum=db.prepare('SELECT COALESCE(SUM(quantity_delta),0) total FROM inventory_movements WHERE part_id=?').get(partId);
+  const ledgerQuantity=Number(sum.total);
+  return {partId,quantity:Number(part.quantity),ledgerQuantity,
+    difference:Number((Number(part.quantity)-ledgerQuantity).toFixed(8))};
+}
+
+export function addInventoryMovement(db,partId,input){return transaction(db,()=>postStockMovement(db,partId,input))}
 
 export function consumePart(db,workOrderId,partId,input){
   return transaction(db,()=>{
     const os=getWorkOrder(db,workOrderId); if(!['APROVADA','EM_SERVICO'].includes(os.status)) throw new Error('OS precisa estar aprovada ou em serviço');
     const q=Number(input.quantity); if(!Number.isFinite(q)||q<=0) throw new Error('Quantidade inválida'); const part=getPart(db,partId);
-    const movement=applyMovement(db,partId,{type:'CONSUMO_OS',quantity:q,workOrderId,note:input.note,createdBy:input.createdBy,allowNegative:input.allowNegative,userRole:input.userRole});
+    const movement=postStockMovement(db,partId,{type:'CONSUMO_OS',quantity:q,workOrderId,note:input.note,createdBy:input.createdBy,allowNegative:input.allowNegative,userRole:input.userRole});
     const r=db.prepare('INSERT INTO work_order_parts(work_order_id,part_id,quantity,unit_price_cents,movement_id) VALUES(?,?,?,?,?)').run(workOrderId,partId,q,input.unitPriceCents??part.sale_price_cents,movement.id);
     return db.prepare('SELECT * FROM work_order_parts WHERE id=?').get(Number(r.lastInsertRowid));
   });
@@ -53,7 +77,7 @@ export function consumePart(db,workOrderId,partId,input){
 export function reverseWorkOrderPart(db,itemId,{note='',createdBy=null}={}){
   return transaction(db,()=>{
     const item=db.prepare('SELECT * FROM work_order_parts WHERE id=?').get(itemId); if(!item)throw new Error('Consumo não encontrado'); if(item.reversed_at)throw new Error('Consumo já estornado');
-    applyMovement(db,item.part_id,{type:'ESTORNO',quantity:item.quantity,workOrderId:item.work_order_id,note,createdBy}); const t=nowIso();
+    postStockMovement(db,item.part_id,{type:'ESTORNO',quantity:item.quantity,workOrderId:item.work_order_id,note,createdBy}); const t=nowIso();
     db.prepare('UPDATE work_order_parts SET reversed_at=? WHERE id=?').run(t,itemId); return {...item,reversed_at:t};
   });
 }
