@@ -75,7 +75,7 @@ function createRouter({db,storageDir}){
   add('POST','/api/technicians',['ADMIN'],({body})=>createTechnician(db,body));
   add('PATCH','/api/technicians/:id',['ADMIN'],({params,body})=>updateTechnician(db,int(params.id),body));
 
-  add('GET','/api/work-orders',ROLE_ALL,({url})=>listWorkOrders(db,{status:url.searchParams.get('status')||undefined,search:url.searchParams.get('search')||''}));
+  add('GET','/api/work-orders',ROLE_ALL,({url})=>listWorkOrders(db,{status:url.searchParams.get('status')||undefined,scope:url.searchParams.get('scope')||undefined,search:url.searchParams.get('search')||'',limit:url.searchParams.get('limit')||undefined,offset:url.searchParams.get('offset')||0}));
   add('POST','/api/work-orders',ROLE_OFFICE,({body,user})=>createWorkOrder(db,{...body,createdBy:user.id}));
   add('GET','/api/work-orders/:id',ROLE_ALL,({params})=>getWorkOrder(db,int(params.id)));
   add('PATCH','/api/work-orders/:id',ROLE_TECH,({params,body,user})=>updateWorkOrder(db,int(params.id),body,{changedBy:user.id}));
