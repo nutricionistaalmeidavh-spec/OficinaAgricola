@@ -144,7 +144,7 @@ async function handleAssistenciaApi({ req, res, url, db }) {
 }
 
 export function createAssistenciaServer({
-  db = openDatabase(process.env.DATABASE_PATH || './data/assistencia-tecnica.sqlite'),
+  db = openDatabase(process.env.DATABASE_PATH || './data/artisys-oficina.sqlite'),
   storageDir = process.env.STORAGE_DIR || './storage/assistencia-tecnica/uploads',
   eventRuntime = null,
 } = {}) {
