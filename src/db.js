@@ -4,7 +4,7 @@ import { dirname, resolve } from 'node:path';
 
 export const nowIso = () => new Date().toISOString();
 
-export function openDatabase(path = process.env.DATABASE_PATH || './data/oficina.sqlite') {
+export function openDatabase(path = process.env.DATABASE_PATH || './data/artisys-oficina.sqlite') {
   if (path !== ':memory:') {
     const resolved = resolve(path);
     mkdirSync(dirname(resolved), { recursive: true });
@@ -19,7 +19,7 @@ export function migrate(db) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS company_settings (
       id INTEGER PRIMARY KEY CHECK (id = 1),
-      name TEXT NOT NULL DEFAULT 'Oficina Agrícola',
+      name TEXT NOT NULL DEFAULT 'ArtiSys Oficina',
       document TEXT NOT NULL DEFAULT '', phone TEXT NOT NULL DEFAULT '',
       email TEXT NOT NULL DEFAULT '', address TEXT NOT NULL DEFAULT '',
       updated_at TEXT NOT NULL

@@ -18,10 +18,26 @@ export class EventBus {
     };
   }
 
-  async publish(event) {
+  #handlersFor(type) {
+    return [...(this.#handlers.get(type) ?? []), ...(this.#handlers.get('*') ?? [])];
+  }
+
+  async publishSettled(event) {
     assertDomainEvent(event);
-    const handlers = [...(this.#handlers.get(event.type) ?? []), ...(this.#handlers.get('*') ?? [])];
-    for (const handler of handlers) await handler(event);
-    return handlers.length;
+    const handlers = this.#handlersFor(event.type);
+    const settled = await Promise.allSettled(handlers.map(handler => {
+      try { return Promise.resolve(handler(event)); }
+      catch (error) { return Promise.reject(error); }
+    }));
+    return {
+      handled: handlers.length,
+      errors: settled.filter(item => item.status === 'rejected').map(item => item.reason),
+    };
+  }
+
+  async publish(event) {
+    const result = await this.publishSettled(event);
+    if (result.errors.length) throw result.errors[0];
+    return result.handled;
   }
 }

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 
 import { EventBus } from '../src/platform/event-bus.js';
 import { createDomainEvent, DOMAIN_EVENT_TYPES } from '../src/platform/events.js';
@@ -39,24 +40,28 @@ test('AuditLog consome wildcard do EventBus e persiste JSONL', async () => {
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('backup/restauração preserva banco e anexos e valida checksum', () => {
+test('backup/restauração preserva banco SQLite real e anexos e valida checksum', () => {
   const root = mkdtempSync(join(tmpdir(), 'oficina-backup-'));
   try {
-    const databasePath = join(root, 'db.sqlite');
-    const uploadsPath = join(root, 'uploads');
-    const backupRoot = join(root, 'backups');
-    mkdirSync(join(uploadsPath, 'os-1'), { recursive: true });
-    writeFileSync(databasePath, 'database-v1');
-    writeFileSync(join(uploadsPath, 'os-1', 'foto.txt'), 'foto-v1');
-    const backup = createBackup({ databasePath, uploadsPath, backupRoot, now: new Date('2026-09-11T15:00:00.000Z') });
-    writeFileSync(databasePath, 'database-alterado');
-    writeFileSync(join(uploadsPath, 'os-1', 'foto.txt'), 'foto-alterada');
-    restoreBackup({ backupDir: backup.backupDir, databasePath, uploadsPath });
-    assert.equal(readFileSync(databasePath, 'utf8'), 'database-v1');
-    assert.equal(readFileSync(join(uploadsPath, 'os-1', 'foto.txt'), 'utf8'), 'foto-v1');
-    writeFileSync(join(backup.backupDir, 'database.sqlite'), 'corrompido');
-    assert.throws(() => restoreBackup({ backupDir: backup.backupDir, databasePath, uploadsPath }), /integridade/i);
-  } finally { rmSync(root, { recursive: true, force: true }); }
+    const databasePath=join(root,'db.sqlite'),uploadsPath=join(root,'uploads'),backupRoot=join(root,'backups');
+    mkdirSync(join(uploadsPath,'os-1'),{recursive:true});
+    const initial=new DatabaseSync(databasePath);
+    initial.exec('CREATE TABLE records (id INTEGER PRIMARY KEY, value TEXT);');
+    initial.prepare('INSERT INTO records(value) VALUES(?)').run('database-v1');
+    initial.close();
+    writeFileSync(join(uploadsPath,'os-1','foto.txt'),'foto-v1');
+    const backup=createBackup({databasePath,uploadsPath,backupRoot,now:new Date('2026-09-11T15:00:00.000Z')});
+    const changed=new DatabaseSync(databasePath);
+    changed.prepare('UPDATE records SET value=?').run('database-alterado');
+    changed.close();
+    writeFileSync(join(uploadsPath,'os-1','foto.txt'),'foto-alterada');
+    restoreBackup({backupDir:backup.backupDir,databasePath,uploadsPath});
+    const restored=new DatabaseSync(databasePath);
+    try{assert.equal(restored.prepare('SELECT value FROM records').get().value,'database-v1');}finally{restored.close();}
+    assert.equal(readFileSync(join(uploadsPath,'os-1','foto.txt'),'utf8'),'foto-v1');
+    writeFileSync(join(backup.backupDir,'database.sqlite'),'corrompido');
+    assert.throws(()=>restoreBackup({backupDir:backup.backupDir,databasePath,uploadsPath}),/integridade/i);
+  }finally{rmSync(root,{recursive:true,force:true});}
 });
 
 test('LocalJobQueue executa FIFO, reporta tamanho correto e drain espera esvaziamento', async () => {
@@ -77,16 +82,20 @@ test('configuração LAN usa 0.0.0.0 e lista IPv4 acessível', () => {
   assert.deepEqual(urls, ['http://192.168.0.50:4123']);
 });
 
-test('PWA mantém API fora do cache e registra shell completo da Etapa 7', () => {
+test('PWA mantém API fora do cache e registra shell local completo', () => {
   const index = readFileSync('public/index.html', 'utf8');
   const manifest = JSON.parse(readFileSync('public/manifest.webmanifest', 'utf8'));
   const sw = readFileSync('public/sw.js', 'utf8');
   assert.match(index, /manifest\.webmanifest/);
   assert.match(index, /pwa-register\.js/);
+  assert.match(index, /local-runtime\.js/);
   assert.equal(manifest.display, 'standalone');
   assert.ok(manifest.start_url);
   assert.match(sw, /pathname\.startsWith\('\/api\/'\)/);
-  assert.match(sw, /networkResponse/);
+  assert.match(sw, /networkFirstNavigation/);
+  assert.match(sw, /cacheFirstStatic/);
+  assert.match(sw, /\/local-runtime\.css/);
+  assert.match(sw, /\/local-runtime\.js/);
   assert.match(sw, /\/ui-stage7\.css/);
   assert.match(sw, /\/app-stage7\.js/);
 });

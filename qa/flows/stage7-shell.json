@@ -1,9 +1,25 @@
 {
   "name": "stage7-shell",
   "steps": [
-    {"action":"expectVisible","text":"Oficina Agro","name":"brand-visible"},
-    {"action":"expectVisible","label":"Usuário","name":"username-visible"},
-    {"action":"expectVisible","label":"Senha","name":"password-visible"},
-    {"action":"screenshot","name":"stage7-login","fullPage":true}
+    {
+      "action": "expectVisible",
+      "name": "brand-visible",
+      "selector": "#loginView .login-brand h1"
+    },
+    {
+      "action": "expectVisible",
+      "label": "Usuário",
+      "name": "username-visible"
+    },
+    {
+      "action": "expectVisible",
+      "label": "Senha",
+      "name": "password-visible"
+    },
+    {
+      "action": "screenshot",
+      "name": "artisys-oficina-login",
+      "fullPage": true
+    }
   ]
 }

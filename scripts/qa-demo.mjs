@@ -16,7 +16,7 @@ await mkdir(videoTemp,{recursive:true});
 
 const logs=[];
 const server=spawn(process.execPath,['src/start.js'],{
-  env:{...process.env,HOST:'127.0.0.1',PORT:'3333',DATABASE_PATH:'.qa/oficina.sqlite',STORAGE_DIR:'.qa/uploads'},
+  env:{...process.env,HOST:'127.0.0.1',PORT:'3344',DATABASE_PATH:'.qa/artisys-oficina.sqlite',STORAGE_DIR:'.qa/uploads'},
   stdio:['ignore','pipe','pipe']
 });
 server.stdout.on('data',d=>logs.push(d.toString()));
@@ -26,7 +26,7 @@ const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function waitForHealth(){
   const end=Date.now()+30000;
   while(Date.now()<end){
-    try{const response=await fetch('http://127.0.0.1:3333/api/health');if(response.ok)return}catch{}
+    try{const response=await fetch('http://127.0.0.1:3344/api/health');if(response.ok)return}catch{}
     await sleep(250);
   }
   throw new Error('Servidor QA não ficou pronto em 30s');
@@ -40,20 +40,20 @@ try{
   page=await context.newPage();
   video=page.video();
 
-  await page.goto('http://127.0.0.1:3333',{waitUntil:'domcontentloaded'});
+  await page.goto('http://127.0.0.1:3344',{waitUntil:'domcontentloaded'});
   await page.getByLabel('Usuário').fill('admin');
   await page.getByLabel('Senha').fill('Admin@1234');
   await page.getByRole('button',{name:'Entrar'}).click();
   await page.locator('#appView').waitFor({state:'visible'});
   await page.locator('#pageTitle').filter({hasText:'Visão Geral'}).waitFor({state:'visible'});
-  await page.locator('#content').filter({hasText:'Fazenda Santa Clara'}).waitFor({state:'visible'});
+  await page.locator('#content').filter({hasText:'João Silva'}).waitFor({state:'visible'});
   await sleep(700);
   await page.screenshot({path:path.join(outputDir,'01-dashboard.png'),fullPage:true});
 
   await page.locator('[data-page="work-orders"]').click();
   await page.locator('.os-card').first().waitFor({state:'visible'});
   const ordersText=(await page.locator('#content').textContent())||'';
-  if(!ordersText.includes('Fazenda Santa Clara')||!ordersText.includes('John Deere'))throw new Error('Dados de demonstração não aparecem nas OS');
+  if(!ordersText.includes('João Silva')||!ordersText.includes('Dell'))throw new Error('Dados técnicos de demonstração não aparecem nas OS');
   await sleep(700);
   await page.screenshot({path:path.join(outputDir,'02-ordens.png'),fullPage:true});
 

@@ -13,38 +13,37 @@ let serverUrl = null;
 
 function dataRoot() {
   const local = process.env.LOCALAPPDATA || app.getPath('userData');
-  return join(local, 'ArtiSys', 'OficinaAgro');
+  return join(local, 'ArtiSys', 'Oficina');
 }
 
 async function startLocalServer() {
   const root = dataRoot();
-  const dbPath = join(root, 'data', 'oficina.sqlite');
-  const storageDir = join(root, 'storage', 'uploads');
 
-  mkdirSync(join(root, 'data'), { recursive: true });
-  mkdirSync(storageDir, { recursive: true });
-
-  process.env.DATABASE_PATH = dbPath;
-  process.env.STORAGE_DIR = storageDir;
-  process.env.HOST = '0.0.0.0';
-  process.env.PORT = '3333';
-
-  // Em builds Electron empacotados, process.argv[1] pode vir undefined.
-  // server.js usa esse argumento apenas para detectar execução direta;
-  // fornecemos um caminho válido antes do import para evitar ERR_INVALID_ARG_TYPE.
   if (!process.argv[1]) process.argv[1] = fileURLToPath(import.meta.url);
 
-  const [{ openDatabase }, { seed }, { createAppServer }] = await Promise.all([
+  const [{ openDatabase, migrate }, { seed }, { migrateAssistencia }, { createAssistenciaServer }] = await Promise.all([
     import('../dist/src/db.js'),
     import('../dist/src/seed.js'),
-    import('../dist/src/server.js'),
+    import('../dist/src/assistencia-schema.js'),
+    import('../dist/src/server-assistencia.js'),
   ]);
+  // Identidade nova: nenhuma busca por pastas ou bancos de versões antigas.
+  const dbPath = join(root, 'data', 'artisys-oficina.sqlite');
+  const storageDir = join(root, 'storage', 'uploads');
+  mkdirSync(join(root,'data'),{recursive:true});
+  mkdirSync(storageDir,{recursive:true});
+  process.env.DATABASE_PATH=dbPath;
+  process.env.STORAGE_DIR=storageDir;
+  process.env.HOST='0.0.0.0';
+  process.env.PORT='3344';
 
   db = openDatabase(dbPath);
+  migrate(db);
+  migrateAssistencia(db);
   seed(db);
-  server = createAppServer({ db, storageDir });
+  server = createAssistenciaServer({ db, storageDir });
 
-  const port = Number(process.env.PORT || 3333);
+  const port = Number(process.env.PORT || 3344);
   await new Promise((resolve, reject) => {
     const onError = (error) => reject(error);
     server.once('error', onError);
@@ -54,7 +53,6 @@ async function startLocalServer() {
     });
   });
 
-  // A janela desktop usa loopback; tablets/celulares usam o IP LAN do PC na porta 3333.
   serverUrl = `http://127.0.0.1:${port}`;
   return serverUrl;
 }
@@ -112,7 +110,7 @@ app.whenReady().then(async () => {
   });
 }).catch((error) => {
   console.error(error);
-  dialog.showErrorBox('Oficina Agro', `Falha ao iniciar o aplicativo:\n\n${error?.stack || error}`);
+  dialog.showErrorBox('ArtiSys Oficina', `Falha ao iniciar o aplicativo:\n\n${error?.stack || error}`);
   app.quit();
 });
 

@@ -1,6 +1,6 @@
 {
-  "name": "oficina-agricola",
-  "version": "0.1.0",
+  "name": "artisys-oficina",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "main": "electron/main.js",
@@ -15,8 +15,8 @@
     "lint": "node scripts/lint.mjs",
     "build": "node scripts/build.mjs",
     "ci": "npm run lint && npm test && npm run build && npm run test:e2e",
-    "db:migrate": "node src/migrate.js",
-    "db:seed": "node src/seed.js",
+    "db:migrate": "node src/migrate-assistencia.js",
+    "db:seed": "node src/seed-assistencia.js",
     "desktop:dist": "powershell -ExecutionPolicy Bypass -File scripts/build-electron.ps1"
   }
 }

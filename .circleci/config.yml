@@ -7,34 +7,16 @@ executors:
     resource_class: small
     working_directory: ~/project
 
-commands:
-  install_consumer:
-    steps:
-      - restore_cache:
-          keys:
-            - oficina-npm-v1-{{ checksum "package-lock.json" }}
-            - oficina-npm-v1-
-      - run:
-          name: Install consumer dependencies
-          command: npm ci
-      - save_cache:
-          key: oficina-npm-v1-{{ checksum "package-lock.json" }}
-          paths:
-            - ~/.npm
-
 jobs:
   quality:
     executor: node_linux
     steps:
       - checkout
-      - install_consumer
       - run:
-          name: Runtime versions
-          command: |
-            node --version
-            npm --version
+          name: Install dependencies
+          command: npm ci
       - run:
-          name: Lint, tests, build and critical E2E
+          name: Unified workshop lint, regression, build, HTTP E2E
           command: npm run ci
 
   qa:
@@ -42,283 +24,39 @@ jobs:
       viewport:
         type: enum
         enum: [desktop, mobile]
-        default: desktop
     executor: node_linux
     steps:
       - checkout
-      - install_consumer
       - run:
-          name: Install local Playwright QA runtime
+          name: Install dependencies and local Chromium
           command: |
+            npm ci
             npm install --no-save --package-lock=false playwright@1.62.1
             npx playwright install --with-deps chromium
       - run:
-          name: Seed deterministic QA database
+          name: Deterministic seed
           command: |
             rm -rf .qa
-            DATABASE_PATH=.qa/oficina.sqlite STORAGE_DIR=.qa/uploads node scripts/seed-qa-demo.mjs
+            DATABASE_PATH=.qa/artisys-oficina.sqlite STORAGE_DIR=.qa/uploads node scripts/seed-qa-demo.mjs
       - run:
-          name: Run local QA · << parameters.viewport >>
+          name: Validate UI in << parameters.viewport >>
           command: |
             node scripts/qa-demo.mjs << parameters.viewport >> "$PWD/qa-artifacts-<< parameters.viewport >>"
       - store_artifacts:
           path: qa-artifacts-<< parameters.viewport >>
-          destination: artisys-qa/<< parameters.viewport >>
-
-  desktop_build:
-    resource_class: windows.medium
-    machine:
-      image: windows-server-2022-gui:current
-      shell: powershell.exe -ExecutionPolicy Bypass
-    steps:
-      - checkout
-      - run:
-          name: Ensure Node 22.16+
-          command: |
-            $required = [Version]"22.16.0"
-            try { $current = [Version](node -p "process.versions.node") } catch { $current = [Version]"0.0.0" }
-            if ($current -lt $required) {
-              choco install nodejs --version=22.16.0 -y --force --no-progress
-              Import-Module "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
-              Update-SessionEnvironment
-            }
-            node --version
-            npm --version
-            $current = [Version](node -p "process.versions.node")
-            if ($current -lt $required) { throw "Node 22.16.0 ou superior é obrigatório." }
-      - run:
-          name: Install consumer dependencies
-          command: npm ci
-      - run:
-          name: Build application
-          command: npm run build
-      - run:
-          name: Build Windows x64 installer without external publish
-          command: |
-            npm install --no-save --package-lock=false electron-builder@26.15.3
-            npx electron-builder --win nsis --x64 --publish never
-            $exe = Get-ChildItem '.\dist-electron\OficinaAgro-Setup-*-Windows-x64.exe' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-            if (-not $exe) { throw 'Instalador final não encontrado.' }
-            if ($exe.Length -lt 1MB) { throw 'Instalador gerado com tamanho inválido.' }
-            $hash = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash
-            Write-Host "Arquivo: $($exe.Name)"
-            Write-Host "Tamanho: $([math]::Round($exe.Length / 1MB, 2)) MB"
-            Write-Host "SHA256: $hash"
-      - store_artifacts:
-          path: dist-electron
-          destination: desktop-build
-
-  desktop_publish:
-    resource_class: windows.medium
-    machine:
-      image: windows-server-2022-gui:current
-      shell: powershell.exe -ExecutionPolicy Bypass
-    steps:
-      - checkout
-      - add_ssh_keys
-      - run:
-          name: Ensure Node 22.16+
-          command: |
-            $required = [Version]"22.16.0"
-            try { $current = [Version](node -p "process.versions.node") } catch { $current = [Version]"0.0.0" }
-            if ($current -lt $required) {
-              choco install nodejs --version=22.16.0 -y --force --no-progress
-              Import-Module "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
-              Update-SessionEnvironment
-            }
-            $current = [Version](node -p "process.versions.node")
-            if ($current -lt $required) { throw "Node 22.16.0 ou superior é obrigatório." }
-      - run:
-          name: Rebuild release installer
-          command: |
-            npm ci
-            npm run build
-            npm install --no-save --package-lock=false electron-builder@26.15.3
-            npx electron-builder --win nsis --x64 --publish never
-            $exe = Get-ChildItem '.\dist-electron\OficinaAgro-Setup-*-Windows-x64.exe' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-            if (-not $exe) { throw 'Instalador de release não encontrado.' }
-      - run:
-          name: Upload encrypted release handoff
-          command: |
-            & .\scripts\publish-filebin-handoff.ps1
-      - run:
-          name: Publish retrievable release artifact
-          command: |
-            & .\scripts\publish-circle-artifact.ps1
-
-  assistencia_quality:
-    executor: node_linux
-    steps:
-      - checkout
-      - run:
-          name: Install Assistência Técnica dependencies
-          command: cd apps/assistencia-tecnica && npm ci
-      - run:
-          name: Assistência Técnica · lint, regression, build and E2E
-          command: cd apps/assistencia-tecnica && npm run ci
-
-  assistencia_qa:
-    parameters:
-      viewport:
-        type: enum
-        enum: [desktop, mobile]
-        default: desktop
-    executor: node_linux
-    steps:
-      - checkout
-      - run:
-          name: Install Assistência Técnica dependencies
-          command: cd apps/assistencia-tecnica && npm ci
-      - run:
-          name: Install Playwright QA runtime
-          command: |
-            cd apps/assistencia-tecnica
-            npm install --no-save --package-lock=false playwright@1.62.1
-            npx playwright install --with-deps chromium
-      - run:
-          name: Seed deterministic Assistência Técnica QA database
-          command: |
-            cd apps/assistencia-tecnica
-            rm -rf .qa
-            DATABASE_PATH=.qa/assistencia-tecnica.sqlite STORAGE_DIR=.qa/uploads EVENT_LOG_PATH=.qa/events.jsonl node scripts/seed-qa-demo.mjs
-      - run:
-          name: Assistência Técnica QA · << parameters.viewport >>
-          command: |
-            cd apps/assistencia-tecnica
-            node scripts/qa-demo.mjs << parameters.viewport >> "$PWD/qa-artifacts-<< parameters.viewport >>"
-      - store_artifacts:
-          path: apps/assistencia-tecnica/qa-artifacts-<< parameters.viewport >>
-          destination: assistencia-tecnica/<< parameters.viewport >>
-
-  assistencia_windows_build:
-    resource_class: windows.medium
-    machine:
-      image: windows-server-2022-gui:current
-      shell: powershell.exe -ExecutionPolicy Bypass
-    steps:
-      - checkout
-      - run:
-          name: Ensure Node 22.16+
-          command: |
-            $required = [Version]"22.16.0"
-            try { $current = [Version](node -p "process.versions.node") } catch { $current = [Version]"0.0.0" }
-            if ($current -lt $required) {
-              choco install nodejs --version=22.16.0 -y --force --no-progress
-              Import-Module "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
-              Update-SessionEnvironment
-            }
-            node --version
-            npm --version
-            $current = [Version](node -p "process.versions.node")
-            if ($current -lt $required) { throw "Node 22.16.0 ou superior é obrigatório." }
-      - run:
-          name: Install Assistência Técnica dependencies
-          command: |
-            Set-Location 'apps\assistencia-tecnica'
-            npm ci
-      - run:
-          name: Build Assistência Técnica application
-          command: |
-            Set-Location 'apps\assistencia-tecnica'
-            npm run build
-      - run:
-          name: Build final Windows x64 installer without external publish
-          command: |
-            Set-Location 'apps\assistencia-tecnica'
-            npm install --no-save --package-lock=false electron-builder@26.15.3
-            npx electron-builder --win nsis --x64 --publish never
-            $exe = Get-ChildItem '.\dist-electron\AssistenciaTecnica-ArtiSys-Setup-1.0.0-Windows-x64.exe' | Select-Object -First 1
-            if (-not $exe) { throw 'Instalador final v1.0.0 não encontrado.' }
-            if ($exe.Length -lt 1MB) { throw 'Instalador gerado com tamanho inválido.' }
-            $hash = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash
-            Write-Host "Arquivo: $($exe.Name)"
-            Write-Host "Tamanho: $([math]::Round($exe.Length / 1MB, 2)) MB"
-            Write-Host "SHA256: $hash"
-      - store_artifacts:
-          path: apps/assistencia-tecnica/dist-electron
-          destination: assistencia-tecnica-v1.0.0
+          destination: oficina-unificada/<< parameters.viewport >>
 
 workflows:
-  oficina_agricola_ci:
+  oficina_unificada:
     jobs:
-      - quality:
-          filters:
-            branches:
-              ignore:
-                - circle-artifact
-                - feature/assistencia-final-11-14
-                - release/assistencia-v1.0.0
-            tags:
-              only: /^v.*/
+      - quality
       - qa:
           name: qa-desktop
           viewport: desktop
           requires:
             - quality
-          filters:
-            branches:
-              ignore:
-                - circle-artifact
-                - feature/assistencia-final-11-14
-                - release/assistencia-v1.0.0
       - qa:
           name: qa-mobile
           viewport: mobile
           requires:
             - quality
-          filters:
-            branches:
-              ignore:
-                - circle-artifact
-                - feature/assistencia-final-11-14
-                - release/assistencia-v1.0.0
-      - desktop_build:
-          requires:
-            - quality
-          filters:
-            branches:
-              ignore: /.*/
-            tags:
-              only: /^v.*/
-      - desktop_publish:
-          requires:
-            - desktop_build
-          filters:
-            branches:
-              ignore: /.*/
-            tags:
-              only: /^v.*/
-      - assistencia_quality:
-          filters:
-            branches:
-              only:
-                - feature/assistencia-final-11-14
-                - release/assistencia-v1.0.0
-      - assistencia_qa:
-          name: assistencia-qa-desktop
-          viewport: desktop
-          requires:
-            - assistencia_quality
-          filters:
-            branches:
-              only:
-                - feature/assistencia-final-11-14
-                - release/assistencia-v1.0.0
-      - assistencia_qa:
-          name: assistencia-qa-mobile
-          viewport: mobile
-          requires:
-            - assistencia_quality
-          filters:
-            branches:
-              only:
-                - feature/assistencia-final-11-14
-                - release/assistencia-v1.0.0
-      - assistencia_windows_build:
-          requires:
-            - assistencia_quality
-            - assistencia-qa-desktop
-            - assistencia-qa-mobile
-          filters:
-            branches:
-              only: release/assistencia-v1.0.0

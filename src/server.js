@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, statSync } from 'node:fs';
 import { join, resolve, extname, sep } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { openDatabase, migrate, nowIso } from './db.js';
 import { login, logout, validateSession, createUser, hashPassword } from './auth.js';
 import { createCustomer, listCustomers, updateCustomer, getCustomer, createMachine, listMachines, updateMachine, getMachine, createTechnician, listTechnicians, updateTechnician } from './services/catalog.js';
@@ -138,7 +138,3 @@ export function createAppServer({db=openDatabase(),storageDir=process.env.STORAG
   });
 }
 
-if(import.meta.url===pathToFileURL(process.argv[1]).href){
-  const db=openDatabase(); migrate(db); seed(db); const server=createAppServer({db}); const port=Number(process.env.PORT||3333),host=process.env.HOST||'127.0.0.1';
-  server.listen(port,host,()=>console.log(`Oficina Agrícola em http://${host}:${port}`));
-}

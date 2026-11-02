@@ -1,1 +1,0 @@
-import './migrate-assistencia.js';
