@@ -28,8 +28,8 @@ async function startLocalServer() {
     import('../dist/src/server-assistencia.js'),
   ]);
   // Identidade nova: nenhuma busca por pastas ou bancos de versões antigas.
-  const dbPath=join(root,'data','artisys-oficina.sqlite');
-  const storageDir=join(root,'storage','uploads');
+  const dbPath = join(root, 'data', 'artisys-oficina.sqlite');
+  const storageDir = join(root, 'storage', 'uploads');
   mkdirSync(join(root,'data'),{recursive:true});
   mkdirSync(storageDir,{recursive:true});
   process.env.DATABASE_PATH=dbPath;
