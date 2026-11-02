@@ -8,8 +8,18 @@ function newCommandId(){
 // Reconciliação DOM local sem dependências externas. Somente nós diferentes mudam.
 function nodeIdentity(node){
   if(node?.nodeType!==1)return null;
-  for(const attr of ['id','data-os','data-sale','data-oa-os','data-edit-customer','data-edit-service','data-entry','data-history','data-check-position','data-edit-machine']){
+  const markers=['id','data-os','data-sale','data-oa-os','data-edit-customer',
+    'data-edit-service','data-entry','data-history','data-check-position','data-edit-machine'];
+  for(const attr of markers){
     if(node.hasAttribute(attr))return attr+':'+node.getAttribute(attr);
+  }
+  // Linhas de tabelas também precisam identidade estável quando a lista muda de ordem.
+  if(node.tagName==='TR'){
+    const child=node.querySelector?.('[data-edit-customer],[data-edit-service],[data-entry],[data-sale],[data-history]');
+    if(child){
+      for(const attr of markers)if(child.hasAttribute(attr))
+        return 'row:'+attr+':'+child.getAttribute(attr);
+    }
   }
   return null;
 }
