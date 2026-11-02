@@ -71,14 +71,16 @@ async function renderReports(){
   ]);
   const status=oaStatusCounts(orders);
   const max=Math.max(1,...status.map(item=>item.count));
-  const completed=orders.filter(order=>order.status==='ENTREGUE').length;
+  const monthStart=new Date(now.getFullYear(),now.getMonth(),1).getTime();
+  const monthEnd=new Date(now.getFullYear(),now.getMonth()+1,1).getTime();
+  const completed=orders.filter(order=>order.status==='ENTREGUE'&&new Date(order.updated_at||order.entered_at).getTime()>=monthStart&&new Date(order.updated_at||order.entered_at).getTime()<monthEnd).length;
   const active=orders.filter(order=>!['ENTREGUE','CANCELADA','REPROVADA'].includes(order.status)).length;
 
   setContent(`
-    <div class="section-head"><div><h2>Resumo do mês</h2><span class="muted">Indicadores derivados dos dados atuais do sistema</span></div></div>
+    <div class="section-head"><div><h2>Resumo operacional</h2><span class="muted">OS em fluxo e estoque atuais; entregas do mês</span></div></div>
     <div class="oa-report-grid">
-      <div class="oa-report-card"><small>OS em fluxo</small><strong>${active}</strong></div>
-      <div class="oa-report-card"><small>OS entregues</small><strong>${completed}</strong></div>
+      <div class="oa-report-card"><small>OS em fluxo (atual)</small><strong>${active}</strong></div>
+      <div class="oa-report-card"><small>OS entregues (mês)</small><strong>${completed}</strong></div>
       <div class="oa-report-card"><small>Itens abaixo do mínimo</small><strong>${dashboard.lowStock.length}</strong></div>
       <div class="oa-report-card"><small>${financeAllowed?'Resultado do mês':'Compromissos próximos'}</small><strong>${financeAllowed?money(finance.resultCents):dashboard.upcoming.length}</strong></div>
     </div>
