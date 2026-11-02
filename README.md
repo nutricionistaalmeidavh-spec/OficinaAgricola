@@ -58,6 +58,20 @@ As validações automatizadas são executadas por **GitHub Actions**:
 Para executar sem serviços externos: `npm run ci`. Não há `.circleci/config.yml`.
 Se um projeto CircleCI externo ainda estiver conectado à conta, desvincule-o nas configurações externas para impedir checks obsoletos no GitHub.
 
+## Primeiro acesso seguro
+
+Em uma **instalação nova**, nenhum usuário e nenhuma senha padrão são gerados. Ao abrir o aplicativo na máquina principal (`http://127.0.0.1:3344`), o formulário de primeiro acesso exige nome do responsável, usuário e uma senha forte (12+ caracteres, maiúscula, minúscula, número e símbolo). O endpoint de inicialização só funciona a partir de `localhost` e somente enquanto não houver usuários. Em seguida o administrador faz login normalmente. Máquinas da rede local podem acessar o sistema depois dessa configuração.
+
+Para automação administrada via terminal, a variável `ADMIN_PASSWORD` pode ser informada explicitamente; não existe valor implícito. Credenciais de QA em `scripts/seed-qa-demo.mjs` são **somente** para banco efêmero de demonstração, nunca para instalações do usuário.
+
+## Dados automotivos
+
+Equipamentos do tipo carro/caminhão também registram **placa normalizada**, **VIN/chassi (17 caracteres)** e **quilometragem**, mantendo horímetro nos equipamentos agrícolas e técnicos. O histórico por equipamento permite registrar **revisões preventivas**, próximas revisões por data/km e **garantias** (data de vencimento), vinculadas opcionalmente a uma OS do mesmo veículo. Isso não emite notas fiscais.
+
+## Instalação Windows e proteção da main
+
+O workflow GitHub Actions `Windows · Instalador limpo` compila o NSIS em máquina virtual Windows temporária, faz instalação silenciosa e testa bootstrap/admin/login sem publicar releases. Não substitui teste final em hardware do cliente. Instruções para configurar a proteção da `main` com os checks do GitHub: [docs/PROTEGER-MAIN.md](docs/PROTEGER-MAIN.md). O core local não depende de GitHub Actions para executar.
+
 ## Qualidade
 ```sh
 npm run lint
