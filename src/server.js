@@ -2,7 +2,8 @@ import { createServer } from 'node:http';
 import { readFileSync, existsSync, statSync } from 'node:fs';
 import { join, resolve, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { openDatabase, migrate, nowIso } from './db.js';
+import { openDatabase, migrate, nowIso, transaction } from './db.js';
+import {enqueueHttpEvent,dispatchOutbox} from './platform/outbox.js';
 import { login, logout, validateSession, createUser, hashPassword } from './auth.js';
 import { createCustomer, listCustomers, updateCustomer, getCustomer, createMachine, listMachines, updateMachine, getMachine, createTechnician, listTechnicians, updateTechnician } from './services/catalog.js';
 import { createWorkOrder, listWorkOrders, getWorkOrder, updateWorkOrder, transitionWorkOrder, getWorkOrderHistory, machineHistory } from './services/work-orders.js';
@@ -128,14 +129,28 @@ function serveStatic(req,res,path){
   res.writeHead(200,{'Content-Type':MIME[extname(file)]||'application/octet-stream','Cache-Control':rel==='index.html'?'no-cache':'public, max-age=3600'});res.end(readFileSync(file));return true;
 }
 
-export function createAppServer({db=openDatabase(),storageDir=process.env.STORAGE_DIR||'./storage/uploads'}={}){
+export function createAppServer({db=openDatabase(),storageDir=process.env.STORAGE_DIR||'./storage/uploads',eventRuntime=null}={}){
   migrate(db); const router=createRouter({db,storageDir});
   return createServer(async(req,res)=>{
     const url=new URL(req.url||'/','http://localhost'); const route=router.match(req.method||'GET',url.pathname);
     try{
       if(route){let user=null,token=tokenFrom(req);if(!route.publicRoute){user=validateSession(db,token);roleGuard(user,route.roles)}const body=['POST','PUT','PATCH'].includes(req.method||'')?await readJson(req):{};
-        const data=await route.handler({req,res,url,params:route.params,body,user,token,db}); if(res.writableEnded)return;
-        if(data&&Object.hasOwn(data,'__html'))return html(res,200,data.__html); if(data&&Object.hasOwn(data,'__binary')){res.writeHead(200,{'Content-Type':data.mimeType||'application/octet-stream','Content-Disposition':`inline; filename=\"${String(data.filename||'anexo').replace(/[\"\r\n]/g,'')}\"`,'Cache-Control':'private, max-age=300'});return res.end(data.__binary)} return json(res,200,data??{ok:true});
+        const isMutation=['POST','PUT','PATCH','DELETE'].includes(req.method||'');
+        const invoke=()=>route.handler({req,res,url,params:route.params,body,user,token,db});
+        // Uma confirmação: comando de negócio + registro de evento imutável.
+        const data=isMutation?transaction(db,()=>{
+          const output=invoke();
+          if(!res.writableEnded)enqueueHttpEvent(db,req.method,url.pathname,output);
+          return output;
+        }):invoke();
+        if(res.writableEnded)return;
+        if(isMutation&&eventRuntime)void dispatchOutbox(db,eventRuntime).catch(e=>console.error('[outbox]',e.message));
+        if(data&&Object.hasOwn(data,'__html'))return html(res,200,data.__html);
+        if(data&&Object.hasOwn(data,'__binary')){
+          res.writeHead(200,{'Content-Type':data.mimeType||'application/octet-stream','Content-Disposition':`inline; filename=\"${String(data.filename||'anexo').replace(/[\"\r\n]/g,'')}\"`,'Cache-Control':'private, max-age=300'});
+          return res.end(data.__binary);
+        }
+        return json(res,200,data??{ok:true});
       }
       if((req.method==='GET'||req.method==='HEAD')&&serveStatic(req,res,url.pathname))return;
       if(req.method==='GET'&&!url.pathname.startsWith('/api/')){if(serveStatic(req,res,'/'))return}
