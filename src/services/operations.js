@@ -79,8 +79,12 @@ export function createChecklistTemplate(db,{name,kind='PERSONALIZADO',items=[]})
   const cleanName=text(name); if(!cleanName||!CHECKLIST_KINDS.has(kind)||!Array.isArray(items)||items.length===0)throw new Error('Modelo de checklist inválido');
   return transaction(db,()=>{
     const t=nowIso(); const r=db.prepare('INSERT INTO checklist_templates(name,kind,created_at,updated_at) VALUES(?,?,?,?)').run(cleanName,kind,t,t); const id=Number(r.lastInsertRowid);
-    const ins=db.prepare('INSERT INTO checklist_template_items(template_id,position,label) VALUES(?,?,?)');
-    items.forEach((item,index)=>{const label=text(item);if(!label)throw new Error('Item de checklist vazio');ins.run(id,index+1,label)});
+    const ins=db.prepare('INSERT INTO checklist_template_items(template_id,position,label,required) VALUES(?,?,?,?)');
+    items.forEach((item,index)=>{
+      const label=text(typeof item==='object'?item.label:item);
+      if(!label)throw new Error('Item de checklist vazio');
+      ins.run(id,index+1,label,typeof item==='object'&&item.required===false?0:1);
+    });
     return getChecklistTemplate(db,id);
   });
 }
@@ -94,13 +98,32 @@ export function seedDefaultChecklists(db){
   if(!db.prepare("SELECT id FROM checklist_templates WHERE kind='ENTRADA'").get())createChecklistTemplate(db,{name:'Checklist de Entrada',kind:'ENTRADA',items:['Fotos gerais da máquina','Nível de combustível','Horímetro registrado','Avarias externas','Itens/acessórios entregues']});
   if(!db.prepare("SELECT id FROM checklist_templates WHERE kind='ENTREGA'").get())createChecklistTemplate(db,{name:'Checklist de Entrega',kind:'ENTREGA',items:['Serviço conferido','Vazamentos verificados','Teste funcional','Limpeza básica','Orientações ao cliente']});
 }
-export function createWorkOrderChecklist(db,workOrderId,templateId,responses=[]){
-  getWorkOrder(db,workOrderId); const template=getChecklistTemplate(db,templateId); const byPos=new Map(template.items.map(i=>[Number(i.position),i]));
-  return transaction(db,()=>{
-    const t=nowIso(); const r=db.prepare('INSERT INTO work_order_checklists(work_order_id,template_id,template_name_snapshot,created_at) VALUES(?,?,?,?)').run(workOrderId,templateId,template.name,t); const id=Number(r.lastInsertRowid);
+export function createWorkOrderChecklist(db,workOrderId,templateId,responses=[],options={}){
+  const requestId=options.requestId??null;
+  return runIdempotent(db,`work-order:${workOrderId}:checklist`,requestId,
+    {templateId,responses},()=>{
+    getWorkOrder(db,workOrderId);
+    const template=getChecklistTemplate(db,templateId);
+    const byPos=new Map(template.items.map(i=>[Number(i.position),i]));
+    if(!Array.isArray(responses))throw new Error('Respostas inválidas');
+    const t=nowIso();
+    const r=db.prepare('INSERT INTO work_order_checklists(work_order_id,template_id,template_name_snapshot,created_at) VALUES(?,?,?,?)')
+      .run(workOrderId,templateId,template.name,t);
+    const id=Number(r.lastInsertRowid);
     const ins=db.prepare('INSERT INTO checklist_responses(checklist_id,position,label_snapshot,response,note) VALUES(?,?,?,?,?)');
-    const seen=new Set(); for(const response of responses){const pos=Number(response.position);const item=byPos.get(pos);if(!item)throw new Error('Item de checklist inválido');if(seen.has(pos))throw new Error('Resposta duplicada');seen.add(pos);if(!RESPONSES.has(response.response))throw new Error('Resposta inválida');ins.run(id,pos,item.label,response.response,text(response.note));}
-    if(responses.length>0)db.prepare('UPDATE work_order_checklists SET completed_at=? WHERE id=?').run(t,id);
+    const seen=new Set();
+    for(const response of responses){
+      const pos=Number(response.position),item=byPos.get(pos);
+      if(!item)throw new Error('Item de checklist inválido');
+      if(seen.has(pos))throw new Error('Resposta duplicada');
+      seen.add(pos);
+      if(!RESPONSES.has(response.response))throw new Error('Resposta inválida');
+      ins.run(id,pos,item.label,response.response,text(response.note));
+    }
+    // Projeção de conclusão: nenhum item obrigatório pode ficar sem resposta.
+    const complete=template.items.every(item=>!item.required||seen.has(Number(item.position)));
+    if(complete&&seen.size>0)
+      db.prepare('UPDATE work_order_checklists SET completed_at=? WHERE id=?').run(t,id);
     return getWorkOrderChecklist(db,id);
   });
 }
