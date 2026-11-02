@@ -52,3 +52,20 @@ test('P0: indicadores de estoque contam mais de oito itens abaixo do mínimo',()
     assert.equal(dashboard.lowStock.length,13);
   }finally{db.close()}
 });
+
+test('P0: mês operacional segue o fuso local da oficina, não UTC',()=>{
+  const previousTz=process.env.TZ;
+  process.env.TZ='America/Sao_Paulo';
+  const {db,order}=fixture();
+  try{
+    const octoberLocal=order(),novemberLocal=order();
+    db.prepare("UPDATE work_orders SET status='ENTREGUE',delivered_at=? WHERE id=?")
+      .run('2026-11-01T02:30:00.000Z',octoberLocal.id);
+    db.prepare("UPDATE work_orders SET status='ENTREGUE',delivered_at=? WHERE id=?")
+      .run('2026-11-01T03:30:00.000Z',novemberLocal.id);
+    assert.equal(dashboardData(db,{now:new Date('2026-11-15T12:00:00.000Z')}).counts.ENTREGUES_MES,1);
+  }finally{
+    db.close();
+    if(previousTz===undefined)delete process.env.TZ;else process.env.TZ=previousTz;
+  }
+});
