@@ -12,7 +12,7 @@ migrateAssistencia(db);
 seed(db,{adminUser:'admin',adminPassword:'Admin@1234',nodeEnv:'development'});
 
 if(!db.prepare("SELECT id FROM customers WHERE name='João Silva'").get()){
-  db.prepare("UPDATE company_settings SET name='Assistência Técnica · Demonstração', phone='(16) 3333-2026', address='Ribeirão Preto - SP', updated_at=datetime('now') WHERE id=1").run();
+  db.prepare("UPDATE company_settings SET name='ArtiSys Oficina · Demonstração', phone='(16) 3333-2026', address='Ribeirão Preto - SP', updated_at=datetime('now') WHERE id=1").run();
   const admin=db.prepare("SELECT id FROM users WHERE username='admin'").get();
   const tech1=createTechnician(db,{name:'Carlos Mendes',phone:'(16) 99990-1001',specialty:'Informática e notebooks'});
   const tech2=createTechnician(db,{name:'Rafael Souza',phone:'(16) 99990-1002',specialty:'Eletrônica e celulares'});
@@ -43,4 +43,4 @@ if(!db.prepare("SELECT id FROM customers WHERE name='João Silva'").get()){
 }
 
 db.close();
-console.log('QA demo da Assistência Técnica pronto');
+console.log('QA demo ArtiSys Oficina pronto');
