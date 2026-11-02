@@ -58,3 +58,16 @@ test('CANON UI: etiquetas são definidas na fonte, sem relabel pós-render',()=>
   assert.match(orders,/<h3>Equipamento<\/h3>/);
   assert.match(orders,/<label>Equipamento<select/);
 });
+
+test('CANON: escritores de estoque/caixa não podem voltar para módulos paralelos',()=>{
+  const sales=read('src/services/sales.js');
+  const finance=read('src/services/finance.js');
+  const inventory=read('src/services/inventory.js');
+  const payments=read('src/services/payment-ledger.js');
+  assert.doesNotMatch(sales,/UPDATE\\s+parts\\s+SET\\s+quantity/i);
+  assert.doesNotMatch(sales,/INSERT\\s+INTO\\s+(?:inventory_movements|sale_stock_movements|cash_movements|payment_events)/i);
+  assert.doesNotMatch(finance,/INSERT\\s+INTO\\s+(?:cash_movements|payment_events)/i);
+  assert.match(inventory,/export function postStockMovement/);
+  assert.match(payments,/export function postPaymentEvent/);
+  assert.match(payments,/export function postCashMovement/);
+});
