@@ -11,8 +11,8 @@ test('Electron da assistência usa dados próprios e expõe LAN na porta 3344', 
   assert.ok(serverImport > argvGuard, 'server-assistencia.js deve ser importado somente após normalizar process.argv[1]');
   assert.match(source, /AssistenciaTecnica/);
   assert.match(source, /assistencia-tecnica\.sqlite/);
-  assert.match(source, /process\\.env\\.HOST\\s*=\\s*'0\\.0\\.0\\.0'/);
-  assert.match(source, /process\\.env\\.PORT\\s*=\\s*'3344'/);
+  assert.match(source, /process\.env\.HOST\s*=\s*'0\.0\.0\.0'/);
+  assert.match(source, /process\.env\.PORT\s*=\s*'3344'/);
   assert.match(source, /migrate\(db\);/);
   assert.match(source, /migrateAssistencia\(db\);/);
   assert.match(source, /server\.listen\(port, '0\.0\.0\.0'/);
