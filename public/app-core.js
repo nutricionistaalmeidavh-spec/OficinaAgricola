@@ -1,9 +1,22 @@
 const $=(s,root=document)=>root.querySelector(s); const $$=(s,root=document)=>[...root.querySelectorAll(s)];
-const state={token:localStorage.getItem('oficina_token')||'',user:null,page:'dashboard'};
+const state={token:localStorage.getItem('oficina_token')||'',user:null,page:'dashboard',pageReady:false,pageEpoch:0,pageController:null};
 const money=c=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(c||0)/100);
 const dt=v=>v?new Date(v).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'}):'—';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
-async function api(path,{method='GET',body,raw=false}={}){const headers={};if(state.token)headers.Authorization=`Bearer ${state.token}`;if(body!==undefined)headers['Content-Type']='application/json';const requester=window.localRuntime?.request||fetch;const res=await requester(path,{method,headers,body:body===undefined?undefined:JSON.stringify(body)});if(res.status===401){logout();throw new Error('Sessão expirada')}const text=await res.text();if(!res.ok){let msg=text;try{msg=JSON.parse(text).error}catch{}throw new Error(msg||'Erro na operação')}return raw?text:(text?JSON.parse(text):null)}
+async function api(path,{method='GET',body,raw=false}={}){
+  const headers={};if(state.token)headers.Authorization=`Bearer ${state.token}`;
+  if(body!==undefined)headers['Content-Type']='application/json';
+  const requester=window.localRuntime?.request||fetch;
+  const isRead=method==='GET',epoch=state.pageEpoch;
+  const signal=isRead?state.pageController?.signal:undefined;
+  const res=await requester(path,{method,headers,signal,body:body===undefined?undefined:JSON.stringify(body)});
+  if(isRead&&(signal?.aborted||epoch!==state.pageEpoch))throw new DOMException('Consulta obsoleta','AbortError');
+  if(res.status===401){logout();throw new Error('Sessão expirada')}
+  const text=await res.text();
+  if(isRead&&(signal?.aborted||epoch!==state.pageEpoch))throw new DOMException('Consulta obsoleta','AbortError');
+  if(!res.ok){let msg=text;try{msg=JSON.parse(text).error}catch{}throw new Error(msg||'Erro na operação')}
+  return raw?text:(text?JSON.parse(text):null);
+}
 function toast(msg,error=false){const el=$('#toast');el.textContent=msg;el.className=`toast${error?' error':''}`;setTimeout(()=>el.classList.add('hidden'),2800)}
 function showModal(title,html,onSubmit){$('#modalTitle').textContent=title;$('#modalBody').innerHTML=html;$('#modal').classList.remove('hidden');const form=$('#modalBody form');if(form&&onSubmit)form.addEventListener('submit',async e=>{e.preventDefault();const btn=$('button[type=submit]',form);if(btn)btn.disabled=true;try{await onSubmit(new FormData(form));closeModal()}catch(err){toast(err.message,true)}finally{if(btn)btn.disabled=false}})}
 function closeModal(){$('#modal').classList.add('hidden');$('#modalBody').innerHTML=''}
@@ -15,9 +28,32 @@ function setContent(html){$('#content').innerHTML=html}
 async function boot(){ $('#today').textContent=new Date().toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'short'}); if(!state.token)return showLogin();try{state.user=await api('/api/auth/me');showApp();await navigate('dashboard')}catch{showLogin()} }
 function showLogin(){$('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden')}
 function showApp(){$('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');$('#userName').textContent=state.user.name;$('#userRole').textContent=state.user.role;$('#avatar').textContent=state.user.name[0]?.toUpperCase()||'A'}
-function logout(){state.token='';state.user=null;localStorage.removeItem('oficina_token');showLogin()}
+function logout(){state.pageController?.abort();state.pageEpoch++;state.pageReady=false;state.token='';state.user=null;localStorage.removeItem('oficina_token');showLogin()}
 
-async function navigate(page){state.page=page;$$('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===page));setContent('<div class="card"><div class="empty">Carregando…</div></div>');try{const fn={dashboard:renderDashboard,customers:renderCustomers,machines:renderMachines,'work-orders':renderWorkOrders,inventory:renderInventory,schedule:renderSchedule,finance:renderFinance,reports:renderReports,technicians:renderTechnicians,settings:renderSettings}[page]||renderDashboard;await fn()}catch(err){setContent(`<div class="card"><div class="empty error">${esc(err.message)}</div></div>`);toast(err.message,true)}}
+async function navigate(page,{force=false}={}){
+  if(state.page===page&&state.pageReady&&!force)return;
+  state.pageController?.abort();
+  state.pageController=new AbortController();
+  const epoch=++state.pageEpoch;
+  state.pageReady=false;
+  state.page=page;
+  $('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===page));
+  setContent('<div class="card"><div class="empty">Carregando…</div></div>');
+  try{
+    const renderers={
+      dashboard:renderDashboard,customers:renderCustomers,machines:renderMachines,
+      'work-orders':renderWorkOrders,inventory:renderInventory,schedule:renderSchedule,
+      finance:renderFinance,reports:renderReports,technicians:renderTechnicians,
+      settings:renderSettings,services:renderServices,sales:renderSales
+    };
+    await (renderers[page]||renderDashboard)();
+    if(epoch===state.pageEpoch)state.pageReady=true;
+  }catch(err){
+    if(epoch!==state.pageEpoch||err.name==='AbortError')return;
+    setContent(`<div class="card"><div class="empty error">${esc(err.message)}</div></div>`);
+    toast(err.message,true);
+  }
+}
 
 async function renderDashboard(){pageTitle('Visão Geral','OPERAÇÃO EM TEMPO REAL');const d=await api('/api/dashboard');const f=d.finance;setContent(`
  <div class="grid stats">
