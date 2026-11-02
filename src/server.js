@@ -148,7 +148,7 @@ export function createAppServer({db=openDatabase(),storageDir=process.env.STORAG
           const output=runIdempotent(db,
             `http:${req.method}:${url.pathname}:user:${user?.id??'public'}`,
             body.requestId??req.headers['idempotency-key'],{body},invoke);
-          if(!res.writableEnded)enqueueHttpEvent(db,req.method,url.pathname,output);
+          if(!res.writableEnded)enqueueHttpEvent(db,req.method,url.pathname,output,{requestId:body.requestId??req.headers['idempotency-key'],actorId:user?.id??null});
           return output;
         }):invoke();
         if(res.writableEnded)return;
