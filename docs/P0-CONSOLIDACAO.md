@@ -9,13 +9,18 @@ A base canônica é a antiga Assistência Técnica ArtiSys, promovida de `apps/a
 4. Backup usa `VACUUM INTO`, que considera transações do WAL. Restaurar banco exige parada da aplicação.
 5. Um único `src/start.js`, `package.json`, `electron/main.js`, `public/`, `src/`, `tests/` no checkout.
 
-## Proteção de dados
-- Nenhum banco real foi copiado, convertido, mesclado ou excluído na operação de código.
-- Resolver da execução escolhe apenas uma fonte existente. Múltiplas fontes causam erro explícito.
-- No Windows, são detectadas as pastas legadas OficinaAgro e AssistenciaTecnica.
-- Dois bancos com dados distintos não podem ser mesclados por substituição de arquivo: exigir migração dedicada com preservação das referências.
-- A cópia do banco histórico não é obrigatória para operar com a única fonte detectada.
-- Manter o banco e anexos antigos intactos até validar fluxo completo e backup.
+## Identidade nova e dados isolados
+A distribuição chama-se **ArtiSys Oficina** (appId `com.artisys.oficina`).
+Instalador: `ArtiSys-Oficina-Setup-<versão>-Windows-x64.exe`.
+Dados Windows: `%LOCALAPPDATA%\\ArtiSys\\Oficina\\data\\artisys-oficina.sqlite`.
+Anexos Windows: `%LOCALAPPDATA%\\ArtiSys\\Oficina\\storage\\uploads`.
+
+- O desktop não detecta bancos de `OficinaAgro` nem `AssistenciaTecnica`, ainda que existam.
+- Na execução pelo terminal, os caminhos padrão são `data/artisys-oficina.sqlite` e `storage/uploads`.
+- Não há migração ou importação silenciosa. A aplicação cria seu próprio banco ao iniciar.
+- Arquivos históricos das aplicações antigas não são apagados nem alterados.
+- `DATABASE_PATH` explicitamente informado é aceito apenas pela execução via terminal para desenvolvimento ou QA.
+- **Premissa de implantação:** computadores novos, sem instalações anteriores.
 
 ## Gates
 `npm run ci`, QA desktop/mobile CircleCI, suíte HTTP E2E, testes P0 e build manual Windows. Não realizar merge nem publicação sem todos os gates confirmados.
