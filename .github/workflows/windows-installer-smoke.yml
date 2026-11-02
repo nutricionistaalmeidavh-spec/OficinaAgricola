@@ -1,0 +1,47 @@
+name: Windows · Instalador limpo
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'electron/**'
+      - 'electron-builder.yml'
+      - 'scripts/build.mjs'
+      - 'scripts/smoke-installer.ps1'
+      - 'public/**'
+      - 'tests/**'
+      - '.github/workflows/windows-installer-smoke.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  windows-clean-install:
+    name: NSIS · Windows x64 limpo
+    runs-on: windows-latest
+    timeout-minutes: 35
+    env:
+      ELECTRON_BUILDER_ALLOW_UNRESOLVED_DEPENDENCIES: 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Quality gate
+        run: npm run ci
+      - name: Build application files
+        run: npm run build
+      - name: Install temporary Electron builder
+        run: npm install --no-save --package-lock=false electron-builder@26.15.3
+      - name: Build Windows NSIS without publishing
+        run: npx electron-builder --win nsis --x64 --publish never
+      - name: Run fresh install and first-login smoke
+        shell: pwsh
+        run: ./scripts/smoke-installer.ps1
