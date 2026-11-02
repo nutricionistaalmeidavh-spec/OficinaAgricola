@@ -119,7 +119,45 @@ try{
   await page.locator('#modalBody').filter({hasText:'Garantia'}).waitFor({state:'visible'});
   await page.screenshot({path:path.join(outputDir,'05-historico-automotivo.png'),fullPage:true});
 
-  await writeFile(path.join(outputDir,'qa-summary.json'),`${JSON.stringify({status:'passed',viewport:viewportName,checks:['login','dashboard','demo-data','work-orders','os-detail','edit-action','pdf-action','history-action','client-save-without-rerender','settings-draft-focus-preserved','vehicle-identity','review-and-warranty']},null,2)}\n`);
+
+  // Fresh installation browser flow. This server uses its own disposable SQLite file.
+  const setupPort=viewportName==='desktop'?3355:3356;
+  const setupFile=`.qa/onboarding-${viewportName}.sqlite`;
+  await rm(setupFile,{force:true});
+  const setupProcess=spawn(process.execPath,['src/start.js'],{
+    env:{...process.env,HOST:'127.0.0.1',PORT:String(setupPort),
+      DATABASE_PATH:setupFile,STORAGE_DIR:`.qa/onboarding-${viewportName}-uploads`,
+      NODE_ENV:'production',ADMIN_PASSWORD:''},
+    stdio:['ignore','pipe','pipe']
+  });
+  try{
+    let ready=false;
+    for(let i=0;i<120;i++){
+      if(setupProcess.exitCode!==null)throw new Error('Servidor de primeiro acesso encerrou');
+      try{const r=await fetch(`http://127.0.0.1:${setupPort}/api/health`);if(r.ok){ready=true;break}}catch{}
+      await sleep(250);
+    }
+    if(!ready)throw new Error('Servidor de primeiro acesso não iniciou');
+    const first=await context.newPage();
+    try{
+      await first.goto(`http://127.0.0.1:${setupPort}`,{waitUntil:'domcontentloaded'});
+      await first.locator('#setupForm').waitFor({state:'visible'});
+      await first.locator('#loginForm').waitFor({state:'hidden'});
+      await first.locator('#setupForm input[name="name"]').fill('Gestor Primeiro Acesso');
+      await first.locator('#setupForm input[name="username"]').fill('gestorqa');
+      await first.locator('#setupForm input[name="password"]').fill('PrimeiroAcessoQA2026!');
+      await first.locator('#setupForm input[name="confirmPassword"]').fill('PrimeiroAcessoQA2026!');
+      await first.locator('#setupForm button[type="submit"]').click();
+      await first.locator('#loginForm').waitFor({state:'visible'});
+      await first.locator('#loginForm input[name="username"]').fill('gestorqa');
+      await first.locator('#loginForm input[name="password"]').fill('PrimeiroAcessoQA2026!');
+      await first.locator('#loginForm button[type="submit"]').click();
+      await first.locator('#appView').waitFor({state:'visible'});
+      await first.screenshot({path:path.join(outputDir,'06-primeiro-acesso-seguro.png')});
+    }finally{await first.close()}
+  }finally{setupProcess.kill('SIGTERM')}
+
+  await writeFile(path.join(outputDir,'qa-summary.json'),`${JSON.stringify({status:'passed',viewport:viewportName,checks:['login','dashboard','demo-data','work-orders','os-detail','edit-action','pdf-action','history-action','client-save-without-rerender','settings-draft-focus-preserved','vehicle-identity','review-and-warranty','first-run-admin-browser']},null,2)}\n`);
 } catch(error){
   if(page)await page.screenshot({path:path.join(outputDir,'failure.png'),fullPage:true}).catch(()=>{});
   await writeFile(path.join(outputDir,'qa-summary.json'),`${JSON.stringify({status:'failed',viewport:viewportName,error:error.message},null,2)}\n`).catch(()=>{});
