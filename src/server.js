@@ -7,7 +7,8 @@ import {enqueueHttpEvent,dispatchOutbox} from './platform/outbox.js';
 import {runIdempotent} from './platform/idempotency.js';
 import {auditInvariants} from './services/reconciliation.js';
 import {duplicateWorkOrderWithQuote} from './services/work-order-duplication.js';
-import { login, logout, validateSession, createUser, hashPassword } from './auth.js';
+import {getCompanySettings,updateCompanySettings,listStaffUsers,createStaffUser,updateStaffUser} from './services/admin.js';
+import { login, logout, validateSession } from './auth.js';
 import { createCustomer, listCustomers, updateCustomer, getCustomer, createMachine, listMachines, updateMachine, getMachine, createTechnician, listTechnicians, updateTechnician } from './services/catalog.js';
 import { createWorkOrder, listWorkOrders, getWorkOrder, updateWorkOrder, transitionWorkOrder, getWorkOrderHistory, machineHistory } from './services/work-orders.js';
 import { saveQuote, getQuote, submitQuote, approveQuote, rejectQuote } from './services/quotes.js';
@@ -58,11 +59,11 @@ function createRouter({db,storageDir}){
   add('POST','/api/auth/logout',ROLE_ALL,({token})=>{logout(db,token);return {ok:true}});
   add('GET','/api/auth/me',ROLE_ALL,({user})=>user);
 
-  add('GET','/api/company',ROLE_ALL,()=>db.prepare('SELECT * FROM company_settings WHERE id=1').get());
-  add('PATCH','/api/company',['ADMIN'],({body})=>{const old=db.prepare('SELECT * FROM company_settings WHERE id=1').get();db.prepare('UPDATE company_settings SET name=?,document=?,phone=?,email=?,address=?,updated_at=? WHERE id=1').run(body.name??old.name,body.document??old.document,body.phone??old.phone,body.email??old.email,body.address??old.address,nowIso());return db.prepare('SELECT * FROM company_settings WHERE id=1').get()});
-  add('GET','/api/users',['ADMIN'],()=>db.prepare('SELECT id,username,name,role,active,created_at FROM users ORDER BY name').all());
-  add('POST','/api/users',['ADMIN'],({body})=>{const id=createUser(db,body);return db.prepare('SELECT id,username,name,role,active FROM users WHERE id=?').get(id)});
-  add('PATCH','/api/users/:id',['ADMIN'],({params,body})=>{const id=int(params.id),old=db.prepare('SELECT * FROM users WHERE id=?').get(id);if(!old)throw new Error('Usuário não encontrado');const roles=new Set(['ADMIN','ATENDIMENTO','TECNICO','FINANCEIRO']);const role=body.role??old.role;if(!roles.has(role))throw new Error('Perfil inválido');db.prepare('UPDATE users SET name=?,role=?,active=?,password_hash=?,updated_at=? WHERE id=?').run(body.name??old.name,role,body.active===undefined?old.active:(body.active?1:0),body.password?hashPassword(body.password):old.password_hash,nowIso(),id);return db.prepare('SELECT id,username,name,role,active FROM users WHERE id=?').get(id)});
+  add('GET','/api/company',ROLE_ALL,()=>getCompanySettings(db));
+  add('PATCH','/api/company',['ADMIN'],({body})=>updateCompanySettings(db,body));
+  add('GET','/api/users',['ADMIN'],()=>listStaffUsers(db));
+  add('POST','/api/users',['ADMIN'],({body})=>createStaffUser(db,body));
+  add('PATCH','/api/users/:id',['ADMIN'],({params,body})=>updateStaffUser(db,int(params.id),body));
 
   add('GET','/api/customers',ROLE_ALL,({url})=>listCustomers(db,{includeInactive:url.searchParams.get('includeInactive')==='1',search:url.searchParams.get('search')||''}));
   add('POST','/api/customers',ROLE_OFFICE,({body})=>createCustomer(db,body));
