@@ -1,4 +1,4 @@
-const CACHE_NAME = 'artisys-oficina-shell-v1';
+const CACHE_NAME = 'artisys-oficina-shell-v2';
 const SHELL = ['/', '/index.html', '/styles.css', '/ui-stage7.css', '/theme-lote-a.css', '/local-runtime.css', '/app-core.js', '/app-catalog.js', '/app-orders.js', '/app-os-tools.js', '/app-operations.js', '/app-stage7.js', '/app-assistencia.js', '/app-admin.js', '/local-runtime.js', '/pwa-register.js', '/manifest.webmanifest', '/icon.svg'];
 
 self.addEventListener('install', event => {
@@ -22,7 +22,21 @@ async function networkFirstNavigation(request) {
   }
 }
 
-async function cacheFirstStatic(request) {
+async function networkFirstStatic(request) {
+  try {
+    // Os recursos da UI precisam ver a última versão após atualizar o sistema.
+    const response=await fetch(request,{cache:'no-store'});
+    if(response.ok){
+      const cache=await caches.open(CACHE_NAME);
+      await cache.put(request,response.clone());
+    }
+    return response;
+  }catch{
+    return await caches.match(request)||Response.error();
+  }
+}
+
+async function cachedAsset(request) {
   const cached = await caches.match(request);
   if (cached) return cached;
   try {
@@ -42,5 +56,8 @@ self.addEventListener('fetch', event => {
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
-  event.respondWith(request.mode === 'navigate' ? networkFirstNavigation(request) : cacheFirstStatic(request));
+  const executable=/\.(?:js|css|webmanifest)$/i.test(url.pathname);
+  event.respondWith(request.mode==='navigate'
+    ? networkFirstNavigation(request)
+    : executable ? networkFirstStatic(request) : cachedAsset(request));
 });
