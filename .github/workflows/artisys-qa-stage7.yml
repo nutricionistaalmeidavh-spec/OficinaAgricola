@@ -7,6 +7,8 @@ on:
     paths:
       - 'public/**'
       - 'qa/**'
+      - 'scripts/qa-demo.mjs'
+      - 'scripts/seed-qa-demo.mjs'
       - 'tests/ui-stage7.test.js'
       - '.github/workflows/artisys-qa-stage7.yml'
 
@@ -16,23 +18,37 @@ permissions:
 jobs:
   visual-shell:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
-      - name: Checkout Oficina Agro
+      - name: Checkout ArtiSys Oficina
         uses: actions/checkout@v4
-      - name: Run pinned ArtiSys QA shell flow
-        uses: nutricionistaalmeidavh-spec/utilidades/.github/actions/artisys-qa@7702e351b5c1fc2eff2fd85be5084046f36ea5b3
+
+      - name: Node 22
+        uses: actions/setup-node@v4
         with:
-          config: qa/artisys-qa.config.json
-          mode: run
-          flow: stage7-shell
-          viewport: desktop
-          output: qa-artifacts
-      - name: Upload QA evidence
+          node-version: 22.16.0
+          cache: npm
+
+      - name: Install app and local Playwright
+        run: |
+          npm ci
+          npm install --no-save --package-lock=false playwright@1.62.1
+          npx playwright install --with-deps chromium
+
+      - name: Seed isolated QA database
+        run: |
+          rm -rf .qa
+          DATABASE_PATH=.qa/artisys-oficina.sqlite STORAGE_DIR=.qa/uploads EVENT_LOG_PATH=.qa/events.jsonl NODE_ENV=development node scripts/seed-qa-demo.mjs
+
+      - name: Browser QA with guaranteed local server shutdown
+        run: |
+          node scripts/qa-demo.mjs desktop "$PWD/qa-artifacts"
+
+      - name: Upload QA screenshots, video and logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: oficina-agro-stage7-qa-${{ github.run_number }}
+          name: artisys-oficina-stage7-qa-${{ github.run_number }}
           path: qa-artifacts
           if-no-files-found: warn
           retention-days: 7
