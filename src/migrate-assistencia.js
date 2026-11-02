@@ -8,7 +8,7 @@ const db = openDatabase();
 try {
   migrate(db);
   migrateAssistencia(db);
-  console.log('Migration Assistência Técnica concluída.');
+  console.log('Migração ArtiSys Oficina concluída.');
 } finally {
   db.close();
 }
