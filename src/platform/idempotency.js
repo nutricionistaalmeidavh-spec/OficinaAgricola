@@ -4,8 +4,8 @@ import {transaction,nowIso} from '../db.js';
 const normalizeId=id=>{
   if(id==null||id==='')return null;
   const value=String(id).trim();
-  if(value.length<8||value.length>128||!/^[\w:.-]+$/.test(value))
-    throw new Error('Identificador da operação inválido (8 a 128 caracteres)');
+  if(value.length<3||value.length>128||!/^[\w:.-]+$/.test(value))
+    throw new Error('Identificador da operação inválido (3 a 128 caracteres)');
   return value;
 };
 function stable(value){
