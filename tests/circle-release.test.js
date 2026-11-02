@@ -12,8 +12,8 @@ test('build desktop da assistência é independente e não exige publicação ex
   ]);
 
   assert.match(builder, /appId: com\.artisys\.assistenciatecnica/);
-  assert.match(builder, /productName: Assistência Técnica ArtiSys/);
-  assert.match(builder, /AssistenciaTecnica-ArtiSys-Setup-/);
-  assert.match(buildScript, /AssistenciaTecnica-ArtiSys-Setup-/);
+  assert.match(builder, /productName: ArtiSys Oficina/);
+  assert.match(builder, /ArtiSys-Oficina-Setup-/);
+  assert.match(buildScript, /ArtiSys-Oficina-Setup-/);
   assert.doesNotMatch(pkg, /publish|filebin|circleci/i);
 });
