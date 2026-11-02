@@ -24,7 +24,7 @@ test('entregas 00-08 permanecem isoladas e sem dependência SaaS de runtime', as
   assert.equal(pkg.devDependencies, undefined);
   assert.match(env, /PORT=3344/);
   assert.match(env, /DATABASE_PATH=/);
-  assert.match(builder, /com\.artisys\.assistenciatecnica/);
+  assert.ok(builder.includes('appId: com.artisys.oficina'));
   assert.match(start, /createAssistenciaServer/);
 
   for (const table of ['service_catalog', 'cash_sessions', 'sales', 'sale_items', 'sale_stock_movements', 'cash_movements']) {
