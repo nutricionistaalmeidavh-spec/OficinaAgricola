@@ -1,5 +1,3 @@
-import { nowIso } from './db.js';
-
 export function migrateAssistencia(db) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS service_catalog (
@@ -92,9 +90,4 @@ export function migrateAssistencia(db) {
   if(!columns.has('request_payload_hash'))db.exec('ALTER TABLE sales ADD COLUMN request_payload_hash TEXT');
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_sales_request_id ON sales(request_id) WHERE request_id IS NOT NULL;');
 
-  const company = db.prepare('SELECT name FROM company_settings WHERE id=1').get();
-  if (company?.name === 'Oficina Agrícola') {
-    db.prepare('UPDATE company_settings SET name=?,updated_at=? WHERE id=1')
-      .run('Assistência Técnica ArtiSys', nowIso());
-  }
 }
