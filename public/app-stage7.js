@@ -60,8 +60,8 @@ function oaStatusCounts(orders){
 async function renderReports(){
   pageTitle('Relatórios','VISÃO OPERACIONAL');
   const now=new Date();
-  const from=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),1));
-  const to=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth()+1,1)-1);
+  const from=new Date(now.getFullYear(),now.getMonth(),1);
+  const to=new Date(new Date(now.getFullYear(),now.getMonth()+1,1).getTime()-1);
   const qs=`from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`;
   const financeAllowed=['ADMIN','FINANCEIRO'].includes(state.user.role);
   const [dashboard,finance]=await Promise.all([
