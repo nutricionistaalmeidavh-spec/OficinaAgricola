@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { nowIso, transaction } from '../db.js';
 import { activeCashForMethod, postPaymentEvent } from './payment-ledger.js';
+import {runIdempotent} from '../platform/idempotency.js';
 import { paymentState } from '../domain.js';
 import { getWorkOrder } from './work-orders.js';
 
@@ -68,9 +69,19 @@ export function reverseReceipt(db,workOrderId,receiptId,{note='',createdBy=null}
 export function listReceipts(db,workOrderId){return db.prepare('SELECT * FROM receipts WHERE work_order_id=? ORDER BY received_at DESC,id DESC').all(workOrderId)}
 
 export function createExpense(db,input){
-  const description=text(input.description); if(!description)throw new Error('Descrição da despesa é obrigatória'); const amount=cents(input.amountCents,'Valor da despesa'); if(input.workOrderId)getWorkOrder(db,input.workOrderId);
-  const t=nowIso(); const r=db.prepare(`INSERT INTO expenses(description,category,amount_cents,due_date,paid_at,reference_center,work_order_id,note,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`).run(description,text(input.category),amount,input.dueDate??null,input.paidAt?new Date(input.paidAt).toISOString():null,text(input.referenceCenter),input.workOrderId??null,text(input.note),t,t);
-  return getExpense(db,Number(r.lastInsertRowid));
+  const {requestId,...command}=input;
+  return runIdempotent(db,'finance:expenses',requestId,command,()=>{
+    const description=text(command.description);
+    if(!description)throw new Error('Descrição da despesa é obrigatória');
+    const amount=cents(command.amountCents,'Valor da despesa');
+    if(command.workOrderId)getWorkOrder(db,command.workOrderId);
+    const t=nowIso();
+    const r=db.prepare(`INSERT INTO expenses(description,category,amount_cents,due_date,paid_at,reference_center,work_order_id,note,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`)
+      .run(description,text(command.category),amount,command.dueDate??null,
+        command.paidAt?new Date(command.paidAt).toISOString():null,text(command.referenceCenter),
+        command.workOrderId??null,text(command.note),t,t);
+    return getExpense(db,Number(r.lastInsertRowid));
+  });
 }
 export function getExpense(db,id){const e=db.prepare('SELECT * FROM expenses WHERE id=?').get(id);if(!e)throw new Error('Despesa não encontrada');return e}
 export function updateExpense(db,id,input){
