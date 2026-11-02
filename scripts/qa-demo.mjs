@@ -16,7 +16,7 @@ await mkdir(videoTemp,{recursive:true});
 
 const logs=[];
 const server=spawn(process.execPath,['src/start.js'],{
-  env:{...process.env,HOST:'127.0.0.1',PORT:'3344',DATABASE_PATH:'.qa/assistencia-tecnica.sqlite',STORAGE_DIR:'.qa/uploads'},
+  env:{...process.env,HOST:'127.0.0.1',PORT:'3344',DATABASE_PATH:'.qa/artisys-oficina.sqlite',STORAGE_DIR:'.qa/uploads'},
   stdio:['ignore','pipe','pipe']
 });
 server.stdout.on('data',d=>logs.push(d.toString()));
