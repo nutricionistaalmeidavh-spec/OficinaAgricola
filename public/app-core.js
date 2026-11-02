@@ -1,6 +1,10 @@
 const $=(s,root=document)=>root.querySelector(s); const $$=(s,root=document)=>[...root.querySelectorAll(s)];
 const state={token:localStorage.getItem('oficina_token')||'',user:null,page:'dashboard',pageReady:false,pageEpoch:0,pageController:null,modalToken:null,modalKey:null};
 const dirtyInputs=new WeakSet();
+function newCommandId(){
+  return globalThis.crypto?.randomUUID?.()||
+    `cmd-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
 // Reconciliação DOM local sem dependências externas. Somente nós diferentes mudam.
 function nodeIdentity(node){
   if(node?.nodeType!==1)return null;
