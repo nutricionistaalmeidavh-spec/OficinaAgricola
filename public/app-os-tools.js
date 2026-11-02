@@ -34,7 +34,7 @@ async function editFullWorkOrder(id){
     const o=formObj(fd); const body={customerId:Number(o.customerId),machineId:Number(o.machineId),problemReported:o.problemReported,diagnosis:o.diagnosis,technicianId:o.technicianId?Number(o.technicianId):null,priority:o.priority,enteredAt:new Date(o.enteredAt).toISOString(),estimatedDelivery:o.estimatedDelivery?new Date(o.estimatedDelivery).toISOString():null,internalNotes:o.internalNotes};
     await api(`/api/work-orders/${id}`,{method:'PATCH',body}); toast('OS atualizada e alteração registrada'); await refreshCurrentPage();
   });
-  $('#editOsCustomer').onchange=e=>{const opts=machineOptions(machines,e.target.value,null);$('#editOsMachine').innerHTML=opts||'<option value="">Nenhuma equipamento deste cliente</option>'};
+  $('#editOsCustomer').onchange=e=>{const opts=machineOptions(machines,e.target.value,null);renderRegion($('#editOsMachine'),opts||'<option value="">Nenhum equipamento deste cliente</option>')};
 }
 
 async function showWorkOrderHistory(id){
@@ -56,6 +56,7 @@ async function downloadWorkOrderPdf(id,number){
 }
 
 async function duplicateWorkOrderUi(id){
+  const requestId=newCommandId();
   const safe=async p=>{try{return await api(p)}catch{return null}};
   const [os,quote,customers,machines]=await Promise.all([api(`/api/work-orders/${id}`),safe(`/api/work-orders/${id}/quote`),api('/api/customers'),api('/api/machines')]);
   showModal(`Duplicar OS #${os.os_number}`,`<form class="form-stack">
@@ -67,12 +68,15 @@ async function duplicateWorkOrderUi(id){
     ${quote?'<label><input type="checkbox" name="copyQuote" checked style="width:auto"> Copiar serviços/itens do orçamento como rascunho</label>':''}
     <button class="btn primary" type="submit">Criar nova OS</button>
   </form>`,async fd=>{
-    const o=formObj(fd); const created=await api('/api/work-orders',{method:'POST',body:{customerId:Number(o.customerId),machineId:Number(o.machineId),problemReported:o.problemReported,diagnosis:o.diagnosis,technicianId:os.technician_id||undefined,priority:os.priority,internalNotes:o.internalNotes}});
-    if(quote&&fd.get('copyQuote')){
-      await api(`/api/work-orders/${created.id}/status`,{method:'POST',body:{status:'DIAGNOSTICO',reason:'Preparação de orçamento reutilizado'}});
-      await api(`/api/work-orders/${created.id}/quote`,{method:'PUT',body:{discountCents:quote.discount_cents,validUntil:null,notes:quote.notes,items:quote.items.map(i=>({kind:i.kind,description:i.description,quantity:i.quantity,unitPriceCents:i.unit_price_cents}))}});
-    }
+    const o=formObj(fd);
+    const created=await api(`/api/work-orders/${id}/duplicate`,{
+      method:'POST',
+      body:{requestId,customerId:Number(o.customerId),machineId:Number(o.machineId),
+        problemReported:o.problemReported,diagnosis:o.diagnosis,
+        technicianId:os.technician_id||null,priority:os.priority,
+        internalNotes:o.internalNotes,copyQuote:Boolean(quote&&fd.get('copyQuote'))}
+    });
     toast(`Nova OS #${created.os_number} criada`); await refreshCurrentPage();
   });
-  $('#dupCustomer').onchange=e=>{const opts=machineOptions(machines,e.target.value,null);$('#dupMachine').innerHTML=opts||'<option value="">Nenhuma equipamento deste cliente</option>'};
+  $('#dupCustomer').onchange=e=>{const opts=machineOptions(machines,e.target.value,null);renderRegion($('#dupMachine'),opts||'<option value="">Nenhum equipamento deste cliente</option>')};
 }
