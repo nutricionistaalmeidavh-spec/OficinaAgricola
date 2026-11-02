@@ -6,7 +6,9 @@ import {join} from 'node:path';
 import {openDatabase,migrate} from '../src/db.js';
 import {migrateAssistencia} from '../src/assistencia-schema.js';
 import {createCustomer,createMachine,createTechnician} from '../src/services/catalog.js';
-import {createWorkOrder, getWorkOrder} from '../src/services/work-orders.js';
+import {createWorkOrder,getWorkOrder,transitionWorkOrder} from '../src/services/work-orders.js';
+import {saveQuote,getQuote} from '../src/services/quotes.js';
+import {duplicateWorkOrderWithQuote} from '../src/services/work-order-duplication.js';
 import {addInventoryMovement,createPart,consumePart,reconcileStock} from '../src/services/inventory.js';
 import {addCashMovement,openCashSession} from '../src/services/sales.js';
 import {createExpense} from '../src/services/finance.js';
@@ -122,4 +124,23 @@ test('P0: falha SQLite no cadastro de anexo não deixa arquivo órfão',()=>{
   assert.throws(()=>saveAttachment(db,os.id,{category:'ENTRADA',mimeType:'image/jpeg',base64:Buffer.from('foto').toString('base64'),originalName:'foto.jpg',storageDir:dir,requestId:'attach-1'}),/forced-failure/);
   assert.equal(readdirSync(dir,{recursive:true}).filter(f=>String(f).endsWith('.jpg')).length,0);
  }finally{db.close();rmSync(dir,{recursive:true,force:true})}
+});
+
+test('P0: duplicação da OS e cópia do orçamento são atômicas e idempotentes',()=>{
+ const {db,os,alien}=context();
+ try{
+  const initial=Number(db.prepare('SELECT COUNT(*) n FROM work_orders').get().n);
+  assert.throws(()=>duplicateWorkOrderWithQuote(db,os.id,{copyQuote:true,requestId:'copy-no-quote'}),/Orçamento não encontrado/);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM work_orders').get().n,initial);
+  transitionWorkOrder(db,os.id,'DIAGNOSTICO');
+  saveQuote(db,os.id,{items:[{kind:'MAO_DE_OBRA',description:'Revisão',quantity:1,unitPriceCents:10000}]});
+  const input={requestId:'dup-os-unique',copyQuote:true};
+  const fresh=duplicateWorkOrderWithQuote(db,os.id,input);
+  assert.equal(duplicateWorkOrderWithQuote(db,os.id,input).id,fresh.id);
+  assert.equal(getQuote(db,fresh.id).total_cents,10000);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM work_orders').get().n,initial+1);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM work_order_parts').get().n,0);
+  assert.throws(()=>duplicateWorkOrderWithQuote(db,os.id,{requestId:'dup-invalid',machineId:alien.id,copyQuote:true}),/pertence/i);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM work_orders').get().n,initial+1);
+ }finally{db.close()}
 });
