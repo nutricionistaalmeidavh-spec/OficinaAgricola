@@ -1,6 +1,6 @@
-# ArtiSys QA — Assistência Técnica
+# ArtiSys QA — ArtiSys Oficina
 
-A edição Assistência Técnica pode consumir o módulo `@artisys/qa` do repositório `utilidades` como ferramenta opcional de desenvolvimento e validação. Ele não é dependência de runtime do produto.
+A edição ArtiSys Oficina pode consumir o módulo `@artisys/qa` do repositório `utilidades` como ferramenta opcional de desenvolvimento e validação. Ele não é dependência de runtime do produto.
 
 ## Fluxos
 
