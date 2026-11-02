@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { DatabaseSync } from 'node:sqlite';
 import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 
@@ -54,7 +55,13 @@ export function createBackup({ databasePath, uploadsPath, backupRoot, now = new 
   rmSync(tempDir, { recursive: true, force: true });
   mkdirSync(join(tempDir, 'uploads'), { recursive: true });
   try {
-    copyFileSync(databasePath, join(tempDir, 'database.sqlite'));
+    // VACUUM INTO cria snapshot transacional consistente mesmo com WAL ativo.
+    // Cópia simples do .sqlite deixaria de fora transações ainda presentes no -wal.
+    const source=new DatabaseSync(databasePath,{readOnly:true});
+    try {
+      const snapshotPath=join(tempDir,'database.sqlite').replaceAll("'","''");
+      source.exec(`VACUUM INTO '${snapshotPath}'`);
+    } finally {source.close();}
     if (uploadsPath && existsSync(uploadsPath)) cpSync(uploadsPath, join(tempDir, 'uploads'), { recursive: true });
     const files = listFiles(tempDir).map(file => manifestEntry(tempDir, file));
     const manifest = { version: 1, createdAt: now.toISOString(), files };
