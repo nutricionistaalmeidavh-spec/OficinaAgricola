@@ -19,7 +19,7 @@ test('entregas 00-08 permanecem isoladas e sem dependência SaaS de runtime', as
   ]);
   const pkg = JSON.parse(pkgText);
 
-  assert.equal(pkg.name, 'artisys-assistencia-tecnica');
+  assert.equal(pkg.name, 'artisys-oficina');
   assert.equal(pkg.dependencies, undefined);
   assert.equal(pkg.devDependencies, undefined);
   assert.match(env, /PORT=3344/);
@@ -44,7 +44,7 @@ test('entregas 00-08 permanecem isoladas e sem dependência SaaS de runtime', as
   assert.match(ui, /data-page="reports"/);
   assert.match(sw, /\/app-assistencia\.js/);
   assert.match(docs, /<strong>Equipamento<\/strong>/);
-  assert.match(docs, /ArtiSys Assistência Técnica/);
+  assert.match(docs, /ArtiSys Oficina/);
   assert.match(readme, /core R\$ 0/);
   assert.match(readme, /nenhuma API ou SaaS pago obrigatório/i);
 });
