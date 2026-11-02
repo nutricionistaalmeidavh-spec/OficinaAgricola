@@ -1,23 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
-import { resolveDatabasePath } from '../src/platform/data-location.js';
+import { resolveDatabasePath, resolveStoragePath } from '../src/platform/data-location.js';
 
-test('seleciona banco antigo automaticamente apenas quando ele é a única fonte',()=>{
+test('cria instalação nova sem detectar bases legadas',()=>{
   const cwd='/app';
-  const result=resolveDatabasePath({cwd,env:{},exists:path=>path===join(cwd,'data','oficina.sqlite')});
-  assert.equal(result,join(cwd,'data','oficina.sqlite'));
+  const found=new Set([join(cwd,'data','oficina.sqlite'),join(cwd,'data','assistencia-tecnica.sqlite')]);
+  assert.equal(resolveDatabasePath({cwd,env:{},exists:p=>found.has(p)}),join(cwd,'data','artisys-oficina.sqlite'));
 });
-test('não escolhe silenciosamente entre dois bancos com clientes diferentes',()=>{
-  const cwd='/app';
-  const files=new Set([join(cwd,'data','oficina.sqlite'),join(cwd,'apps','assistencia-tecnica','data','assistencia-tecnica.sqlite')]);
-  assert.throws(()=>resolveDatabasePath({cwd,env:{},exists:files.has.bind(files)}),/DATABASE_PATH/);
+test('bases antigas não bloqueiam a inicialização do novo produto',()=>{
+  assert.doesNotThrow(()=>resolveDatabasePath({cwd:'/app',env:{},exists:()=>true}));
+  assert.equal(resolveDatabasePath({cwd:'/app',env:{},exists:()=>true}),'/app/data/artisys-oficina.sqlite');
 });
-test('DATABASE_PATH explícito preserva a preferência do operador',()=>{
-  const result=resolveDatabasePath({cwd:'/app',env:{DATABASE_PATH:'custom/arquivo.sqlite'},exists:()=>false});
-  assert.equal(result,'/app/custom/arquivo.sqlite');
+test('DATABASE_PATH explícito continua disponível para QA e administradores',()=>{
+  assert.equal(resolveDatabasePath({cwd:'/app',env:{DATABASE_PATH:'custom/arquivo.sqlite'}}),'/app/custom/arquivo.sqlite');
 });
-test('instalação nova seleciona um único banco canônico',()=>{
-  const result=resolveDatabasePath({cwd:'/app',env:{},exists:()=>false});
-  assert.equal(result,'/app/data/artisys-oficina.sqlite');
+test('anexos novos usam storage/uploads exclusivo sem detectar legados',()=>{
+  const cwd='/app',databasePath=join(cwd,'data','artisys-oficina.sqlite');
+  assert.equal(resolveStoragePath({cwd,env:{},databasePath,exists:()=>true}),join(cwd,'storage','uploads'));
+});
+test('instalação nova não requer banco já existente',()=>{
+  assert.equal(resolveDatabasePath({cwd:'/app',env:{}}),'/app/data/artisys-oficina.sqlite');
 });
