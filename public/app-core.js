@@ -1,10 +1,10 @@
 const $=(s,root=document)=>root.querySelector(s); const $$=(s,root=document)=>[...root.querySelectorAll(s)];
-const state={token:localStorage.getItem('oficina_token')||'',user:null,page:'dashboard',pageReady:false,pageEpoch:0,pageController:null,modalToken:null};
+const state={token:localStorage.getItem('oficina_token')||'',user:null,page:'dashboard',pageReady:false,pageEpoch:0,pageController:null,modalToken:null,modalKey:null};
 const dirtyInputs=new WeakSet();
 // Reconciliação DOM local sem dependências externas. Somente nós diferentes mudam.
 function nodeIdentity(node){
   if(node?.nodeType!==1)return null;
-  for(const attr of ['id','data-os','data-sale','data-oa-os','data-edit-customer','data-edit-service','data-entry','data-history']){
+  for(const attr of ['id','data-os','data-sale','data-oa-os','data-edit-customer','data-edit-service','data-entry','data-history','data-check-position','data-edit-machine']){
     if(node.hasAttribute(attr))return attr+':'+node.getAttribute(attr);
   }
   return null;
@@ -42,6 +42,11 @@ function reconcileChildren(host,incoming){
     if(key&&nodeIdentity(present)!==key){
       const match=[...host.childNodes].slice(i+1).find(x=>nodeIdentity(x)===key);
       if(match){host.insertBefore(match,present);present=match;}
+      else if(present){
+        // Uma entidade nova não pode sobrescrever DOM de outra entidade.
+        host.insertBefore(desired.cloneNode(true),present);
+        continue;
+      }
     }
     if(!present){host.appendChild(desired.cloneNode(true));continue;}
     reconcileNode(present,desired);
@@ -73,18 +78,18 @@ async function api(path,{method='GET',body,raw=false}={}){
   return raw?text:(text?JSON.parse(text):null);
 }
 function toast(msg,error=false){const el=$('#toast');el.textContent=msg;el.className=`toast${error?' error':''}`;setTimeout(()=>el.classList.add('hidden'),2800)}
-function showModal(title,html,onSubmit){
+function showModal(title,html,onSubmit,{entityKey=null}={}){
   const dialog=$('#modal'),body=$('#modalBody'),heading=$('#modalTitle');
-  const same=heading.textContent===title&&!dialog.classList.contains('hidden');
+  const key=entityKey||title;
+  const same=state.modalKey===key&&!dialog.classList.contains('hidden');
   heading.textContent=title;
-  if(same&&body.childNodes?.length){
-    const fresh=document.createElement('template');fresh.innerHTML=html;
-    reconcileChildren(body,fresh.content);
-  }else body.innerHTML=html;
+  if(same&&body.childNodes?.length)renderRegion(body,html);
+  else body.innerHTML=html;
   dialog.classList.remove('hidden');
   trackDirtyInputs(body);
   const token=Symbol('modal');
   state.modalToken=token;
+  state.modalKey=key;
   const form=$('#modalBody form');
   if(form&&onSubmit)form.onsubmit=async e=>{
     e.preventDefault();
@@ -97,19 +102,20 @@ function showModal(title,html,onSubmit){
     finally{if(btn)btn.disabled=false}
   };
 }
-function closeModal(){state.modalToken=null;$('#modal').classList.add('hidden');$('#modalBody').innerHTML=''}
+function closeModal(){state.modalToken=null;state.modalKey=null;$('#modal').classList.add('hidden');$('#modalBody').innerHTML=''}
 function formObj(fd){return Object.fromEntries([...fd.entries()].map(([k,v])=>[k,typeof v==='string'?v.trim():v]))}
 function badge(status){const cls=/PRONTA|ENTREGUE|APROVADA|PAGO/.test(status)?'green':/AGUARDANDO|ORCAMENTO|PARCIAL/.test(status)?'orange':/CANCELADA|REPROVADA/.test(status)?'red':'blue';return `<span class="pill ${cls}">${esc(status.replaceAll('_',' '))}</span>`}
 function pageTitle(title,eyebrow='OFICINA'){ $('#pageTitle').textContent=title;$('#pageEyebrow').textContent=eyebrow }
+function renderRegion(host,html){
+  const template=document.createElement('template');
+  template.innerHTML=html;
+  reconcileChildren(host,template.content);
+  trackDirtyInputs(host);
+}
 function setContent(html){
   const host=$('#content');
-  if(!state.pageReady||!host.childNodes?.length){
-    host.innerHTML=html;
-  }else{
-    const fresh=document.createElement('template');
-    fresh.innerHTML=html;
-    reconcileChildren(host,fresh.content);
-  }
+  if(!state.pageReady||!host.childNodes?.length)host.innerHTML=html;
+  else renderRegion(host,html);
   trackDirtyInputs(host);
 }
 
@@ -134,22 +140,30 @@ function showApp(){$('#loginView').classList.add('hidden');$('#appView').classLi
 function logout(){state.pageController?.abort();state.pageEpoch++;state.pageReady=false;state.token='';state.user=null;localStorage.removeItem('oficina_token');showLogin()}
 
 function pageRenderer(page){
+  const dashboard=typeof renderDashboard==='function'?renderDashboard:async()=>{};
   return ({
-    dashboard:renderDashboard,customers:renderCustomers,machines:renderMachines,
+    dashboard,customers:renderCustomers,machines:renderMachines,
     'work-orders':renderWorkOrders,inventory:renderInventory,schedule:renderSchedule,
     finance:renderFinance,reports:renderReports,technicians:renderTechnicians,
     settings:renderSettings,services:renderServices,sales:renderSales
-  })[page]||renderDashboard;
+  })[page]||dashboard;
 }
-// Chamado após comandos: reconsulta dados, mas preserva os nós DOM existentes.
+let refreshPromise=null,refreshQueued=false;
+// Consolida concorrência numa projeção por página, sem sobrescrever requests recentes.
 async function refreshCurrentPage(){
   if(!state.pageReady)return;
+  if(refreshPromise){refreshQueued=true;return refreshPromise}
   const epoch=state.pageEpoch,active=state.page;
-  try{
-    await pageRenderer(active)();
-  }catch(error){
-    if(epoch===state.pageEpoch&&error?.name!=='AbortError')toast(error.message,true);
-  }
+  refreshPromise=(async()=>{
+    do{
+      refreshQueued=false;
+      if(epoch!==state.pageEpoch||active!==state.page)return;
+      await pageRenderer(active)();
+    }while(refreshQueued&&epoch===state.pageEpoch);
+  })();
+  try{await refreshPromise}
+  catch(error){if(epoch===state.pageEpoch&&error?.name!=='AbortError')toast(error.message,true)}
+  finally{refreshPromise=null;refreshQueued=false}
 }
 async function navigate(page,{force=false}={}){
   if(state.page===page&&state.pageReady&&!force)return;
@@ -170,10 +184,4 @@ async function navigate(page,{force=false}={}){
   }
 }
 
-async function renderDashboard(){pageTitle('Visão Geral','OPERAÇÃO EM TEMPO REAL');const d=await api('/api/dashboard');const f=d.finance;setContent(`
- <div class="grid stats">
-  ${stat('OS abertas',d.counts.ABERTAS)}${stat('Em diagnóstico',d.counts.DIAGNOSTICO)}${stat('Aguard. aprovação',d.counts.AGUARDANDO_APROVACAO)}${stat('Em serviço',d.counts.EM_SERVICO)}${stat('Prontas',d.counts.PRONTA)}${stat('Faturamento',money(f.invoicedCents),'accent')}
- </div>
- <div class="grid two-col"><div class="card"><div class="card-head"><h2>Próximos compromissos</h2><button class="btn sm" data-go="schedule">Ver agenda</button></div>${d.upcoming.length?`<div class="list">${d.upcoming.map(e=>`<div class="list-item"><div><strong>${esc(e.title)}</strong><br><small>${esc(e.customer_name||'')} ${e.os_number?`• OS #${e.os_number}`:''}</small></div><small>${dt(e.starts_at)}</small></div>`).join('')}</div>`:'<div class="empty">Nenhum compromisso próximo.</div>'}</div>
- <div class="card"><div class="card-head"><h2>Estoque crítico</h2><button class="btn sm" data-go="inventory">Ver estoque</button></div>${d.lowStock.length?`<div class="list">${d.lowStock.map(p=>`<div class="list-item"><div><strong>${esc(p.description)}</strong><br><small>${esc(p.sku)}</small></div><span class="pill orange">${p.quantity} / mín. ${p.min_stock}</span></div>`).join('')}</div>`:'<div class="empty">Estoque dentro dos mínimos.</div>'}</div></div>`);$$('[data-go]').forEach(b=>b.onclick=()=>navigate(b.dataset.go))}
 function stat(label,value,cls=''){return `<div class="stat"><small>${label}</small><strong class="${cls}">${value}</strong></div>`}
