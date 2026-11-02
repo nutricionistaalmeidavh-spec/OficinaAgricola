@@ -89,6 +89,22 @@ export function migrateAssistencia(db) {
   if(!columns.has('request_id'))db.exec('ALTER TABLE sales ADD COLUMN request_id TEXT');
   if(!columns.has('request_payload_hash'))db.exec('ALTER TABLE sales ADD COLUMN request_payload_hash TEXT');
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_sales_request_id ON sales(request_id) WHERE request_id IS NOT NULL;');
+  const cashCols=new Set(db.prepare("PRAGMA table_info('cash_movements')").all().map(c=>c.name));
+  if(!cashCols.has('receipt_id'))db.exec('ALTER TABLE cash_movements ADD COLUMN receipt_id INTEGER REFERENCES receipts(id)');
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_cash_receipt_action ON cash_movements(receipt_id,type) WHERE receipt_id IS NOT NULL");
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_cash_sale_action ON cash_movements(sale_id,type) WHERE sale_id IS NOT NULL");
+
+  // Receitas de balcão legadas entram apenas no ledger lógico, sem duplicar
+  // movimentações de caixa já persistidas.
+  db.exec(`
+    INSERT OR IGNORE INTO payment_events(source_type,source_id,event_type,amount_cents,method,cash_session_id,created_at)
+    SELECT 'SALE',id,'PAID',total_cents,payment_method,cash_session_id,created_at
+    FROM sales WHERE total_cents>0;
+    INSERT OR IGNORE INTO payment_events(source_type,source_id,event_type,amount_cents,method,cash_session_id,created_at)
+    SELECT 'SALE',id,'REFUNDED',-total_cents,payment_method,NULL,COALESCE(canceled_at,created_at)
+    FROM sales WHERE status='CANCELADA' AND total_cents>0;
+  `);
+
   // Um único livro de estoque: inventory_movements. Histórico sale_stock_movements
   // é migrado uma única vez, SEM reaplicar o delta ao saldo materializado.
   const inventoryCols=new Set(db.prepare("PRAGMA table_info('inventory_movements')").all().map(c=>c.name));
