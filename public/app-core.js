@@ -37,7 +37,7 @@ async function navigate(page,{force=false}={}){
   const epoch=++state.pageEpoch;
   state.pageReady=false;
   state.page=page;
-  $('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===page));
+  $$('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===page));
   setContent('<div class="card"><div class="empty">Carregando…</div></div>');
   try{
     const renderers={
