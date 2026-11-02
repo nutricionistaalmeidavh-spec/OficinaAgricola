@@ -113,8 +113,23 @@ function setContent(html){
   trackDirtyInputs(host);
 }
 
-async function boot(){ $('#today').textContent=new Date().toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'short'}); if(!state.token)return showLogin();try{state.user=await api('/api/auth/me');showApp();await navigate('dashboard')}catch{showLogin()} }
-function showLogin(){$('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden')}
+async function boot(){
+  $('#today').textContent=new Date().toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'short'});
+  try{
+    const setup=await api('/api/setup/status');
+    if(setup.required){state.token='';localStorage.removeItem('oficina_token');return showSetup()}
+  }catch{ /* The login view will display server errors if offline. */ }
+  if(!state.token)return showLogin();
+  try{state.user=await api('/api/auth/me');showApp();await navigate('dashboard')}catch{showLogin()}
+}
+function showSetup(){
+  $('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');
+  $('#loginForm').classList.add('hidden');$('#setupForm').classList.remove('hidden');
+}
+function showLogin(){
+  $('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');
+  $('#setupForm').classList.add('hidden');$('#loginForm').classList.remove('hidden');
+}
 function showApp(){$('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');$('#userName').textContent=state.user.name;$('#userRole').textContent=state.user.role;$('#avatar').textContent=state.user.name[0]?.toUpperCase()||'A'}
 function logout(){state.pageController?.abort();state.pageEpoch++;state.pageReady=false;state.token='';state.user=null;localStorage.removeItem('oficina_token');showLogin()}
 
