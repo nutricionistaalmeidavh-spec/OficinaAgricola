@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { nowIso, transaction } from '../db.js';
 import { postStockMovement } from './inventory.js';
+import { postCashMovement, postPaymentEvent } from './payment-ledger.js';
 
 const text = (value) => value == null ? '' : String(value).trim();
 const positiveNumber = (value, label = 'Quantidade') => {
@@ -81,9 +82,10 @@ export function addCashMovement(db, { type, amountCents, note = '', userId = nul
   const value = cents(amountCents);
   if (value <= 0) throw new Error('Valor deve ser maior que zero');
   const signed = type === 'SANGRIA' ? -value : value;
-  const result = db.prepare(`INSERT INTO cash_movements(cash_session_id,type,amount_cents,payment_method,note,created_by,created_at)
-    VALUES(?,?,?,'DINHEIRO',?,?,?)`).run(session.id, type, signed, text(note), userId, nowIso());
-  return db.prepare('SELECT * FROM cash_movements WHERE id=?').get(Number(result.lastInsertRowid));
+  return db.prepare('SELECT * FROM cash_movements WHERE id=?').get(
+    postCashMovement(db,{cashSessionId:session.id,type,amountCents:signed,
+      paymentMethod:'DINHEIRO',note,createdBy:userId})
+  );
 }
 
 function normalizeSaleItem(db, input) {
@@ -124,6 +126,7 @@ function saleFingerprint(input,items) {
 }
 
 export function createSale(db, input, { userId = null } = {}) {
+  if(input.workOrderId!=null)throw new Error('Recebimentos de OS devem ser registrados no financeiro da ordem de serviço; venda balcão separada');
   const rawItems = Array.isArray(input.items) ? input.items : [];
   if (!rawItems.length) throw new Error('A venda precisa ter ao menos um item');
   const requestId=text(input.requestId);
@@ -173,10 +176,11 @@ export function createSale(db, input, { userId = null } = {}) {
       }
     }
 
-    if (total > 0) {
-      db.prepare(`INSERT INTO cash_movements(cash_session_id,sale_id,type,amount_cents,payment_method,note,created_by,created_at)
-        VALUES(?,?,'VENDA',?,?,?,?,?)`).run(cash.id, saleId, total, paymentMethod, `Venda #${saleNumber}`, userId, createdAt);
-    }
+    if(total>0)postPaymentEvent(db,{
+      sourceType:'SALE',sourceId:saleId,eventType:'PAID',
+      amountCents:total,method:paymentMethod,cashSessionId:cash.id,
+      createdBy:userId,note:`Venda #${saleNumber}`,createdAt
+    });
     return getSale(db, saleId);
   });
 }
@@ -219,8 +223,12 @@ export function cancelSale(db, id, { reason = '', userId = null } = {}) {
       });
     }
     db.prepare(`UPDATE sales SET status='CANCELADA',canceled_at=?,cancel_reason=? WHERE id=?`).run(t, text(reason), id);
-    if(currentCash&&sale.total_cents>0)db.prepare(`INSERT INTO cash_movements(cash_session_id,sale_id,type,amount_cents,payment_method,note,created_by,created_at)
-        VALUES(?,?,'ESTORNO',?,?,?,?,?)`).run(currentCash.id,id,-sale.total_cents,sale.payment_method,`Estorno venda #${sale.sale_number}`,userId,t);
+    if(currentCash&&sale.total_cents>0)postPaymentEvent(db,{
+      sourceType:'SALE',sourceId:id,eventType:'REFUNDED',
+      amountCents:sale.total_cents,method:sale.payment_method,
+      cashSessionId:currentCash.id,createdBy:userId,
+      note:`Estorno venda #${sale.sale_number}`,createdAt:t
+    });
     return getSale(db, id);
   });
 }
