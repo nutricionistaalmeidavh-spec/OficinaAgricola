@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 // Sem exclusão, sobrescrita ou migração silenciosa dos dados legados.
 export function resolveDatabasePath({
@@ -22,4 +22,14 @@ export function resolveDatabasePath({
     throw new Error('Foram encontrados bancos legados diferentes. Informe DATABASE_PATH explicitamente para selecionar o banco correto; nenhum deles foi apagado ou mesclado. Fontes: '+found.join(', '));
   }
   return found[0]||defaultPath;
+}
+
+export function resolveStoragePath({env=process.env,databasePath,exists=existsSync}={}){
+  const explicit=String(env.STORAGE_DIR||'').trim();
+  if(explicit)return resolve(explicit);
+  const dataRoot=dirname(dirname(resolve(databasePath)));
+  const legacy=join(dataRoot,'storage','assistencia-tecnica','uploads');
+  const traditional=join(dataRoot,'storage','uploads');
+  if(exists(legacy)&&!exists(traditional))return legacy;
+  return traditional;
 }
