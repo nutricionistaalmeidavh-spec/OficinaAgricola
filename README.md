@@ -45,6 +45,19 @@ O histórico do código da Oficina Agrícola permanece recuperável pelo Git, ma
 - Backup com SQLite `VACUUM INTO` gera snapshot consistente, incluindo mudanças ainda no WAL.
 - Integração fiscal real permanece **desativada**. Nada é transmitido à SEFAZ pela oficina.
 
+## Canonicidade (C1)
+- **Estoque:** `inventory_movements` é o único livro de origem para OS, vendas, ajustes e estornos; `parts.quantity` é a projeção reconciliável.
+- **Receitas:** `payment_events` é a origem para recebimentos/estornos de OS e vendas balcão; `cash_movements` registra a sessão do caixa quando aplicável.
+- **Interface:** gravações não recriam páginas inteiras; `refreshCurrentPage()` reconcilia os nós alterados e preserva formulários, foco e scroll. Navegação explícita continua criando a nova tela.
+- **Fiscal:** segue desativado, sem SEFAZ/ACBr obrigatórios para o funcionamento local.
+- Detalhes e limites: [ADR-0002](docs/architecture/0002-canonicalidade-e-ui-estavel.md).
+
+## CI exclusivo no GitHub
+As validações automatizadas são executadas por **GitHub Actions**:
+`CI` (lint, testes, build, E2E) e `ArtiSys QA` (Playwright desktop/mobile).
+Para executar sem serviços externos: `npm run ci`. Não há `.circleci/config.yml`.
+Se um projeto CircleCI externo ainda estiver conectado à conta, desvincule-o nas configurações externas para impedir checks obsoletos no GitHub.
+
 ## Qualidade
 ```sh
 npm run lint
