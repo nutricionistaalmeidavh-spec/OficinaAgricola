@@ -114,6 +114,8 @@ async function renderSales() {
 }
 
 async function saleModal() {
+  // Mesma chave em todos os retries deste formulário (inclusive após timeout HTTP).
+  const requestId = globalThis.crypto?.randomUUID?.() || `sale-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const [parts, services, customers] = await Promise.all([api('/api/parts'), api('/api/services'), api('/api/customers')]);
   const options = [
     ...parts.filter(p => p.active).map(p => ({ value: `P:${p.id}`, label: `Peça · ${p.sku} — ${p.description} · ${money(p.sale_price_cents)} · estoque ${p.quantity}` })),
@@ -136,6 +138,7 @@ async function saleModal() {
     if (!items.length) throw new Error('Inclua ao menos um item');
     const customerId = fd.get('customerId');
     await api('/api/sales', { method: 'POST', body: {
+      requestId,
       customerId: customerId ? Number(customerId) : null,
       discountCents: Math.round(Number(fd.get('discount') || 0) * 100),
       paymentMethod: fd.get('paymentMethod'),
