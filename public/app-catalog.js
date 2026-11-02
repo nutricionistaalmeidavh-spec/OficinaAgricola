@@ -10,9 +10,9 @@ async function machineHistoryModal(id){
  ]);
  const history=h.length?`<div class="list">${h.map(o=>`<div class="list-item"><div><strong>OS #${o.os_number} ${badge(o.status)}</strong><p>${esc(o.problem_reported)}</p><small>${esc(o.diagnosis||'Sem diagnóstico')}</small></div><div>${dt(o.entered_at)}<br><strong>${money(o.quote_total_cents)}</strong></div></div>`).join('')}</div>`:'<div class="empty">Sem ordens de serviço.</div>';
  const maintenance=records.length?`<div class="list">${records.map(r=>`<div class="list-item"><div><strong>${esc(r.kind==='REVISAO'?'Revisão':'Garantia')}</strong><small> ${esc(r.performed_at||r.warranty_until||'')} ${r.os_number?' · OS #'+r.os_number:''}</small><p>${esc(r.notes||'')}</p></div><small>${r.next_due_km!=null?'Próx.: '+r.next_due_km+' km':''} ${esc(r.next_due_date||'')}</small></div>`).join('')}</div>`:'<div class="empty">Nenhuma revisão ou garantia registrada.</div>';
- showModal(`Histórico — ${m.brand} ${m.model}`,`<div class="action-row"><button class="btn sm" id="newReview">+ Revisão</button><button class="btn sm" id="newWarranty">+ Garantia</button></div><h3>Histórico de OS</h3>${history}<h3>Revisões e garantias</h3>${maintenance}`);
- $('#newReview').onclick=()=>maintenanceModal(id,'REVISAO');
- $('#newWarranty').onclick=()=>maintenanceModal(id,'GARANTIA');
+ const canRecord=['ADMIN','ATENDIMENTO'].includes(state.user.role);
+ showModal(`Histórico — ${m.brand} ${m.model}`,`${canRecord?'<div class="action-row"><button class="btn sm" id="newReview">+ Revisão</button><button class="btn sm" id="newWarranty">+ Garantia</button></div>':''}<h3>Histórico de OS</h3>${history}<h3>Revisões e garantias</h3>${maintenance}`);
+ if(canRecord){$('#newReview').onclick=()=>maintenanceModal(id,'REVISAO');$('#newWarranty').onclick=()=>maintenanceModal(id,'GARANTIA')}
 }
 function maintenanceModal(machineId,kind){
  const review=kind==='REVISAO';
