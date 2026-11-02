@@ -54,7 +54,9 @@ export function migrate(db) {
       customer_id INTEGER NOT NULL REFERENCES customers(id),
       type TEXT NOT NULL, brand TEXT NOT NULL DEFAULT '', model TEXT NOT NULL DEFAULT '',
       year INTEGER, serial_number TEXT NOT NULL DEFAULT '', internal_id TEXT NOT NULL DEFAULT '',
-      hour_meter REAL NOT NULL DEFAULT 0 CHECK(hour_meter >= 0), notes TEXT NOT NULL DEFAULT '',
+      hour_meter REAL NOT NULL DEFAULT 0 CHECK(hour_meter >= 0),
+      license_plate TEXT, vin TEXT, odometer_km REAL CHECK(odometer_km >= 0),
+      notes TEXT NOT NULL DEFAULT '',
       active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
       created_at TEXT NOT NULL, updated_at TEXT NOT NULL
     );
@@ -79,6 +81,20 @@ export function migrate(db) {
       quote_total_cents INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL, updated_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS vehicle_maintenance_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      machine_id INTEGER NOT NULL REFERENCES machines(id),
+      work_order_id INTEGER REFERENCES work_orders(id),
+      kind TEXT NOT NULL CHECK(kind IN ('REVISAO','GARANTIA')),
+      performed_at TEXT,
+      next_due_date TEXT,
+      next_due_km REAL CHECK(next_due_km >= 0),
+      warranty_until TEXT,
+      notes TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_vehicle_maintenance_machine ON vehicle_maintenance_records(machine_id,created_at);
+
     CREATE TABLE IF NOT EXISTS work_order_status_history (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       work_order_id INTEGER NOT NULL REFERENCES work_orders(id),
@@ -209,6 +225,12 @@ export function migrate(db) {
     CREATE INDEX IF NOT EXISTS idx_receipts_os ON receipts(work_order_id);
   `);
   // Migrate older local SQLite files additively; never truncate or rewrite balances.
+  const machineCols=new Set(db.prepare("PRAGMA table_info('machines')").all().map(c=>c.name));
+  if(!machineCols.has('license_plate'))db.exec('ALTER TABLE machines ADD COLUMN license_plate TEXT');
+  if(!machineCols.has('vin'))db.exec('ALTER TABLE machines ADD COLUMN vin TEXT');
+  if(!machineCols.has('odometer_km'))db.exec('ALTER TABLE machines ADD COLUMN odometer_km REAL CHECK(odometer_km >= 0)');
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_machines_plate ON machines(license_plate) WHERE license_plate IS NOT NULL AND license_plate<>''");
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_machines_vin ON machines(vin) WHERE vin IS NOT NULL AND vin<>''");
   const inventoryCols=new Set(db.prepare("PRAGMA table_info('inventory_movements')").all().map(c=>c.name));
   if(!inventoryCols.has('source_type'))db.exec('ALTER TABLE inventory_movements ADD COLUMN source_type TEXT');
   if(!inventoryCols.has('source_item_id'))db.exec('ALTER TABLE inventory_movements ADD COLUMN source_item_id INTEGER');
