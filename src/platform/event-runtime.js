@@ -27,6 +27,11 @@ export function createEventRuntime({ auditPath = null, integrations = [], logger
   return {
     bus,
     audit,
+    // Usado pelo outbox: só confirma entrega quando todos os handlers concluíram.
+    async deliver(event){
+      await bus.publish(event);
+      return event;
+    },
     async emit(type, payload = {}, meta = {}) {
       const event = createDomainEvent(type, payload, meta);
       const result = await bus.publishSettled(event);
