@@ -120,6 +120,96 @@ try{
   await page.screenshot({path:path.join(outputDir,'05-historico-automotivo.png'),fullPage:true});
 
 
+  // P0: navegação, filtro de encerradas, fechamento contado e perfis reais.
+  await page.locator('#modalClose').click();
+  const adminToken=await page.evaluate(()=>localStorage.getItem('oficina_token'));
+  const qaRequest=async(path,method='GET',body=null,token=adminToken)=>{
+    const response=await fetch('http://127.0.0.1:3344'+path,{
+      method,headers:{Authorization:'Bearer '+token,...(body?{'Content-Type':'application/json'}:{})},
+      body:body?JSON.stringify(body):undefined
+    });
+    const data=await response.json();
+    if(!response.ok)throw new Error('QA API '+path+' '+response.status+' '+JSON.stringify(data));
+    return data;
+  };
+  const qaCustomer=(await qaRequest('/api/customers'))[0];
+  const qaMachine=(await qaRequest('/api/machines')).find(item=>item.customer_id===qaCustomer.id);
+  if(!qaMachine)throw new Error('Sem equipamento QA associado ao cliente');
+  const closedOrder=await qaRequest('/api/work-orders','POST',{customerId:qaCustomer.id,machineId:qaMachine.id,problemReported:'P0 Historico QA encerrado'});
+  await qaRequest('/api/work-orders/'+closedOrder.id+'/status','POST',{status:'CANCELADA'});
+  await page.locator('[data-page="work-orders"]').click();
+  await page.locator('#osArchiveRows').filter({hasText:'P0 Historico QA encerrado'}).waitFor({state:'visible'});
+  await page.locator('#osArchiveStatus').selectOption('ENTREGUE');
+  await page.locator('#osArchiveRows').filter({hasText:'Nenhuma OS encerrada encontrada.'}).waitFor({state:'visible'});
+  await page.locator('#osArchiveStatus').selectOption('CANCELADA');
+  await page.locator('#osArchiveSearch').fill('P0 Historico QA encerrado');
+  await page.locator('#osArchiveFilter').click();
+  await page.locator('#osArchiveRows').filter({hasText:'P0 Historico QA encerrado'}).waitFor({state:'visible'});
+  await page.screenshot({path:path.join(outputDir,'07-p0-historico-filtrado.png'),fullPage:true});
+  await page.locator('#osArchiveRows .os-card').first().click();
+  await page.locator('#modalBody').filter({hasText:'Ações da OS'}).waitFor({state:'visible'});
+  await page.locator('#modalClose').click();
+
+  await page.locator('[data-page="sales"]').click();
+  await page.locator('#openCash').waitFor({state:'visible'});
+  await page.locator('#openCash').click();
+  await page.locator('#modalBody input[name="opening"]').fill('50');
+  await page.locator('#modalBody button[type="submit"]').click();
+  await page.locator('#closeCash').waitFor({state:'visible'});
+  await page.locator('#closeCash').click();
+  const counted=page.locator('#modalBody input[name="closing"]');
+  await counted.waitFor({state:'visible'});
+  if(await counted.inputValue()!=='')throw new Error('P0: caixa abriu com contagem preenchida automaticamente');
+  await page.screenshot({path:path.join(outputDir,'08-p0-contagem-caixa.png'),fullPage:true});
+  await counted.fill('40');
+  await page.locator('#modalBody button[type="submit"]').click();
+  await page.locator('#openCash').waitFor({state:'visible'});
+  const lastCash=(await qaRequest('/api/cash/sessions'))[0];
+  if(lastCash.status!=='FECHADO'||lastCash.difference_cents!==-1000)throw new Error('P0: divergência de caixa incorreta: '+JSON.stringify(lastCash));
+  await page.screenshot({path:path.join(outputDir,'09-p0-caixa-fechado.png'),fullPage:true});
+
+  for(const role of ['FINANCEIRO','TECNICO','ATENDIMENTO']){
+    const username='p0qa-'+role.toLowerCase();
+    const password='P0QA!2026abc';
+    await qaRequest('/api/users','POST',{username,password,role,name:'QA '+role});
+    const roleContext=await browser.newContext({viewport});
+    const rolePage=await roleContext.newPage();
+    try{
+      await rolePage.goto('http://127.0.0.1:3344',{waitUntil:'domcontentloaded'});
+      await rolePage.locator('#loginForm input[name="username"]').fill(username);
+      await rolePage.locator('#loginForm input[name="password"]').fill(password);
+      await rolePage.locator('#loginForm button[type="submit"]').click();
+      await rolePage.locator('#appView').waitFor({state:'visible'});
+      await rolePage.locator('[data-page="customers"]').click();
+      await rolePage.locator('#content').filter({hasText:'Clientes cadastrados'}).waitFor({state:'visible'});
+      if((await rolePage.locator('#newCustomer').count())!==(role==='ATENDIMENTO'?1:0))throw new Error('P0: permissão de clientes divergente para '+role);
+      await rolePage.locator('[data-page="inventory"]').click();
+      await rolePage.locator('#content').filter({hasText:'Movimentações auditáveis'}).waitFor({state:'visible'});
+      if((await rolePage.locator('#newPart').count())!==(role==='ATENDIMENTO'?1:0))throw new Error('P0: permissão de estoque divergente para '+role);
+      await rolePage.locator('[data-page="work-orders"]').click();
+      await rolePage.locator('#osArchiveStatus').waitFor({state:'visible'});
+      if((await rolePage.locator('#newOS').count())!==(role==='ATENDIMENTO'?1:0))throw new Error('P0: abertura de OS divergente para '+role);
+      await rolePage.locator('.os-card').first().click();
+      await rolePage.locator('#modalBody').filter({hasText:'Ações da OS'}).waitFor({state:'visible'});
+      if((await rolePage.locator('#editFullOS').count())!==(role==='FINANCEIRO'?0:1))throw new Error('P0: edição de OS divergente para '+role);
+      if(role==='FINANCEIRO'){
+        if(await rolePage.locator('#quoteBtn, #submitQuote, #partBtn, #checkBtn, #photoBtn').count())throw new Error('P0: financeiro recebeu ação operacional sem autorização');
+        const readonly=await rolePage.locator('#diagnosisForm textarea').getAttribute('readonly');
+        if(readonly===null)throw new Error('P0: diagnóstico editável para financeiro');
+      }
+      await rolePage.locator('#modalClose').click();
+      const roleToken=await rolePage.evaluate(()=>localStorage.getItem('oficina_token'));
+      if(role!=='ATENDIMENTO'){
+        const forbidden=await fetch('http://127.0.0.1:3344/api/customers',{
+          method:'POST',headers:{Authorization:'Bearer '+roleToken,'Content-Type':'application/json'},
+          body:JSON.stringify({name:'Proibido QA'})
+        });
+        if(forbidden.ok)throw new Error('P0: API permitiu criar cliente ao perfil '+role);
+      }
+      await rolePage.screenshot({path:path.join(outputDir,'10-p0-perfil-'+role.toLowerCase()+'.png'),fullPage:true});
+    }finally{await roleContext.close()}
+  }
+
   // Fresh installation browser flow. This server uses its own disposable SQLite file.
   const setupPort=viewportName==='desktop'?3355:3356;
   const setupFile=`.qa/onboarding-${viewportName}.sqlite`;
@@ -157,7 +247,7 @@ try{
     }finally{await first.close()}
   }finally{setupProcess.kill('SIGTERM')}
 
-  await writeFile(path.join(outputDir,'qa-summary.json'),`${JSON.stringify({status:'passed',viewport:viewportName,checks:['login','dashboard','demo-data','work-orders','os-detail','edit-action','pdf-action','history-action','client-save-without-rerender','settings-draft-focus-preserved','vehicle-identity','review-and-warranty','first-run-admin-browser']},null,2)}\n`);
+  await writeFile(path.join(outputDir,'qa-summary.json'),`${JSON.stringify({status:'passed',viewport:viewportName,checks:['login','dashboard','demo-data','work-orders','os-detail','edit-action','pdf-action','history-action','client-save-without-rerender','settings-draft-focus-preserved','vehicle-identity','review-and-warranty','first-run-admin-browser','p0-archive-search','p0-cash-counted','p0-cash-difference','p0-role-ui-matrix','p0-role-api-authorization']},null,2)}\n`);
 } catch(error){
   if(page)await page.screenshot({path:path.join(outputDir,'failure.png'),fullPage:true}).catch(()=>{});
   await writeFile(path.join(outputDir,'qa-summary.json'),`${JSON.stringify({status:'failed',viewport:viewportName,error:error.message},null,2)}\n`).catch(()=>{});
