@@ -4,7 +4,11 @@ import { assertTransition } from '../domain.js';
 const text=(v)=>v==null?'':String(v).trim();
 const PRIORITIES=new Set(['BAIXA','NORMAL','ALTA','URGENTE']);
 const customerSnapshot=c=>JSON.stringify({id:c.id,name:c.name,document:c.document,phone:c.phone,address:c.address});
-const machineSnapshot=m=>JSON.stringify({id:m.id,type:m.type,brand:m.brand,model:m.model,year:m.year,serialNumber:m.serial_number,internalId:m.internal_id,hourMeter:m.hour_meter});
+const machineSnapshot=m=>JSON.stringify({
+  id:m.id,type:m.type,brand:m.brand,model:m.model,year:m.year,
+  serialNumber:m.serial_number,internalId:m.internal_id,hourMeter:m.hour_meter,
+  licensePlate:m.license_plate||null,vin:m.vin||null,odometerKm:m.odometer_km??null
+});
 const auditValue=v=>v==null?null:String(v);
 
 export function createWorkOrder(db,input){
