@@ -9,7 +9,7 @@ test('Electron da assistência usa dados próprios e expõe LAN na porta 3344', 
   const serverImport = source.indexOf("import('../dist/src/server-assistencia.js')");
   assert.ok(argvGuard >= 0, 'Electron deve normalizar process.argv[1] no build empacotado');
   assert.ok(serverImport > argvGuard, 'server-assistencia.js deve ser importado somente após normalizar process.argv[1]');
-  assert.match(source, /AssistenciaTecnica/);
+  assert.match(source, /join\\(local, 'ArtiSys', 'Oficina'\\)/);
   assert.match(source, /assistencia-tecnica\.sqlite/);
   assert.match(source, /process\.env\.HOST\s*=\s*'0\.0\.0\.0'/);
   assert.match(source, /process\.env\.PORT\s*=\s*'3344'/);
