@@ -64,9 +64,9 @@ test('CANON: escritores de estoque/caixa não podem voltar para módulos paralel
   const finance=read('src/services/finance.js');
   const inventory=read('src/services/inventory.js');
   const payments=read('src/services/payment-ledger.js');
-  assert.doesNotMatch(sales,/UPDATE\\s+parts\\s+SET\\s+quantity/i);
-  assert.doesNotMatch(sales,/INSERT\\s+INTO\\s+(?:inventory_movements|sale_stock_movements|cash_movements|payment_events)/i);
-  assert.doesNotMatch(finance,/INSERT\\s+INTO\\s+(?:cash_movements|payment_events)/i);
+  assert.doesNotMatch(sales,/UPDATE\s+parts\s+SET\s+quantity/i);
+  assert.doesNotMatch(sales,/INSERT\s+INTO\s+(?:inventory_movements|sale_stock_movements|cash_movements|payment_events)/i);
+  assert.doesNotMatch(finance,/INSERT\s+INTO\s+(?:cash_movements|payment_events)/i);
   assert.match(inventory,/export function postStockMovement/);
   assert.match(payments,/export function postPaymentEvent/);
   assert.match(payments,/export function postCashMovement/);
