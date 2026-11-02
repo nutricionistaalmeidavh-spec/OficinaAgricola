@@ -131,12 +131,57 @@ export function getWorkOrderChecklist(db,id){const c=db.prepare('SELECT * FROM w
 export function listWorkOrderChecklists(db,workOrderId){return db.prepare('SELECT * FROM work_order_checklists WHERE work_order_id=? ORDER BY id DESC').all(workOrderId)}
 
 export function saveAttachment(db,workOrderId,input){
-  getWorkOrder(db,workOrderId); if(!ATTACHMENT_CATEGORIES.has(input.category))throw new Error('Categoria de anexo inválida');
-  const ext=MIME_EXT.get(input.mimeType); if(!ext)throw new Error('Tipo de arquivo não permitido');
-  const raw=Buffer.from(String(input.base64||''),'base64'); const maxBytes=Number(input.maxBytes??5*1024*1024); if(raw.length===0)throw new Error('Arquivo vazio'); if(raw.length>maxBytes)throw new Error('Arquivo excede o limite permitido');
-  const root=resolve(input.storageDir||process.env.STORAGE_DIR||'./storage/uploads'); const targetDir=join(root,String(workOrderId)); mkdirSync(targetDir,{recursive:true});
-  const filename=`${randomUUID()}${ext}`; const full=join(targetDir,filename); writeFileSync(full,raw,{flag:'wx'}); const rel=relative(root,full).replaceAll('\\','/'); if(rel.startsWith('..'))throw new Error('Caminho de armazenamento inválido');
-  const r=db.prepare(`INSERT INTO attachments(work_order_id,category,caption,mime_type,original_name,relative_path,size_bytes,created_at) VALUES(?,?,?,?,?,?,?,?)`).run(workOrderId,input.category,text(input.caption),input.mimeType,text(input.originalName)||`anexo${ext}`,rel,raw.length,nowIso());
-  return db.prepare('SELECT * FROM attachments WHERE id=?').get(Number(r.lastInsertRowid));
+  const {requestId,...command}=input;
+  const {storageDir,...fingerprint}=command;
+  return runIdempotent(db,`work-order:${workOrderId}:attachment`,requestId,
+    fingerprint,()=>{
+      getWorkOrder(db,workOrderId);
+      if(!ATTACHMENT_CATEGORIES.has(command.category))throw new Error('Categoria de anexo inválida');
+      const ext=MIME_EXT.get(command.mimeType);
+      if(!ext)throw new Error('Tipo de arquivo não permitido');
+      const raw=Buffer.from(String(command.base64||''),'base64');
+      const maxBytes=Number(command.maxBytes??5*1024*1024);
+      if(raw.length===0)throw new Error('Arquivo vazio');
+      if(raw.length>maxBytes)throw new Error('Arquivo excede o limite permitido');
+      const root=resolve(command.storageDir||process.env.STORAGE_DIR||'./storage/uploads');
+      const targetDir=join(root,String(workOrderId));
+      mkdirSync(targetDir,{recursive:true});
+      const filename=`${randomUUID()}${ext}`,full=join(targetDir,filename);
+      const rel=relative(root,full).replaceAll('\\','/');
+      if(rel.startsWith('..'))throw new Error('Caminho de armazenamento inválido');
+      try{
+        writeFileSync(full,raw,{flag:'wx'});
+        const r=db.prepare(`INSERT INTO attachments(work_order_id,category,caption,mime_type,original_name,relative_path,size_bytes,created_at)
+          VALUES(?,?,?,?,?,?,?,?)`).run(workOrderId,command.category,text(command.caption),command.mimeType,
+          text(command.originalName)||`anexo${ext}`,rel,raw.length,nowIso());
+        return db.prepare('SELECT * FROM attachments WHERE id=?').get(Number(r.lastInsertRowid));
+      }catch(error){
+        // Se o INSERT ou um callback falhar, não deixar o arquivo sem metadado.
+        rmSync(full,{force:true});
+        throw error;
+      }
+    });
 }
-export function listAttachments(db,workOrderId){return db.prepare('SELECT * FROM attachments WHERE work_order_id=? ORDER BY id DESC').all(workOrderId)}
+export function listAttachments(db,workOrderId){
+  return db.prepare('SELECT * FROM attachments WHERE work_order_id=? ORDER BY id DESC').all(workOrderId);
+}
+// Recuperação pós-crash: remove somente blobs UUID antigos sem referência SQLite.
+export function recoverOrphanAttachments(db,storageDir,{olderThanMs=3600000}={}){
+  const root=resolve(storageDir),removed=[];
+  let folders=[];
+  try{folders=readdirSync(root,{withFileTypes:true})}catch{return removed}
+  for(const dir of folders){
+    if(!dir.isDirectory()||!/^[0-9]+$/.test(dir.name))continue;
+    const folder=join(root,dir.name);
+    for(const file of readdirSync(folder,{withFileTypes:true})){
+      if(!file.isFile()||!/^[0-9a-f-]{36}\.(jpg|png|webp|pdf)$/i.test(file.name))continue;
+      const absolute=join(folder,file.name);
+      if(Date.now()-statSync(absolute).mtimeMs<olderThanMs)continue;
+      const rel=`${dir.name}/${file.name}`;
+      if(db.prepare('SELECT 1 FROM attachments WHERE relative_path=?').get(rel))continue;
+      rmSync(absolute,{force:true});
+      removed.push(rel);
+    }
+  }
+  return removed;
+}
