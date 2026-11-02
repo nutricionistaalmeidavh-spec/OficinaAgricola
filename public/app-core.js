@@ -170,7 +170,10 @@ async function refreshCurrentPage(){
   finally{refreshPromise=null;refreshQueued=false}
 }
 async function navigate(page,{force=false}={}){
-  if(state.page===page&&state.pageReady&&!force)return;
+  if(state.page===page&&state.pageReady){
+    if(force)return refreshCurrentPage();
+    return;
+  }
   state.pageController?.abort();
   state.pageController=new AbortController();
   const epoch=++state.pageEpoch;
