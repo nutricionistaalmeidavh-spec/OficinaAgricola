@@ -1,5 +1,5 @@
 # ADR-0002 — Contrato canônico do ArtiSys Oficina
-Status: **adotado como contrato de desenvolvimento; implantação parcial nesta branch**.
+Status: **C1 aplicado em branch para validação — não publicado**.
 Data: 2026-11-02.
 Escopo: único sistema Node.js + SQLite + HTML/JS vanilla, offline/local-first, core self-hosted R$ 0.
 
@@ -29,18 +29,16 @@ mas somente sob uma regra de recomposição e teste de reconciliação.
 | Equipamento / veículo | `machines` | `src/services/catalog.js` | `snapshot_machine` e histórico de OS são leituras | Vínculo com proprietário; não renomear o item histórico pelo cadastro atual |
 | Ordem de Serviço | `work_orders` | `src/services/work-orders.js` | `work_order_status_history` e `work_order_change_history` auditam | Transição validada em `domain.js`; status/histórico na mesma transação |
 | Orçamento | `quotes`, `quote_items` | `src/services/quotes.js` | `work_orders.quote_total_cents` é cópia do total **aprovado** | Cálculo em centavos; aprovado é imutável; aprovação atualiza OS atomicamente |
-| Estoque disponível | `parts.quantity` **(atual)** | `inventory.js` para OS/movimento; `sales.js` para balcão | `inventory_movements` + `sale_stock_movements` auditam por caminhos diferentes | Nenhum saldo negativo indevido; dois livros ainda exigem reconciliação para torná-los um livro canônico |
+| Estoque disponível | `inventory_movements` (livro canônico); `parts.quantity` é projeção | `src/services/inventory.js` (`postStockMovement`) | `sale_stock_movements` é legado, migrado sem nova baixa | Entradas, OS, balcão e estorno passam pelo mesmo escritor, com origem única |
 | Venda de balcão | `sales`, `sale_items` | `src/services/sales.js` | `request_id`/hash protege reenvio; movimentos vinculados à venda | Venda, baixa e caixa atômicos; idempotência; estorno único |
-| Caixa | `cash_sessions`, `cash_movements` | `src/services/sales.js` | Saldo esperado por soma dos movimentos, não pelo DOM | Um caixa aberto; fechamento histórico preservado; estorno no caixa corrente |
-| Recebimento de OS | `receipts` | `src/services/finance.js` | `paymentSummary` deriva de orçamento aprovado − recebimentos ativos | Não confundir com venda de balcão; eventual integração precisa ID único para impedir crédito em duplicidade |
+| Caixa | `cash_sessions`, `cash_movements` | `payment-ledger.js` escreve movimentos; `sales.js` abre/fecha sessões | Saldo esperado por movimentos e forma de pagamento | Caixa histórico preservado, movimentos OS e balcão com referências exclusivas |
+| Recebimento de OS | `receipts` e `payment_events` | `finance.js` valida o título; `payment-ledger.js` lança receita/estorno | `paymentSummary` deriva do saldo da OS; `financeSummary` soma eventos assinados | Chave de requisição única, estorno sem apagar histórico, sem dupla entrada no caixa |
 | Despesa | `expenses` | `src/services/finance.js` | Somatórios são consultas derivadas | Sem lançamento automático adicional de caixa até existir vínculo canônico |
 | Agenda / checklist | `schedule_events`, `work_order_checklists` | `src/services/operations.js` | Visões por OS e técnico | Checklist é registro finalizado, não autoriza alteração de OS por fora |
 | Anexos | `attachments` e arquivos locais | `src/services/operations.js` | Modal e PDFs consultam os dados existentes | Guardar referência e validar integridade/arquivo |
 | Usuários e sessões | `users`, `sessions` | `src/auth.js` e rotas administrativas | `state.user` é só representação da sessão | Senhas são hashes; papéis no servidor, nunca só na UI |
 
-**ATENÇÃO — não confundir contrato com implementação concluída**: inventário e recebimentos/caixa
-ainda têm mais de um fluxo de escrita. A remoção desses dois débitos exige migração aditiva e
-testes, não simples exclusão de tabelas. Proibido contabilizar dois livros como se fossem um só.
+**C1:** livros transacionais de estoque e pagamentos usam um caminho canônico com migração aditiva. `sale_stock_movements` fica preservado apenas como histórico legado e não recebe novos lançamentos. `payment_events` é o único livro financeiro de receita/estorno; `cash_movements` é a projeção por sessão de caixa. Pagamentos de OS não são automaticamente uma `sale` de balcão; criar venda com `workOrderId` é recusado para não duplicar a cobrança.
 
 ## 3. Contrato de comando e consulta (CQRS leve, sem biblioteca)
 
@@ -67,34 +65,26 @@ A interface atual é JS vanilla, **não React**; "rerender" significa trocar a �
 9. Não fazer `MutationObserver` para "consertar" DOM recomposto; corrigir a autoria do fluxo.
 10. Sem renderização para ajustar rótulos após o fato: definir "Equipamento" diretamente nas telas originais.
 
-**Estado da migração:** itens 1–4 e 10 são o primeiro corte desta branch. Os itens
-5–7 em *todos os formulários* exigem fase incremental por tela, com QA de foco/edição/scroll.
-Há `renderSales`, `renderWorkOrders`, `renderServices`, `openWorkOrder` e outros
-recargas pós-escrita ainda identificados. Não declarar "zero rerender" até substituí-los e testá-los.
+**Estado da migração C1:** os callbacks pós-save usam `refreshCurrentPage()`; `setContent` e a atualização de modal aplicam reconciliação de nós alterados, preservando DOM, foco, valor digitado e scroll. Navegação para outra página ainda monta uma tela inicial, e fechamento intencional de modal remove seu conteúdo. QA de navegador valida preservação do nó da lista após salvar cliente.
 
-## 5. Conciliações pendentes antes de novos módulos
+## 5. Conciliação concluída no C1 e limitações
 
-### C1: estoque
-`inventory_movements` e `sale_stock_movements` hoje descrevem partes diferentes do consumo.
-Projetar uma única operação de estoque com origem (`OS`, `BALCAO`, `AJUSTE`, `ESTORNO`),
-`source_id` único e livro auditável. Não duplicar baixa quando uma OS gera venda.
+### Estoque canônico
+`inventory_movements` é o livro unificado; `postStockMovement` escreve saldo e evento na mesma transação. Novas vendas/estornos não gravam `sale_stock_movements`. Migração idempotente importa o legado sem reaplicar saldo. `reconcileStock` permite conferir livro versus `parts.quantity`.
 
-### C2: orçamento/recebimento/caixa
-OS tem orçamento e `receipts`; balcão tem `sales` e `cash_movements`.
-O sistema ainda não declara que uma OS faturada **é** uma venda de balcão. Antes de unificar,
-criar ligação canônica `work_order_id`/documento/recebimento e política por forma de
-pagamento, com testes de não dupla contagem e estorno coerente.
+### Recebimentos, vendas e caixa
+`payment_events` contém eventos `PAID`/`REFUNDED` com chave única por origem (`SALE` ou `OS_RECEIPT`). `cash_movements` guarda a projeção de movimentos da sessão aberta, com vínculo ao recibo/venda. Dinheiro em espécie exige caixa aberto. Pagamentos eletrônicos sem sessão ativa continuam auditados no livro financeiro sem criar caixa fictício. `financeSummary` soma eventos assinados e inclui vendas balcão concluídas; `getPaymentSummary` calcula o saldo das OS pelo recebimento líquido.
 
-### C3: fiscal
-Documento fiscal será **snapshot** da venda ou OS; emissão e cancelamento não alteram
-quantidades/recebimentos por conta própria. O Fiscal Core do ERP entra **depois**
-de C1/C2, isolado e inicialmente só em simulação/homologação.
+**Limite explícito:** uma OS aprovada e uma venda de balcão continuam documentos de negócio diferentes. Não se converte automaticamente orçamento da OS em venda de balcão; a API recusa `workOrderId` em venda para evitar dupla cobrança. Um documento fiscal/contábil unificado que vincule ambos, quando necessário, depende de modelo específico numa etapa posterior, sem duplicar estoque ou pagamentos.
+
+### Fiscal
+A emissão fiscal permanece desativada. Futuro adaptador do ERP consumirá snapshots das origens canônicas e jamais movimentará estoque/caixa por conta própria.
 
 ## 6. Gates de entrega
 
-`npm run ci`; GitHub Actions CI; CircleCI quality, desktop, mobile; QA visual;
-testes de transição, atomicidade, idempotência e não reconstrução do DOM;
-sem alterar secrets, sem publicar e sem merge antes de autorização.
+`npm run ci`; GitHub Actions CI e matriz QA visual desktop/mobile (Playwright); testes
+de transição, atomicidade, idempotência, reconciliação, foco e DOM estável.
+Sem CircleCI como executor configurado, sem secrets, sem publicar e sem merge antes de autorização.
+**Integração externa CircleCI:** a remoção do YAML não desinstala um aplicativo/projeto CircleCI vinculado; desconectar externamente se ele continuar reportando status ao GitHub.
 
-Este ADR não representa homologação fiscal, instalação Windows validada nem reconciliação
-de estoque/caixa concluída.
+Não representa homologação fiscal nem instalador Windows validado.
