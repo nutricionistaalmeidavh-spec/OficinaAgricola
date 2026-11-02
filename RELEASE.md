@@ -14,6 +14,6 @@ Produto novo para instalação limpa, baseado no sistema único do repositório.
 Não reaproveitar dados de OficinaAgro ou AssistenciaTecnica. Nenhum instalador é publicado automaticamente.
 
 ## Gates obrigatórios
-`npm run ci`, CircleCI `quality`, `qa-desktop`, `qa-mobile`, GitHub Actions CI e QA visual adicional. Somente gerar instalador para distribuição após aprovar o PR e conferir gates.
+`npm run ci`, GitHub Actions CI e QA visual Playwright em matriz desktop/mobile. Somente gerar instalador para distribuição após aprovar o PR e conferir gates.
 
 O motor fiscal do ERP não está integrado neste P0; emissão real desativada.
