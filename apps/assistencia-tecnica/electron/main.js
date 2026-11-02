@@ -18,25 +18,29 @@ function dataRoot() {
 
 async function startLocalServer() {
   const root = dataRoot();
-  const dbPath = join(root, 'data', 'assistencia-tecnica.sqlite');
-  const storageDir = join(root, 'storage', 'uploads');
-
-  mkdirSync(join(root, 'data'), { recursive: true });
-  mkdirSync(storageDir, { recursive: true });
-
-  process.env.DATABASE_PATH = dbPath;
-  process.env.STORAGE_DIR = storageDir;
-  process.env.HOST = '0.0.0.0';
-  process.env.PORT = '3344';
+  const local = process.env.LOCALAPPDATA || app.getPath('userData');
+  const oldAgroRoot = join(local,'ArtiSys','OficinaAgro');
 
   if (!process.argv[1]) process.argv[1] = fileURLToPath(import.meta.url);
 
-  const [{ openDatabase, migrate }, { seed }, { migrateAssistencia }, { createAssistenciaServer }] = await Promise.all([
+  const [{resolveDatabasePath,resolveStoragePath},{ openDatabase, migrate }, { seed }, { migrateAssistencia }, { createAssistenciaServer }] = await Promise.all([
+    import('../dist/src/platform/data-location.js'),
     import('../dist/src/db.js'),
     import('../dist/src/seed.js'),
     import('../dist/src/assistencia-schema.js'),
     import('../dist/src/server-assistencia.js'),
   ]);
+  const dbPath=resolveDatabasePath({
+    canonical:join(root,'data','artisys-oficina.sqlite'),
+    candidates:[join(root,'data','assistencia-tecnica.sqlite'),join(oldAgroRoot,'data','oficina.sqlite')],
+  });
+  const storageDir=resolveStoragePath({databasePath:dbPath});
+  mkdirSync(join(root,'data'),{recursive:true});
+  mkdirSync(storageDir,{recursive:true});
+  process.env.DATABASE_PATH=dbPath;
+  process.env.STORAGE_DIR=storageDir;
+  process.env.HOST='0.0.0.0';
+  process.env.PORT='3344';
 
   db = openDatabase(dbPath);
   migrate(db);
