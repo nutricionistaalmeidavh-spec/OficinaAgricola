@@ -64,7 +64,22 @@ try{
   await sleep(1000);
   await page.screenshot({path:path.join(outputDir,'03-os-detalhe.png'),fullPage:true});
 
-  await writeFile(path.join(outputDir,'qa-summary.json'),`${JSON.stringify({status:'passed',viewport:viewportName,checks:['login','dashboard','demo-data','work-orders','os-detail','edit-action','pdf-action','history-action']},null,2)}\n`);
+  // Pós-save: a seção da lista deve manter o mesmo nó e não receber rerender total.
+  await page.locator('#modalClose').click();
+  await page.locator('[data-page="customers"]').click();
+  await page.locator('#newCustomer').waitFor({state:'visible'});
+  await page.evaluate(()=>{window.__qaCustomerHeader=document.querySelector('#content .section-head')});
+  await page.locator('#newCustomer').click();
+  await page.locator('#modalBody input[name="name"]').fill('Cliente QA Canônico');
+  await page.locator('#modalBody button[type="submit"]').click();
+  await page.locator('#content').filter({hasText:'Cliente QA Canônico'}).waitFor({state:'visible'});
+  const preserved=await page.evaluate(
+    ()=>window.__qaCustomerHeader===document.querySelector('#content .section-head')
+  );
+  if(!preserved)throw new Error('Pós-save recriou o DOM da lista de clientes');
+  await page.screenshot({path:path.join(outputDir,'04-cliente-sem-rerender.png'),fullPage:true});
+
+  await writeFile(path.join(outputDir,'qa-summary.json'),`${JSON.stringify({status:'passed',viewport:viewportName,checks:['login','dashboard','demo-data','work-orders','os-detail','edit-action','pdf-action','history-action','client-save-without-rerender']},null,2)}\n`);
 } catch(error){
   if(page)await page.screenshot({path:path.join(outputDir,'failure.png'),fullPage:true}).catch(()=>{});
   await writeFile(path.join(outputDir,'qa-summary.json'),`${JSON.stringify({status:'failed',viewport:viewportName,error:error.message},null,2)}\n`).catch(()=>{});
