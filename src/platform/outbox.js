@@ -4,6 +4,7 @@ import {createDomainEvent} from './events.js';
 import {describeHttpMutation} from './http-event-bridge.js';
 
 const inFlight=new WeakMap();
+const reschedule=new WeakSet();
 function identity(method,path,data,descriptor,db){
  const {type,payload}=descriptor;
  const ref=payload.movementId??payload.receiptId??payload.saleId??
@@ -52,8 +53,25 @@ async function dispatch(db,runtime,limit){
 }
 export function dispatchOutbox(db,runtime,limit=100){
  if(!runtime)return Promise.resolve(0);
- if(inFlight.has(db))return inFlight.get(db);
- const job=dispatch(db,runtime,limit).finally(()=>inFlight.delete(db));
+ if(inFlight.has(db)){
+   reschedule.add(db);
+   return inFlight.get(db);
+ }
+ const job=(async()=>{
+   let count=0;
+   while(true){
+     const n=await dispatch(db,runtime,limit);
+     count+=n;
+     if(n<limit)break;
+   }
+   return count;
+ })().finally(()=>{
+   inFlight.delete(db);
+   if(reschedule.has(db)){
+     reschedule.delete(db);
+     queueMicrotask(()=>void dispatchOutbox(db,runtime,limit).catch(()=>{}));
+   }
+ });
  inFlight.set(db,job);
  return job;
 }
