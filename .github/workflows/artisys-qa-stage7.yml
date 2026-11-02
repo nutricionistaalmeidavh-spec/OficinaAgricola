@@ -9,14 +9,19 @@ on:
       - 'qa/**'
       - 'scripts/qa-demo.mjs'
       - 'scripts/seed-qa-demo.mjs'
-      - 'tests/ui-stage7.test.js'
-      - '.github/workflows/artisys-qa-stage7.yml'
+      - 'tests/**'
+      - 'src/**'
+      - '.github/workflows/**'
 
 permissions:
   contents: read
 
 jobs:
   visual-shell:
+    strategy:
+      fail-fast: false
+      matrix:
+        viewport: [desktop, mobile]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -42,13 +47,13 @@ jobs:
 
       - name: Browser QA with guaranteed local server shutdown
         run: |
-          node scripts/qa-demo.mjs desktop "$PWD/qa-artifacts"
+          node scripts/qa-demo.mjs ${{ matrix.viewport }} "$PWD/qa-artifacts"
 
       - name: Upload QA screenshots, video and logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: artisys-oficina-stage7-qa-${{ github.run_number }}
+          name: artisys-oficina-stage7-${{ matrix.viewport }}-${{ github.run_number }}
           path: qa-artifacts
           if-no-files-found: warn
           retention-days: 7
