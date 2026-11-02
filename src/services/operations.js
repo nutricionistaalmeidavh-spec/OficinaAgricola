@@ -1,8 +1,9 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, rmSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve, relative } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { nowIso, transaction } from '../db.js';
 import { getWorkOrder } from './work-orders.js';
+import {runIdempotent} from '../platform/idempotency.js';
 
 const EVENT_TYPES=new Set(['DIAGNOSTICO','EXECUCAO','VISITA','PREVISAO_ENTREGA','RETORNO']);
 const CHECKLIST_KINDS=new Set(['ENTRADA','ENTREGA','PERSONALIZADO']);
@@ -11,26 +12,67 @@ const ATTACHMENT_CATEGORIES=new Set(['ENTRADA','DIAGNOSTICO','SERVICO','ENTREGA'
 const MIME_EXT=new Map([['image/jpeg','.jpg'],['image/png','.png'],['image/webp','.webp'],['application/pdf','.pdf']]);
 const text=(v)=>v==null?'':String(v).trim();
 
-function ensureOptionalLink(db,table,id,label){if(id!=null&&!db.prepare(`SELECT id FROM ${table} WHERE id=?`).get(id))throw new Error(`${label} não encontrado`)}
+function ensureOptionalLink(db,table,id,label){if(id!=null&&id!==''&&!db.prepare(`SELECT id FROM ${table} WHERE id=?`).get(id))throw new Error(`${label} não encontrado`)}
+function validateScheduleLinks(db,{customerId,machineId,workOrderId,technicianId,startsAt,endsAt}){
+  ensureOptionalLink(db,'customers',customerId,'Cliente');
+  ensureOptionalLink(db,'machines',machineId,'Equipamento');
+  ensureOptionalLink(db,'work_orders',workOrderId,'OS');
+  ensureOptionalLink(db,'technicians',technicianId,'Técnico');
+  const start=new Date(startsAt);
+  if(!startsAt||Number.isNaN(start.getTime()))throw new Error('Data de início inválida');
+  if(endsAt!=null&&endsAt!==''){
+    const end=new Date(endsAt);
+    if(Number.isNaN(end.getTime()))throw new Error('Data final inválida');
+    if(end<start)throw new Error('Data final anterior ao início');
+  }
+  const machine=machineId?db.prepare('SELECT customer_id FROM machines WHERE id=?').get(machineId):null;
+  const order=workOrderId?db.prepare('SELECT customer_id,machine_id FROM work_orders WHERE id=?').get(workOrderId):null;
+  if(machine&&customerId&&Number(machine.customer_id)!==Number(customerId))
+    throw new Error('Equipamento não pertence ao cliente selecionado');
+  if(order&&customerId&&Number(order.customer_id)!==Number(customerId))
+    throw new Error('OS não pertence ao cliente selecionado');
+  if(order&&machineId&&Number(order.machine_id)!==Number(machineId))
+    throw new Error('OS não pertence ao equipamento selecionado');
+}
 
 export function createScheduleEvent(db,input){
-  if(!EVENT_TYPES.has(input.type)) throw new Error('Tipo de evento inválido');
-  if(!text(input.title)||!input.startsAt||Number.isNaN(new Date(input.startsAt).getTime())) throw new Error('Evento inválido');
-  ensureOptionalLink(db,'customers',input.customerId,'Cliente'); ensureOptionalLink(db,'machines',input.machineId,'Máquina'); ensureOptionalLink(db,'work_orders',input.workOrderId,'OS'); ensureOptionalLink(db,'technicians',input.technicianId,'Técnico');
-  const t=nowIso(); const r=db.prepare(`INSERT INTO schedule_events(type,title,starts_at,ends_at,customer_id,machine_id,work_order_id,technician_id,notes,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(input.type,text(input.title),new Date(input.startsAt).toISOString(),input.endsAt?new Date(input.endsAt).toISOString():null,input.customerId??null,input.machineId??null,input.workOrderId??null,input.technicianId??null,text(input.notes),t,t);
-  return db.prepare('SELECT * FROM schedule_events WHERE id=?').get(Number(r.lastInsertRowid));
+  const {requestId,...command}=input;
+  return runIdempotent(db,'schedule:create',requestId,command,()=>{
+    if(!EVENT_TYPES.has(command.type)||!text(command.title))throw new Error('Evento inválido');
+    validateScheduleLinks(db,command);
+    const t=nowIso();
+    const r=db.prepare(`INSERT INTO schedule_events(type,title,starts_at,ends_at,customer_id,machine_id,work_order_id,technician_id,notes,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(command.type,text(command.title),new Date(command.startsAt).toISOString(),
+        command.endsAt?new Date(command.endsAt).toISOString():null,command.customerId||null,
+        command.machineId||null,command.workOrderId||null,command.technicianId||null,text(command.notes),t,t);
+    return db.prepare('SELECT * FROM schedule_events WHERE id=?').get(Number(r.lastInsertRowid));
+  });
 }
 export function listSchedule(db,{from='1970-01-01T00:00:00.000Z',to='2999-12-31T23:59:59.999Z'}={}){
   return db.prepare(`SELECT e.*,c.name customer_name,m.model machine_model,t.name technician_name,wo.os_number FROM schedule_events e LEFT JOIN customers c ON c.id=e.customer_id LEFT JOIN machines m ON m.id=e.machine_id LEFT JOIN technicians t ON t.id=e.technician_id LEFT JOIN work_orders wo ON wo.id=e.work_order_id WHERE e.starts_at>=? AND e.starts_at<=? ORDER BY e.starts_at`).all(from,to);
 }
 export function updateScheduleEvent(db,id,input){
-  const old=db.prepare('SELECT * FROM schedule_events WHERE id=?').get(id); if(!old)throw new Error('Evento não encontrado');
-  const type=input.type??old.type; if(!EVENT_TYPES.has(type))throw new Error('Tipo de evento inválido');
-  db.prepare(`UPDATE schedule_events SET type=?,title=?,starts_at=?,ends_at=?,customer_id=?,machine_id=?,work_order_id=?,technician_id=?,notes=?,updated_at=? WHERE id=?`).run(
-    type,input.title===undefined?old.title:text(input.title),input.startsAt===undefined?old.starts_at:new Date(input.startsAt).toISOString(),input.endsAt===undefined?old.ends_at:(input.endsAt?new Date(input.endsAt).toISOString():null),
-    input.customerId===undefined?old.customer_id:input.customerId,input.machineId===undefined?old.machine_id:input.machineId,input.workOrderId===undefined?old.work_order_id:input.workOrderId,input.technicianId===undefined?old.technician_id:input.technicianId,input.notes===undefined?old.notes:text(input.notes),nowIso(),id);
-  return db.prepare('SELECT * FROM schedule_events WHERE id=?').get(id);
+  return transaction(db,()=>{
+    const old=db.prepare('SELECT * FROM schedule_events WHERE id=?').get(id);
+    if(!old)throw new Error('Evento não encontrado');
+    const next={
+      type:input.type??old.type,title:input.title===undefined?old.title:text(input.title),
+      startsAt:input.startsAt===undefined?old.starts_at:input.startsAt,
+      endsAt:input.endsAt===undefined?old.ends_at:input.endsAt,
+      customerId:input.customerId===undefined?old.customer_id:input.customerId,
+      machineId:input.machineId===undefined?old.machine_id:input.machineId,
+      workOrderId:input.workOrderId===undefined?old.work_order_id:input.workOrderId,
+      technicianId:input.technicianId===undefined?old.technician_id:input.technicianId,
+      notes:input.notes===undefined?old.notes:text(input.notes)
+    };
+    if(!EVENT_TYPES.has(next.type)||!text(next.title))throw new Error('Evento inválido');
+    validateScheduleLinks(db,next);
+    db.prepare(`UPDATE schedule_events SET type=?,title=?,starts_at=?,ends_at=?,customer_id=?,machine_id=?,work_order_id=?,technician_id=?,notes=?,updated_at=? WHERE id=?`)
+      .run(next.type,next.title,new Date(next.startsAt).toISOString(),
+        next.endsAt?new Date(next.endsAt).toISOString():null,next.customerId||null,
+        next.machineId||null,next.workOrderId||null,next.technicianId||null,next.notes,nowIso(),id);
+    return db.prepare('SELECT * FROM schedule_events WHERE id=?').get(id);
+  });
 }
 
 export function createChecklistTemplate(db,{name,kind='PERSONALIZADO',items=[]}){
