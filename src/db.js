@@ -168,7 +168,8 @@ export function migrate(db) {
     CREATE TABLE IF NOT EXISTS checklist_template_items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       template_id INTEGER NOT NULL REFERENCES checklist_templates(id) ON DELETE CASCADE,
-      position INTEGER NOT NULL, label TEXT NOT NULL
+      position INTEGER NOT NULL, label TEXT NOT NULL,
+      required INTEGER NOT NULL DEFAULT 1 CHECK(required IN (0,1))
     );
     CREATE TABLE IF NOT EXISTS work_order_checklists (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -246,6 +247,9 @@ export function migrate(db) {
     CREATE INDEX IF NOT EXISTS idx_receipts_os ON receipts(work_order_id);
   `);
   // Migrate older local SQLite files additively; never truncate or rewrite balances.
+  const checklistCols=new Set(db.prepare("PRAGMA table_info('checklist_template_items')").all().map(c=>c.name));
+  if(!checklistCols.has('required'))
+    db.exec('ALTER TABLE checklist_template_items ADD COLUMN required INTEGER NOT NULL DEFAULT 1 CHECK(required IN (0,1))');
   const machineCols=new Set(db.prepare("PRAGMA table_info('machines')").all().map(c=>c.name));
   if(!machineCols.has('license_plate'))db.exec('ALTER TABLE machines ADD COLUMN license_plate TEXT');
   if(!machineCols.has('vin'))db.exec('ALTER TABLE machines ADD COLUMN vin TEXT');
