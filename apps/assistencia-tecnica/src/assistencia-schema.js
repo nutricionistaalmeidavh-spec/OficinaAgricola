@@ -41,7 +41,9 @@ export function migrateAssistencia(db) {
       created_by INTEGER REFERENCES users(id),
       created_at TEXT NOT NULL,
       canceled_at TEXT,
-      cancel_reason TEXT NOT NULL DEFAULT ''
+      cancel_reason TEXT NOT NULL DEFAULT '',
+      request_id TEXT,
+      request_payload_hash TEXT
     );
 
     CREATE TABLE IF NOT EXISTS sale_items (
@@ -83,6 +85,12 @@ export function migrateAssistencia(db) {
     CREATE INDEX IF NOT EXISTS idx_cash_sessions_status ON cash_sessions(status);
     CREATE INDEX IF NOT EXISTS idx_cash_movements_session ON cash_movements(cash_session_id,created_at);
   `);
+
+  // Migração aditiva: mantém vendas históricas e permite reenvio idempotente.
+  const columns=new Set(db.prepare("PRAGMA table_info('sales')").all().map(c=>c.name));
+  if(!columns.has('request_id'))db.exec('ALTER TABLE sales ADD COLUMN request_id TEXT');
+  if(!columns.has('request_payload_hash'))db.exec('ALTER TABLE sales ADD COLUMN request_payload_hash TEXT');
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_sales_request_id ON sales(request_id) WHERE request_id IS NOT NULL;');
 
   const company = db.prepare('SELECT name FROM company_settings WHERE id=1').get();
   if (company?.name === 'Oficina Agrícola') {
