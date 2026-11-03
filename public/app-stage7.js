@@ -11,7 +11,7 @@ function oaKpi(label,value,kind=''){
 }
 
 function oaOrderCard(order){
-  const machine=[order.machine_brand,order.machine_model].filter(Boolean).join(' ')||'Máquina não informada';
+  const machine=[order.machine_brand,order.machine_model].filter(Boolean).join(' ')||'Equipamento não informado';
   return `<button type="button" class="oa-order-mini" data-oa-os="${order.id}"><strong>OS #${order.os_number} · ${esc(order.customer_name)}</strong><p>${esc(machine)}<br>${esc(order.problem_reported||'Sem descrição')}</p>${badge(order.status)}</button>`;
 }
 
