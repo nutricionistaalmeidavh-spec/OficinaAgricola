@@ -12,7 +12,7 @@ import { loginHttp, logout, validateSession } from './auth.js';
 import {authTokenFrom,assertSameOrigin,prefersCookie,issueBrowserCookie,clearBrowserCookie,hardenHttpResponse} from './platform/session-http.js';
 import {assertSecureNetwork} from './platform/network.js';
 import { createCustomer, listCustomers, updateCustomer, getCustomer, createMachine, listMachines, updateMachine, getMachine, createTechnician, listTechnicians, updateTechnician } from './services/catalog.js';
-import { createWorkOrder, listWorkOrders, getWorkOrder, updateWorkOrder, transitionWorkOrder, getWorkOrderHistory, machineHistory } from './services/work-orders.js';
+import { createWorkOrder, listWorkOrders, listWorkOrdersPage, getWorkOrder, updateWorkOrder, transitionWorkOrder, getWorkOrderHistory, machineHistory } from './services/work-orders.js';
 import { saveQuote, getQuote, submitQuote, approveQuote, rejectQuote } from './services/quotes.js';
 import { renderDocument, renderPdfDocument, renderDiagnosticPdf } from './documents.js';
 import {listDiagnosticAdapters} from './services/diagnostics.js';
@@ -20,6 +20,9 @@ import { createPart, listParts, updatePart, addInventoryMovement, consumePart, r
 import { createScheduleEvent, listSchedule, updateScheduleEvent, createChecklistTemplate, getChecklistTemplate, listChecklistTemplates, createWorkOrderChecklist, listWorkOrderChecklists, saveAttachment, listAttachments } from './services/operations.js';
 import { addReceipt, reverseReceipt, listReceipts, getPaymentSummary, createExpense, updateExpense, listExpenses, financeSummary } from './services/finance.js';
 import { dashboardData } from './services/dashboard.js';
+import { getOperationalReport } from './services/reports.js';
+import { createFiscalDraft, getFiscalDocument, listFiscalDocuments, listFiscalEvents, submitFiscalDocument, reconcileFiscalDocument } from './services/fiscal.js';
+import { getFiscalSettings, setFiscalSettings } from './services/fiscal-settings.js';
 import { seed } from './seed.js';
 import {listServiceRecords,createServiceRecord} from './services/vehicle-maintenance.js';
 import {savePartFitment,listPartFitments,deletePartFitment,listCompatibleParts,createDiagnosticScan,listDiagnosticScans,
@@ -100,7 +103,8 @@ function createRouter({db,storageDir}){
   add('POST','/api/technicians',['ADMIN'],({body})=>createTechnician(db,body));
   add('PATCH','/api/technicians/:id',['ADMIN'],({params,body})=>updateTechnician(db,int(params.id),body));
 
-  add('GET','/api/work-orders',ROLE_ALL,({url})=>listWorkOrders(db,{status:url.searchParams.get('status')||undefined,search:url.searchParams.get('search')||''}));
+  add('GET','/api/work-orders',ROLE_ALL,({url})=>listWorkOrders(db,{status:url.searchParams.get('status')||undefined,scope:url.searchParams.get('scope')||undefined,search:url.searchParams.get('search')||'',limit:url.searchParams.get('limit')||undefined,offset:url.searchParams.get('offset')||0}));
+  add('GET','/api/work-orders/page',ROLE_ALL,({url})=>listWorkOrdersPage(db,{status:url.searchParams.get('status')||'',scope:url.searchParams.get('scope')||'',search:url.searchParams.get('search')||'',cursor:url.searchParams.get('cursor'),limit:url.searchParams.get('limit')||60}));
   add('POST','/api/work-orders',ROLE_OFFICE,({body,user})=>createWorkOrder(db,{...body,createdBy:user.id}));
   add('POST','/api/work-orders/:id/duplicate',ROLE_OFFICE,({params,body,user})=>
     duplicateWorkOrderWithQuote(db,int(params.id),body,{createdBy:user.id}));
@@ -149,6 +153,14 @@ function createRouter({db,storageDir}){
   add('POST','/api/expenses',ROLE_FIN,({body})=>createExpense(db,body));
   add('PATCH','/api/expenses/:id',ROLE_FIN,({params,body})=>updateExpense(db,int(params.id),body));
   add('GET','/api/finance/summary',ROLE_FIN,({url})=>financeSummary(db,{from:url.searchParams.get('from')||undefined,to:url.searchParams.get('to')||undefined}));
+  add('GET','/api/reports',ROLE_ALL,({url,user})=>getOperationalReport(db,{from:url.searchParams.get('from')||undefined,to:url.searchParams.get('to')||undefined,includeFinance:ROLE_FIN.includes(user.role)}));
+  add('GET','/api/fiscal',ROLE_FIN,({url})=>listFiscalDocuments(db,{status:url.searchParams.get('status')||'',limit:url.searchParams.get('limit')||100}));
+  add('GET','/api/fiscal/settings',ROLE_FIN,()=>getFiscalSettings(db));
+  add('PATCH','/api/fiscal/settings',['ADMIN'],({body})=>setFiscalSettings(db,body));
+  add('POST','/api/fiscal/drafts',ROLE_FIN,({body})=>createFiscalDraft(db,body));
+  add('GET','/api/fiscal/:id',ROLE_FIN,({params})=>getFiscalDocument(db,int(params.id)));
+  add('GET','/api/fiscal/:id/events',ROLE_FIN,({params})=>listFiscalEvents(db,int(params.id)));
+  add('GET','/api/fiscal/:id/xml',ROLE_FIN,({params})=>{const doc=getFiscalDocument(db,int(params.id));if(!['AUTORIZADA','AUTORIZADA_HOMOLOGACAO'].includes(doc.status)||!doc.authorized_xml)throw new Error('Documento sem XML fiscal autorizado');return {__binary:Buffer.from(doc.authorized_xml,'utf8'),mimeType:'application/xml; charset=utf-8',filename:doc.kind+'-'+doc.id+'.xml'}});
   add('GET','/api/admin/reconciliation',['ADMIN'],()=>auditInvariants(db));
   add('GET','/api/commands/status',ROLE_ALL,({user,url})=>{
     const method=url.searchParams.get('method'),path=url.searchParams.get('path'),requestId=url.searchParams.get('requestId');
@@ -166,7 +178,7 @@ function serveStatic(req,res,path){
   res.writeHead(200,{'Content-Type':MIME[extname(file)]||'application/octet-stream','Cache-Control':rel==='index.html'?'no-cache':'public, max-age=3600'});res.end(readFileSync(file));return true;
 }
 
-export function createAppServer({db=openDatabase(),storageDir=process.env.STORAGE_DIR||'./storage/uploads',eventRuntime=null}={}){
+export function createAppServer({db=openDatabase(),storageDir=process.env.STORAGE_DIR||'./storage/uploads',eventRuntime=null,fiscalProvider=null}={}){
   migrate(db); const router=createRouter({db,storageDir});
   return createServer(async(req,res)=>{
     const url=new URL(req.url||'/','http://localhost'); const route=router.match(req.method||'GET',url.pathname);
@@ -174,6 +186,18 @@ export function createAppServer({db=openDatabase(),storageDir=process.env.STORAG
     try{
       assertSecureNetwork(req);
       assertSameOrigin(req);
+      // Transmissão fiscal faz I/O externo; nunca manter transação SQLite aberta durante a rede.
+      // Rotas assíncronas são separadas do envelopamento HTTP de comandos síncronos.
+      const fiscalAction=(req.method==='POST')?url.pathname.match(/^\/api\/fiscal\/(\d+)\/(submit|reconcile)$/):null;
+      if(fiscalAction){
+        const user=validateSession(db,tokenFrom(req));roleGuard(user,ROLE_FIN);
+        await readJson(req);
+        const id=int(fiscalAction[1]);
+        const data=fiscalAction[2]==='submit'
+          ? await submitFiscalDocument(db,id,{provider:fiscalProvider})
+          : await reconcileFiscalDocument(db,id,{provider:fiscalProvider});
+        return json(res,200,data);
+      }
       if(route){let user=null,token=tokenFrom(req);if(!route.publicRoute){user=validateSession(db,token);roleGuard(user,route.roles)}const body=['POST','PUT','PATCH'].includes(req.method||'')?await readJson(req):{};
         const isMutation=['POST','PUT','PATCH','DELETE'].includes(req.method||'');
         const invoke=()=>route.handler({req,res,url,params:route.params,body,user,token,db});
