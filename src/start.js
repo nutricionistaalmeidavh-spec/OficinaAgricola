@@ -1,3 +1,4 @@
+import {cleanupOperationalData} from './platform/data-maintenance.js';
 import { resolveDatabasePath, resolveStoragePath } from './platform/data-location.js';
 import {readFileSync} from 'node:fs';
 import {dirname,join} from 'node:path';
@@ -23,9 +24,19 @@ migrateAssistencia(db);
 seed(db);
 recoverOrphanAttachments(db,process.env.STORAGE_DIR);
 const eventRuntime = createEventRuntime({ auditPath: process.env.EVENT_LOG_PATH });
-const flushEvents=()=>void dispatchOutbox(db,eventRuntime).catch(error=>
+const flushEvents=()=>void dispatchOutbox(db,eventRuntime,100,{respectBackoff:true}).catch(error=>
   console.error('[outbox]',error.message));
 const outboxTimer=setInterval(flushEvents,15000);
+function maintainDatabase(){
+ try{
+   const result=cleanupOperationalData(db,{deliveredRetentionDays:Number(process.env.OUTBOX_RETENTION_DAYS||0)});
+   db.exec('PRAGMA optimize');
+   if(result.sessions||result.deliveredEvents)console.info('[database] Registros operacionais expirados:',result);
+ }catch(error){console.error('[database] Manutenção:',error.message);}
+}
+maintainDatabase();
+const maintenanceTimer=setInterval(maintainDatabase,60*60*1000);
+maintenanceTimer.unref?.();
 outboxTimer.unref?.();
 let lastReconciliationWarning=null;
 function reconcile(){
@@ -39,7 +50,7 @@ function reconcile(){
    }
  }catch(error){console.error('[canonicidade] Falha de auditoria:',error.message)}
 }
-const reconciliationTimer=setInterval(reconcile,60000);
+const reconciliationTimer=setInterval(reconcile,15*60*1000);
 reconciliationTimer.unref?.();
 const { port, host } = resolveServerConfig(process.env);
 const tls=process.env.HTTPS_CERT_FILE&&process.env.HTTPS_KEY_FILE?{
@@ -63,6 +74,7 @@ server.listen(port, host, () => {
 
 const shutdown = () => {
   clearInterval(outboxTimer);
+  clearInterval(maintenanceTimer);
   clearInterval(reconciliationTimer);
   stopBackupSchedule();
   server.close(async () => {
