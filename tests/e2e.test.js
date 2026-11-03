@@ -23,8 +23,14 @@ test('critical workshop flow works end-to-end through HTTP API', async (t)=>{
   const machine=await request(base,'/api/machines',{method:'POST',token,body:{customerId:customer.id,type:'Trator',brand:'John Deere',model:'6175M',hourMeter:950}});
   const tech=await request(base,'/api/technicians',{method:'POST',token,body:{name:'Carlos',specialty:'Hidráulica'}});
   let os=await request(base,'/api/work-orders',{method:'POST',token,body:{customerId:customer.id,machineId:machine.id,technicianId:tech.id,problemReported:'Vazamento hidráulico'}});
-  os=await request(base,`/api/work-orders/${os.id}`,{method:'PATCH',token,body:{diagnosis:'Vedação da bomba danificada'}});
-  await request(base,`/api/work-orders/${os.id}/status`,{method:'POST',token,body:{status:'DIAGNOSTICO'}});
+  os=await request(base,`/api/work-orders/${os.id}`,{method:'PATCH',token,body:{diagnosis:'Vedação da bomba danificada',expectedVersion:os.version}});
+  const changeStatus=async status=>{
+    // Busca a versão canônica após orçamento, consumo de peça e recebimento.
+    const current=await request(base,`/api/work-orders/${os.id}`,{token});
+    return request(base,`/api/work-orders/${os.id}/status`,{method:'POST',token,
+      body:{status,expectedVersion:current.version}});
+  };
+  await changeStatus('DIAGNOSTICO');
   await request(base,`/api/work-orders/${os.id}/quote`,{method:'PUT',token,body:{items:[{kind:'MAO_DE_OBRA',description:'Reparo hidráulico',quantity:1,unitPriceCents:20000}]}});
   await request(base,`/api/work-orders/${os.id}/quote/approve`,{method:'POST',token,body:{}});
   const part=await request(base,'/api/parts',{method:'POST',token,body:{sku:'VED-01',description:'Kit de vedação',salePriceCents:8000,minStock:1}});
@@ -35,10 +41,10 @@ test('critical workshop flow works end-to-end through HTTP API', async (t)=>{
   await request(base,`/api/work-orders/${os.id}/attachments`,{method:'POST',token,body:{category:'DIAGNOSTICO',caption:'Bomba',originalName:'bomba.jpg',mimeType:'image/jpeg',base64:Buffer.from('foto').toString('base64')}});
   const attachments=await request(base,`/api/work-orders/${os.id}/attachments`,{token}); assert.equal(attachments.length,1);
   const file=await request(base,`/api/attachments/${attachments[0].id}/file`,{token,raw:true}); assert.equal(file,'foto');
-  await request(base,`/api/work-orders/${os.id}/status`,{method:'POST',token,body:{status:'EM_SERVICO'}});
-  await request(base,`/api/work-orders/${os.id}/status`,{method:'POST',token,body:{status:'PRONTA'}});
+  await changeStatus('EM_SERVICO');
+  await changeStatus('PRONTA');
   const pay=await request(base,`/api/work-orders/${os.id}/receipts`,{method:'POST',token,body:{amountCents:20000,method:'PIX'}}); assert.equal(pay.amount_cents,20000);
-  await request(base,`/api/work-orders/${os.id}/status`,{method:'POST',token,body:{status:'ENTREGUE'}});
+  await changeStatus('ENTREGUE');
   const history=await request(base,`/api/machines/${machine.id}/history`,{token}); assert.equal(history[0].status,'ENTREGUE');
   const doc=await request(base,`/api/work-orders/${os.id}/documents/work-order`,{token,raw:true}); assert.match(doc,/Ordem de Serviço/);
   const dashboard=await request(base,'/api/dashboard',{token}); assert.ok('counts' in dashboard); assert.equal(dashboard.lowStock.length>=0,true);
