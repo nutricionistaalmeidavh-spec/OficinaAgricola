@@ -10,6 +10,13 @@ const commandQueue=window.OficinaCommands?.createQueue({
     const headers={'Content-Type':'application/json'};
     const transport=window.localRuntime?.request||fetch;
     return transport(path,{method,headers,body:JSON.stringify(body)});
+  },
+  lookup:async({path,method,requestId})=>{
+    const query=new URLSearchParams({path,method,requestId});
+    const transport=window.localRuntime?.request||fetch;
+    const response=await transport('/api/commands/status?'+query.toString());
+    if(!response.ok)throw new Error('Não foi possível consultar a confirmação');
+    return response.json();
   }
 });
 async function updatePendingCommands(){
@@ -23,8 +30,8 @@ async function updatePendingCommands(){
     const count=pending.length;
     button.classList.toggle('hidden',count===0);
     button.textContent=count===0?'':count===1
-      ?'1 operação aguardando confirmação · Tentar novamente'
-      :count+' operações aguardando confirmação · Tentar novamente';
+      ?'1 operação aguardando confirmação · Revisar'
+      :count+' operações aguardando confirmação · Revisar';
   }catch(error){
     // Erro de armazenamento não pode ser tratado como operação confirmada.
     button.classList.remove('hidden');
@@ -47,6 +54,61 @@ async function resumePendingCommands(manual=false){
     }
   }catch(error){if(manual)toast(error.message,true)}
   finally{await updatePendingCommands()}
+}
+function pendingCommandLabel(record){
+  const path=record.path,body=record.body||{};
+  const label=path.includes('/receipts')?'Recebimento':
+    path.includes('/sales')?'Venda':
+    path.includes('/cash/')?'Operação de caixa':
+    path.includes('/inventory/')||path.endsWith('/parts')?'Movimentação de estoque':
+    path.includes('/work-orders')?'Ordem de serviço':
+    path.includes('/customers')?'Cliente':
+    path.includes('/machines')?'Equipamento':
+    path.includes('/expenses')?'Despesa':'Alteração de cadastro';
+  const name=body.name||body.description||body.title||body.problemReported||'';
+  const value=Number(body.amountCents);
+  return {label,detail:String(name).slice(0,120),
+    amount:Number.isFinite(value)&&value>0?money(value):null};
+}
+async function openPendingCommands(){
+  if(!state.user||!commandQueue)return;
+  const owner=currentCommandOwner(),rows=await commandQueue.list(owner);
+  if(!rows.length){toast('Nenhuma operação pendente');return}
+  rows.sort((a,b)=>a.createdAt-b.createdAt);
+  showModal('Operações aguardando confirmação',
+    `<div class="pending-list">
+      <p class="muted">Estas operações estão salvas neste dispositivo. O sistema consulta o servidor antes de reenviar uma tentativa.</p>
+      ${rows.map(item=>{
+        const d=pendingCommandLabel(item);
+        const highRisk=(item.policy||'review')==='review';
+        return `<section class="pending-item" data-pending-id="${esc(item.id)}">
+          <strong>${esc(d.label)}</strong> <span class="pill orange">${highRisk?'Revisão obrigatória':'Aguardando confirmação'}</span>
+          <p>${esc(d.detail)}${d.amount?' · '+esc(d.amount):''}</p>
+          <small>${new Date(item.createdAt).toLocaleString('pt-BR')} · ${item.status==='auth'?'Sessão necessária':item.status==='pending'?'Sem confirmação':'Enviado'}</small>
+          <div class="action-row"><button type="button" class="btn sm ${highRisk?'':'soft'}" data-queue-retry="${esc(item.id)}">
+            ${highRisk?'Revisar e tentar novamente':'Consultar / tentar novamente'}
+          </button></div>
+        </section>`;
+      }).join('')}
+    </div>`);
+  $$('[data-queue-retry]').forEach(button=>button.onclick=async()=>{
+    const id=button.dataset.queueRetry;
+    if(!state.user||currentCommandOwner()!==owner)return;
+    if(button.textContent.includes('Revisar')){
+      button.textContent='Confirmar tentativa desta operação';
+      button.classList.add('primary');
+      return;
+    }
+    button.disabled=true;
+    try{
+      const count=await commandQueue.replay(owner,{manual:true,ids:[id]});
+      if(count)await refreshCurrentPage();
+      await updatePendingCommands();
+      const remain=await commandQueue.list(owner);
+      if(!remain.length){closeModal();toast('Operação confirmada');}
+      else{closeModal();await openPendingCommands()}
+    }catch(error){toast(error.message,true);button.disabled=false}
+  });
 }
 commandQueue?.bus.on('pending',()=>void updatePendingCommands());
 commandQueue?.bus.on('confirmed',()=>void updatePendingCommands());
