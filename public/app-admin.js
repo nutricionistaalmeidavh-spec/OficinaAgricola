@@ -7,7 +7,7 @@ function userModal(){const requestId=newCommandId();showModal('Novo usuário',`<
 function table(headers,rows){return `<div class="table-wrap"><table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.length?rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join(''):`<tr><td colspan="${headers.length}" class="empty">Nenhum registro.</td></tr>`}</tbody></table></div>`}
 
 const pendingRecovery=$('#pendingCommands');
-if(pendingRecovery)pendingRecovery.onclick=()=>void resumePendingCommands(true);
+if(pendingRecovery)pendingRecovery.onclick=()=>void openPendingCommands();
 $('#setupForm').addEventListener('submit',async e=>{
   e.preventDefault();
   const form=e.currentTarget,button=$('button[type="submit"]',form);
