@@ -12,6 +12,7 @@ let db = null;
 let serverUrl = null;
 let eventRuntime = null;
 let outboxTimer = null;
+let stopBackupSchedule=null;
 
 function dataRoot() {
   const local = process.env.LOCALAPPDATA || app.getPath('userData');
@@ -25,7 +26,7 @@ async function startLocalServer() {
 
   const [
     {openDatabase,migrate},{seed},{migrateAssistencia},{createAssistenciaServer},
-    {createEventRuntime},{dispatchOutbox},{recoverOrphanAttachments}
+    {createEventRuntime},{dispatchOutbox},{recoverOrphanAttachments},{startBackupSchedule}
   ]=await Promise.all([
     import('../dist/src/db.js'),
     import('../dist/src/seed.js'),
@@ -34,6 +35,7 @@ async function startLocalServer() {
     import('../dist/src/platform/event-runtime.js'),
     import('../dist/src/platform/outbox.js'),
     import('../dist/src/services/operations.js'),
+    import('../dist/src/platform/backup-scheduler.js'),
   ]);
   // Identidade nova: nenhuma busca por pastas ou bancos de versões antigas.
   const dbPath = join(root, 'data', 'artisys-oficina.sqlite');
@@ -53,6 +55,10 @@ async function startLocalServer() {
   recoverOrphanAttachments(db,storageDir);
   eventRuntime=createEventRuntime({auditPath:join(root,'events','events.jsonl')});
   server = createAssistenciaServer({ db, storageDir, eventRuntime });
+  stopBackupSchedule=startBackupSchedule({
+    databasePath:dbPath,uploadsPath:storageDir,
+    backupRoot:join(root,'backups'),retention:7
+  });
 
   const port = Number(process.env.PORT || 3344);
   await new Promise((resolve, reject) => {
@@ -132,6 +138,7 @@ app.whenReady().then(async () => {
 });
 
 app.on('before-quit', () => {
+  stopBackupSchedule?.();
   if(outboxTimer)clearInterval(outboxTimer);
   try { server?.close(); } catch {}
   try { eventRuntime?.close(); } catch {}
