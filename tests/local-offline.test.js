@@ -33,7 +33,7 @@ test('PWA mantém shell local em cache sem interceptar a API', async () => {
     read('public/manifest.webmanifest'),
   ]);
 
-  assert.match(sw, /artisys-oficina-shell-v2/);
+  assert.match(sw, /artisys-oficina-shell-v3/);
   assert.match(sw, /local-runtime\.css/);
   assert.match(sw, /local-runtime\.js/);
   assert.match(sw, /networkFirstStatic/);
