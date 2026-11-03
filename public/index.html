@@ -52,6 +52,7 @@
         <button data-page="dashboard" class="active"><span class="nav-icon">⌂</span><b>Visão Geral</b></button>
         <button data-page="work-orders"><span class="nav-icon">▤</span><b>Ordens de Serviço</b></button>
         <button data-page="schedule"><span class="nav-icon">□</span><b>Agenda</b></button>
+        <button data-page="market"><span class="nav-icon">◎</span><b>CRM e Frotas</b></button>
         <button data-page="customers"><span class="nav-icon">◎</span><b>Clientes</b></button>
         <button data-page="machines"><span class="nav-icon">◇</span><b>Equipamentos</b></button>
         <button data-page="services"><span class="nav-icon">⌁</span><b>Serviços</b></button>
@@ -65,6 +66,7 @@
       </nav>
       <button id="mobileMoreBtn" class="mobile-more-trigger" type="button" aria-expanded="false" aria-controls="mobileMorePanel" aria-label="Mais opções">☷ <span>Mais</span></button>
       <div id="mobileMorePanel" class="mobile-more-panel hidden" role="group" aria-label="Mais opções da oficina">
+        <button type="button" data-mobile-page="market">CRM e frotas</button>
         <button type="button" data-mobile-page="machines">Equipamentos</button>
         <button type="button" data-mobile-page="services">Serviços</button>
         <button type="button" data-mobile-page="inventory">Estoque</button>
@@ -128,5 +130,6 @@
   <script defer src="/app-fiscal.js"></script>
   <script defer src="/app-assistencia.js"></script>
   <script defer src="/app-admin.js"></script>
+  <script defer src="/app-market.js"></script>
 </body>
 </html>
