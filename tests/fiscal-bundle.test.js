@@ -49,10 +49,10 @@ test('bundle Windows íntegro identifica duas DLLs e executor, configura só per
     assert.equal(env.FISCAL_ACBR_NFSE_LIB,join(f.fiscal,'ACBrNFSe64.dll'));
     assert.equal(env.FISCAL_ACBR_WORKER_EXE,join(f.fiscal,'acbrlib-worker.exe'));
     assert.equal(env.FISCAL_ACBR_PYTHON,undefined);
-    assert.match(readFileSync(env.FISCAL_ACBR_NFE_CONFIG,'utf8'),/\\[Principal\\]/);
+    assert.match(readFileSync(env.FISCAL_ACBR_NFE_CONFIG,'utf8'),/\[Principal\]/);
     assert.ok(env.FISCAL_ACBR_INPUT_DIR.startsWith(f.profile));
     assert.equal(readFileSync(join(f.fiscal,'ACBrNFe64.dll'),'utf8'),'native-nfe-binary');
-    writeFileSync(env.FISCAL_ACBR_NFE_CONFIG,'[Principal]\\nCertificado=PRIVADO\\n');
+    writeFileSync(env.FISCAL_ACBR_NFE_CONFIG,'[Principal]\nCertificado=PRIVADO\n');
     configureBundledFiscal({resourcesPath:f.resources,dataRoot:f.profile,platform:'win32',arch:'x64',env});
     assert.match(readFileSync(env.FISCAL_ACBR_NFE_CONFIG,'utf8'),/Certificado=PRIVADO/);
   }finally{f.cleanup()}
