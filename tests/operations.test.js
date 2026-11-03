@@ -33,6 +33,6 @@ test('stores safe local attachment path and blocks unsupported or oversized file
  const saved=saveAttachment(db,os.id,{category:'ENTRADA',caption:'Frente',originalName:'../../trator.jpg',mimeType:'image/jpeg',base64:Buffer.from('foto').toString('base64'),storageDir:dir});
  assert.equal(saved.relative_path.includes('..'),false); assert.equal(saved.relative_path.startsWith(`${os.id}/`),true); assert.equal(existsSync(join(dir,saved.relative_path)),true);
  assert.throws(()=>saveAttachment(db,os.id,{category:'OUTRO',originalName:'x.exe',mimeType:'application/x-msdownload',base64:'AA==',storageDir:dir}),/Tipo de arquivo/);
- assert.throws(()=>saveAttachment(db,os.id,{category:'OUTRO',originalName:'x.jpg',mimeType:'image/jpeg',base64:Buffer.alloc(10).toString('base64'),storageDir:dir,maxBytes:5}),/excede/);
+ assert.throws(()=>saveAttachment(db,os.id,{category:'OUTRO',originalName:'x.jpg',mimeType:'image/jpeg',base64:Buffer.alloc(5*1024*1024+1).toString('base64'),storageDir:dir,maxBytes:20*1024*1024}),/excede/);
  rmSync(dir,{recursive:true,force:true}); db.close();
 });
