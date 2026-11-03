@@ -7,6 +7,7 @@ import { createWorkOrder, transitionWorkOrder } from '../src/services/work-order
 import { saveQuote, approveQuote } from '../src/services/quotes.js';
 import { createPart } from '../src/services/inventory.js';
 import { getOperationalReport } from '../src/services/reports.js';
+import { dashboardData } from '../src/services/dashboard.js';
 import { migrateFiscal, createFiscalDraft, getFiscalDocument, submitFiscalDocument, listFiscalDocuments } from '../src/services/fiscal.js';
 import {setFiscalSettings} from '../src/services/fiscal-settings.js';
 
@@ -103,5 +104,22 @@ test('P0 fiscal: perda de resposta fica indeterminada e não autoriza reenvio ce
     assert.equal(getFiscalDocument(db,draft.id).status,'INDETERMINADO');
     await assert.rejects(()=>submitFiscalDocument(db,draft.id,{provider}),/indeterminad|concilia|consulta/i);
     assert.equal(calls,1);
+  }finally{db.close()}
+});
+
+
+test('P0 dashboard: OS ativa antiga não desaparece após 250 entregas recentes',()=>{
+  const {db,customer,machine}=fixture();
+  try{
+    const active=createWorkOrder(db,{customerId:customer.id,machineId:machine.id,problemReported:'OS antiga'});
+    for(let i=0;i<250;i++){
+      const other=createWorkOrder(db,{customerId:customer.id,machineId:machine.id,problemReported:'Entrega '+i});
+      db.prepare("UPDATE work_orders SET status='ENTREGUE',delivered_at='2026-11-03T12:00:00.000Z' WHERE id=?").run(other.id);
+    }
+    const dashboard=dashboardData(db);
+    assert.equal(dashboard.counts.ABERTAS,1);
+    assert.equal(dashboard.board.entrada.count,1);
+    assert.equal(dashboard.board.entrada.items[0].id,active.id);
+    assert.equal(dashboard.board.entrada.items.length,1);
   }finally{db.close()}
 });
