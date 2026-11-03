@@ -15,6 +15,37 @@ if ($installerProcess.ExitCode -ne 0) { throw "Instalador encerrou com código $
 $exe = Get-ChildItem -Path $installDir -Filter 'ArtiSys Oficina.exe' -Recurse -File | Select-Object -First 1
 if (-not $exe) { throw 'Executável não instalado no diretório limpo' }
 
+# A instalação só é considerada válida se o pacote fiscal nativo, em resources,
+# estiver completo, íntegro e carregável, SEM Python instalado no cliente.
+$fiscalDir = Join-Path $installDir 'resources\fiscal'
+$manifestFile = Join-Path $fiscalDir 'acbr-bundle.json'
+if (-not (Test-Path $manifestFile)) { throw 'Instalador sem pacote fiscal/manifesto ACBr' }
+$manifest = Get-Content $manifestFile -Raw | ConvertFrom-Json
+if ($manifest.schemaVersion -ne 1 -or $manifest.architecture -ne 'x64') {
+  throw 'Manifesto ACBr inválido'
+}
+foreach ($file in $manifest.files.PSObject.Properties) {
+  $name = $file.Name
+  if ($name -notmatch '^(?:[a-zA-Z0-9._-]+|deps/[a-zA-Z0-9._-]+)$') {
+    throw "Caminho fiscal suspeito: $name"
+  }
+  $local = Join-Path $fiscalDir $name
+  if (-not (Test-Path $local)) { throw "Pacote ACBr incompleto: $name" }
+  if ((Get-FileHash -Path $local -Algorithm SHA256).Hash.ToLowerInvariant() -ne $file.Value) {
+    throw "Pacote ACBr adulterado: $name"
+  }
+}
+$worker = Join-Path $fiscalDir 'acbrlib-worker.exe'
+$workerState = & $worker --self-test | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0 -or -not $workerState.ok -or -not $workerState.frozen) {
+  throw 'Worker fiscal exige Python ou falhou no Windows limpo'
+}
+foreach ($dll in @('ACBrNFe64.dll','ACBrNFSe64.dll')) {
+  $native = & $worker --probe (Join-Path $fiscalDir $dll) | ConvertFrom-Json
+  if ($LASTEXITCODE -ne 0 -or -not $native.ok) { throw "ACBr não carregou no instalador: $dll" }
+}
+Write-Host 'PASS: worker standalone e duas DLLs ACBr reais carregadas sem Python do cliente'
+
 $hostUrl = 'http://127.0.0.1:3344'
 $appProcess = $null
 try {
@@ -75,6 +106,20 @@ try {
   }
   if ($matching.Count -ne 1) {
     throw "EventBus do desktop precisa registrar exatamente um evento por cliente; eventos=$($matching.Count)"
+  }
+
+  $fiscalProfile = Join-Path $env:LOCALAPPDATA 'ArtiSys\Oficina\fiscal'
+  foreach ($relative in @('config\ACBrLibNFe.ini','config\ACBrLibNFSe.ini')) {
+    if (-not (Test-Path (Join-Path $fiscalProfile $relative))) {
+      throw "Configuração ACBr no perfil do usuário não foi preparada: $relative"
+    }
+  }
+  if (-not (Test-Path (Join-Path $fiscalProfile 'entrada'))) {
+    throw 'Diretório privado de INIs fiscais não criado'
+  }
+  $settings = Invoke-RestMethod -Uri "$hostUrl/api/fiscal/settings" -Headers $headers
+  if ($settings.enabled -eq $true -or $settings.enabled -eq 1) {
+    throw 'Fiscal não pode iniciar habilitado no primeiro acesso'
   }
 
   $dbFile = Join-Path $env:LOCALAPPDATA 'ArtiSys\Oficina\data\artisys-oficina.sqlite'

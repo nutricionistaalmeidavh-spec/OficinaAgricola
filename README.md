@@ -97,3 +97,7 @@ npm run test:e2e
 Instalador Windows é opcional via `npm run desktop:dist`, sem publicação automática.
 
 Consulte `docs/P0-CONSOLIDACAO.md` para limites, cenários e validação da unificação.
+
+### ACBr fiscal Windows embarcado (branch de implementação)
+
+O instalador Windows x64 é montado com worker independente de Python e bibliotecas ACBr nativas compiladas dos fontes LGPL, com teste de integridade e DLL real. O cliente final não instala Python/ACBr manualmente. Consulte [ACBR-WINDOWS-EMBUTIDO.md](docs/ACBR-WINDOWS-EMBUTIDO.md). A emissão permanece opcional/desativada até configuração legal/tributária e homologação; não há SaaS pago obrigatório.

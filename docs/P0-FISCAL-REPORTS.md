@@ -114,3 +114,6 @@ Documentação oficial: https://www.gov.br/nfse/pt-br/biblioteca/documentacao-te
 Executar `npm run ci`, QA Playwright desktop/mobile, build e smoke NSIS Windows. Não fazer merge nem publicar sem autorização do responsável e gates verdes. Serviço pago jamais é obrigatório para operação da oficina: fiscal pode ficar desabilitado, sem travar OS, estoque, venda ou caixa.
 
 Limitação de produto: NFC-e, DANFE/DANFSe fiscal, cancelamento via autoridade e geração local de XML fiscal real ainda são entregas futuras. O recibo comum e PDF operacional não substituem nota fiscal.
+## Empacotamento Windows integrado (nova implementação)
+
+As instruções de configurar Python e DLLs por variáveis de ambiente acima continuam válidas **apenas** para desenvolvimento manual e instalações fora do pacote. O instalador NSIS x64, quando construído com sucesso pelo pipeline nativo, incorpora `acbrlib-worker.exe`, as duas DLLs e dependências de forma automática, com hashes por arquivo e perfis privados. Documentação: [ACBR-WINDOWS-EMBUTIDO.md](ACBR-WINDOWS-EMBUTIDO.md). Não implica homologação fiscal de produção.
