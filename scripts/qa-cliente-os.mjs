@@ -107,6 +107,7 @@ try {
   await page.locator('#diagnosisForm button[type="submit"]').click();
   await page.getByRole('status').filter({ hasText: 'Diagnóstico salvo' }).waitFor({ state: 'visible' });
   await page.locator('#modalClose').click();
+  await page.locator('#modal').waitFor({ state: 'hidden' });
   await page.locator('.os-card[data-os="' + osId + '"]').click();
   await page.locator('#quoteBtn').click();
   await page.locator('#quoteItems [data-q-description]').first().fill('Revisao e substituicao de filtro');
