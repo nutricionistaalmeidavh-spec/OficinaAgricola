@@ -90,12 +90,15 @@
  function createQueue({store=openIndexedDB(),send,lookup=null,bus=createEventBus(),now=()=>Date.now(),
    createId=()=>root.crypto?.randomUUID?.()||('op-'+Date.now()+'-'+Math.random().toString(36).slice(2))}={}){
    if(typeof send!=='function')throw new Error('Transportador de comandos obrigatório');
+   const channel=root.BroadcastChannel?new root.BroadcastChannel('oficina-command-status'):null;
+   if(channel)channel.onmessage=()=>bus.emit('external-change',{});
    const inFlight=new Map();
    let replaying=null;
-   const notify=(type,record,extra={})=>bus.emit(type,{
-     requestId:record.body.requestId,ownerId:record.ownerId,
-     method:record.method,path:record.path,...extra
-   });
+   const notify=(type,record,extra={})=>{
+     bus.emit(type,{requestId:record.body.requestId,ownerId:record.ownerId,
+       method:record.method,path:record.path,...extra});
+     channel?.postMessage({type,ownerId:record.ownerId});
+   };
    const fingerprint=(method,path,body)=>method+' '+path+' '+stringify(
      Object.fromEntries(Object.entries(body).filter(([key])=>key!=='requestId').sort(([a],[b])=>a.localeCompare(b)))
    );
