@@ -79,6 +79,71 @@ try{
   if(!preserved)throw new Error('Pós-save recriou o DOM da lista de clientes');
   await page.screenshot({path:path.join(outputDir,'04-cliente-sem-rerender.png'),fullPage:true});
 
+  // P1: resposta de criação perdida após COMMIT; IndexedDB deve preservar
+  // requestId e o reenvio após reload não pode cadastrar cliente duas vezes.
+  const missingReplyName='Cliente QA Fila Confirmacao';
+  let swallowedReply=false;
+  const lostReply=async route=>{
+    const request=route.request();
+    if(request.method()!=='POST'||!request.postData()?.includes(missingReplyName))
+      return route.continue();
+    if(swallowedReply)return route.continue();
+    swallowedReply=true;
+    const backend=await route.fetch();
+    if(!backend.ok())throw new Error('Backend não confirmou operação durante QA da fila');
+    await route.abort('failed'); // servidor confirmou, browser não recebeu a resposta
+  };
+  await page.route('**/api/customers',lostReply);
+  await page.locator('#newCustomer').click();
+  await page.locator('#modalBody input[name="name"]').fill(missingReplyName);
+  await page.locator('#modalBody button[type="submit"]').click();
+  await page.locator('#pendingCommands').waitFor({state:'visible'});
+  if(!swallowedReply)throw new Error('Interceptação de resposta perdida não ocorreu');
+  const queued=await page.evaluate(async()=>{
+    const commands=await window.OficinaCommands.openIndexedDB().list(state.user.id);
+    return commands.map(c=>({
+      method:c.method,path:c.path,requestId:c.body.requestId,
+      hasToken:JSON.stringify(c).includes('Bearer ')
+    }));
+  });
+  if(queued.length!==1||!queued[0].requestId||queued[0].hasToken)
+    throw new Error('Fila não persistiu chave única sem token');
+  await page.screenshot({path:path.join(outputDir,'07-operacao-pendente.png'),fullPage:true});
+  await page.unroute('**/api/customers',lostReply);
+  await page.reload({waitUntil:'domcontentloaded'});
+  await page.locator('#appView').waitFor({state:'visible'});
+  await page.waitForFunction(async()=>{
+    if(!state.user)return false;
+    return (await window.OficinaCommands.openIndexedDB().list(state.user.id)).length===0;
+  },null,{timeout:20000});
+  const afterReplay=await page.evaluate(()=>api('/api/customers'));
+  if(afterReplay.filter(c=>c.name===missingReplyName).length!==1)
+    throw new Error('Reenvio da fila duplicou cliente após perder resposta');
+  await page.locator('#pendingCommands').waitFor({state:'hidden'});
+  await page.screenshot({path:path.join(outputDir,'08-operacao-recuperada.png'),fullPage:true});
+
+  // P2: servidor não recebeu a primeira tentativa; funcionário confirma
+  // manualmente pela faixa no topo sem duplicação ou exposição de requestId.
+  const manualName='Cliente QA Reenvio Manual';
+  const noNetwork=async route=>{
+    if(route.request().method()==='POST'&&route.request().postData()?.includes(manualName))
+      return route.abort('failed');
+    return route.continue();
+  };
+  await page.route('**/api/customers',noNetwork);
+  await page.locator('[data-page="customers"]').click();
+  await page.locator('#newCustomer').click();
+  await page.locator('#modalBody input[name="name"]').fill(manualName);
+  await page.locator('#modalBody button[type="submit"]').click();
+  await page.locator('#pendingCommands').waitFor({state:'visible'});
+  await page.unroute('**/api/customers',noNetwork);
+  await page.locator('#pendingCommands').click();
+  await page.locator('#pendingCommands').waitFor({state:'hidden',timeout:20000});
+  const manualCustomers=await page.evaluate(()=>api('/api/customers'));
+  if(manualCustomers.filter(c=>c.name===manualName).length!==1)
+    throw new Error('Recuperação manual não gravou exatamente um cliente');
+
+
 
   // Draft settings form: a background refresh must preserve the node, focus and user edit.
   await page.locator('[data-page="settings"]').click();
@@ -157,7 +222,7 @@ try{
     }finally{await first.close()}
   }finally{setupProcess.kill('SIGTERM')}
 
-  await writeFile(path.join(outputDir,'qa-summary.json'),`${JSON.stringify({status:'passed',viewport:viewportName,checks:['login','dashboard','demo-data','work-orders','os-detail','edit-action','pdf-action','history-action','client-save-without-rerender','settings-draft-focus-preserved','vehicle-identity','review-and-warranty','first-run-admin-browser']},null,2)}\n`);
+  await writeFile(path.join(outputDir,'qa-summary.json'),`${JSON.stringify({status:'passed',viewport:viewportName,checks:['login','dashboard','demo-data','work-orders','os-detail','edit-action','pdf-action','history-action','client-save-without-rerender','settings-draft-focus-preserved','vehicle-identity','review-and-warranty','first-run-admin-browser','durable-command-lost-response','offline-manual-command-retry']},null,2)}\n`);
 } catch(error){
   if(page)await page.screenshot({path:path.join(outputDir,'failure.png'),fullPage:true}).catch(()=>{});
   await writeFile(path.join(outputDir,'qa-summary.json'),`${JSON.stringify({status:'failed',viewport:viewportName,error:error.message},null,2)}\n`).catch(()=>{});
