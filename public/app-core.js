@@ -323,10 +323,11 @@ function logout(){
 
 function pageRenderer(page){
   const dashboard=typeof renderDashboard==='function'?renderDashboard:async()=>{};
+  const fiscal=typeof renderFiscal==='function'?renderFiscal:async()=>{};
   return ({
     dashboard,customers:renderCustomers,machines:renderMachines,
     'work-orders':renderWorkOrders,inventory:renderInventory,schedule:renderSchedule,
-    finance:renderFinance,reports:renderReports,fiscal:renderFiscal,technicians:renderTechnicians,
+    finance:renderFinance,reports:renderReports,fiscal,technicians:renderTechnicians,
     settings:renderSettings,services:renderServices,sales:renderSales
   })[page]||dashboard;
 }
