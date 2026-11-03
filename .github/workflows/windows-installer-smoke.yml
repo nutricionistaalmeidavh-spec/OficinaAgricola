@@ -10,6 +10,9 @@ on:
       - 'electron-builder.yml'
       - 'scripts/build.mjs'
       - 'scripts/smoke-installer.ps1'
+      - 'scripts/build-acbr-native.ps1'
+      - 'scripts/stage-fiscal-bundle.mjs'
+      - 'src/platform/fiscal-bundle.js'
       - 'public/**'
       - 'tests/**'
       - '.github/workflows/windows-installer-smoke.yml'
@@ -25,7 +28,7 @@ jobs:
   windows-clean-install:
     name: NSIS · Windows x64 limpo
     runs-on: windows-latest
-    timeout-minutes: 35
+    timeout-minutes: 90
     env:
       ELECTRON_BUILDER_ALLOW_UNRESOLVED_DEPENDENCIES: 'true'
     steps:
@@ -42,6 +45,33 @@ jobs:
         run: npm run ci
       - name: Build application files
         run: npm run build
+      - name: Python 3.12 apenas no builder (não no cliente)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compilar worker fiscal autônomo
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check pyinstaller==6.16.0
+          python -m PyInstaller --noconfirm --clean --onefile --console --name acbrlib-worker --distpath build/fiscal-worker --workpath build/pyinstaller-tmp --specpath build/pyinstaller-src src/platform/acbrlib-worker.py
+          $response = & ./build/fiscal-worker/acbrlib-worker.exe --self-test | ConvertFrom-Json
+          if (-not $response.ok -or -not $response.frozen) { throw 'Worker ACBr não é executável autônomo' }
+      - name: Instalar compilador open source Lazarus/FPC + SVN
+        shell: pwsh
+        run: |
+          choco install lazarus --version=4.0.0 -y --no-progress
+          if (-not (Get-Command svn -ErrorAction SilentlyContinue)) { choco install subversion -y --no-progress }
+      - name: Compilar ACBrLib NF-e e NFS-e de fontes oficiais LGPL
+        shell: pwsh
+        run: ./scripts/build-acbr-native.ps1 -Revision 48608
+      - name: Verificar DLLs reais e montar bundle autocontido
+        shell: pwsh
+        run: |
+          foreach ($lib in @('ACBrNFe64.dll','ACBrNFSe64.dll')) {
+            $response = & ./build/fiscal-worker/acbrlib-worker.exe --probe "build/fiscal-native/$lib" | ConvertFrom-Json
+            if (-not $response.ok) { throw "DLL sem exportações ACBr válidas: $lib" }
+          }
+          node scripts/stage-fiscal-bundle.mjs
       - name: Install temporary Electron builder
         run: npm install --no-save --package-lock=false electron-builder@26.15.3
       - name: Build Windows NSIS without publishing
