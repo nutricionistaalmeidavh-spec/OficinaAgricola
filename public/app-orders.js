@@ -11,9 +11,7 @@ function bindOrderCards(host=document){
 async function renderWorkOrders({append=false}={}){
   pageTitle('Ordens de Serviço','OFICINA');
   const path='/api/work-orders/page?scope=active&limit=100'+(append&&osPageCursor?'&cursor='+encodeURIComponent(osPageCursor):'');
-  const [page,customers,machines,techs,summary]=await Promise.all([
-    api(path),api('/api/customers'),api('/api/machines'),api('/api/technicians'),api('/api/dashboard')
-  ]);
+  const [page,summary]=await Promise.all([api(path),api('/api/dashboard')]);
   osPagedRows=append?osPagedRows.concat(page.items):page.items;
   osPageCursor=page.nextCursor;osTotal=page.total;
   const orders=osPagedRows;
@@ -37,7 +35,12 @@ async function renderWorkOrders({append=false}={}){
     '<div id="osArchiveCount" class="muted" aria-live="polite"></div>'+
     '<div id="osArchiveRows" class="list"><div class="empty">Carregando histórico…</div></div>'+
     '<button id="osArchiveMore" class="btn sm soft" type="button" hidden>Carregar mais</button></section>');
-  const newOS=$('#newOS');if(newOS)newOS.onclick=()=>workOrderModal(customers,machines,techs);
+  const newOS=$('#newOS');if(newOS)newOS.onclick=async()=>{
+      try{
+        const [customers,machines,techs]=await Promise.all([api('/api/customers'),api('/api/machines'),api('/api/technicians')]);
+        workOrderModal(customers,machines,techs);
+      }catch(error){toast(error.message,true);}
+    };
   bindOrderCards($('#content'));
   const loadMore=$('#loadMoreOS');if(loadMore)loadMore.onclick=()=>renderWorkOrders({append:true}).catch(error=>toast(error.message,true));
   let archive=[],archiveCursor=null,sequence=0;
