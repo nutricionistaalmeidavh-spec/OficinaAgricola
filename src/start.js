@@ -1,3 +1,5 @@
+import { createServer as createHttpsServer } from 'node:https';
+import { readFileSync } from 'node:fs';
 import { resolveDatabasePath, resolveStoragePath } from './platform/data-location.js';
 import { openDatabase, migrate } from './db.js';
 import { seed } from './seed.js';
@@ -38,12 +40,16 @@ function reconcile(){
 }
 const reconciliationTimer=setInterval(reconcile,60000);
 reconciliationTimer.unref?.();
-const server = createAssistenciaServer({ db, storageDir: process.env.STORAGE_DIR, eventRuntime });
-const { port, host } = resolveServerConfig(process.env);
+const appServer = createAssistenciaServer({ db, storageDir: process.env.STORAGE_DIR, eventRuntime });
+const { port, host, secure, keyPath, certPath } = resolveServerConfig(process.env);
+// LAN segura é configurável apenas por TLS explícito. A instalação local continua HTTP loopback.
+const server=secure?createHttpsServer({
+  key:readFileSync(keyPath),cert:readFileSync(certPath)
+},(req,res)=>appServer.emit('request',req,res)):appServer;
 
 server.listen(port, host, () => {
-  console.log(`ArtiSys Oficina em http://${host}:${port}`);
-  for (const url of listLanUrls({ port })) console.log(`Rede local: ${url}`);
+  console.log(`ArtiSys Oficina em ${secure?'https':'http'}://${host}:${port}`);
+  if(secure)for (const url of listLanUrls({ port, secure:true })) console.log(`Rede local: ${url}`);
   flushEvents();
   reconcile();
 });
