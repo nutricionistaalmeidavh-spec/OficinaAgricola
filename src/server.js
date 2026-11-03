@@ -137,6 +137,7 @@ function createRouter({db,storageDir}){
   add('POST','/api/fiscal/drafts',ROLE_FIN,({body})=>createFiscalDraft(db,body));
   add('GET','/api/fiscal/:id',ROLE_FIN,({params})=>getFiscalDocument(db,int(params.id)));
   add('GET','/api/fiscal/:id/events',ROLE_FIN,({params})=>listFiscalEvents(db,int(params.id)));
+  add('GET','/api/fiscal/:id/xml',ROLE_FIN,({params})=>{const doc=getFiscalDocument(db,int(params.id));if(!['AUTORIZADA','AUTORIZADA_HOMOLOGACAO'].includes(doc.status)||!doc.authorized_xml)throw new Error('Documento sem XML fiscal autorizado');return {__binary:Buffer.from(doc.authorized_xml,'utf8'),mimeType:'application/xml; charset=utf-8',filename:doc.kind+'-'+doc.id+'.xml'}});
   add('GET','/api/admin/reconciliation',['ADMIN'],()=>auditInvariants(db));
   add('GET','/api/dashboard',ROLE_ALL,()=>dashboardData(db));
   return r;
