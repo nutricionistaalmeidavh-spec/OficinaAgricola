@@ -119,7 +119,7 @@ export function createAcbrLibFiscalProvider(opts={}){
       throw new Error('Emitente fiscal ausente; configure antes do envio ACBr');
     const iniPath=resolveInputs(inputDir,document,safeIssuer);
     return {kind,documentId:Number(document.id),iniPath,
-      snapshotHash:document.snapshot_hash,environment:safeIssuer.environment,
+      snapshotHash:document.snapshot_hash,amountCents:Number(document.amount_cents),environment:safeIssuer.environment,
       issuerCnpj:safeIssuer.cnpj,
       ...libraries[kind]};
   };
