@@ -6,6 +6,8 @@ function userModal(){const requestId=newCommandId();showModal('Novo usuário',`<
 
 function table(headers,rows){return `<div class="table-wrap"><table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.length?rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join(''):`<tr><td colspan="${headers.length}" class="empty">Nenhum registro.</td></tr>`}</tbody></table></div>`}
 
+const pendingRecovery=$('#pendingCommands');
+if(pendingRecovery)pendingRecovery.onclick=()=>void resumePendingCommands(true);
 $('#setupForm').addEventListener('submit',async e=>{
   e.preventDefault();
   const form=e.currentTarget,button=$('button[type="submit"]',form);
@@ -22,6 +24,6 @@ $('#setupForm').addEventListener('submit',async e=>{
   }catch(err){error.textContent=err.message}
   finally{button.disabled=false}
 });
-$('#loginForm').addEventListener('submit',async e=>{e.preventDefault();$('#loginError').textContent='';const o=formObj(new FormData(e.target));try{const result=await api('/api/auth/login',{method:'POST',body:o});state.token=result.token;state.user=result.user;localStorage.setItem('oficina_token',state.token);showApp();await navigate('dashboard')}catch(err){$('#loginError').textContent=err.message}});
+$('#loginForm').addEventListener('submit',async e=>{e.preventDefault();$('#loginError').textContent='';const o=formObj(new FormData(e.target));try{const result=await api('/api/auth/login',{method:'POST',body:o});state.token=result.token;state.user=result.user;localStorage.setItem('oficina_token',state.token);showApp();await navigate('dashboard');void updatePendingCommands();void resumePendingCommands()}catch(err){$('#loginError').textContent=err.message}});
 $('#logoutBtn').onclick=async()=>{try{await api('/api/auth/logout',{method:'POST',body:{}})}catch{}logout()};$('#modalClose').onclick=closeModal;$('#modal').addEventListener('click',e=>{if(e.target.id==='modal')closeModal()});$('#refreshBtn').onclick=()=>navigate(state.page,{force:true});$$('#nav button').forEach(b=>b.onclick=()=>navigate(b.dataset.page));
 boot();
