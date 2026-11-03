@@ -19,6 +19,7 @@ import { addReceipt, reverseReceipt, listReceipts, getPaymentSummary, createExpe
 import { dashboardData } from './services/dashboard.js';
 import { getOperationalReport } from './services/reports.js';
 import { createFiscalDraft, getFiscalDocument, listFiscalDocuments, listFiscalEvents, submitFiscalDocument, reconcileFiscalDocument } from './services/fiscal.js';
+import { getFiscalSettings, setFiscalSettings } from './services/fiscal-settings.js';
 import { seed } from './seed.js';
 import {listServiceRecords,createServiceRecord} from './services/vehicle-maintenance.js';
 import {isSetupRequired,initializeAdmin} from './setup.js';
@@ -131,6 +132,8 @@ function createRouter({db,storageDir}){
   add('GET','/api/finance/summary',ROLE_FIN,({url})=>financeSummary(db,{from:url.searchParams.get('from')||undefined,to:url.searchParams.get('to')||undefined}));
   add('GET','/api/reports',ROLE_ALL,({url,user})=>getOperationalReport(db,{from:url.searchParams.get('from')||undefined,to:url.searchParams.get('to')||undefined,includeFinance:ROLE_FIN.includes(user.role)}));
   add('GET','/api/fiscal',ROLE_FIN,({url})=>listFiscalDocuments(db,{status:url.searchParams.get('status')||'',limit:url.searchParams.get('limit')||100}));
+  add('GET','/api/fiscal/settings',ROLE_FIN,()=>getFiscalSettings(db));
+  add('PATCH','/api/fiscal/settings',['ADMIN'],({body})=>setFiscalSettings(db,body));
   add('POST','/api/fiscal/drafts',ROLE_FIN,({body})=>createFiscalDraft(db,body));
   add('GET','/api/fiscal/:id',ROLE_FIN,({params})=>getFiscalDocument(db,int(params.id)));
   add('GET','/api/fiscal/:id/events',ROLE_FIN,({params})=>listFiscalEvents(db,int(params.id)));
