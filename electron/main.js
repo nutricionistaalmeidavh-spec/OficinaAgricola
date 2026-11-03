@@ -107,6 +107,21 @@ function createWindow(url) {
     },
   });
 
+  // Web Serial: seleção explícita de adaptador e somente na origem local do app.
+  const ses=mainWindow.webContents.session;
+  ses.setPermissionCheckHandler((contents,permission,requestingOrigin)=>
+    permission==='serial' && contents===mainWindow?.webContents &&
+    requestingOrigin===new URL(url).origin);
+  ses.on('select-serial-port',(event,ports,contents,callback)=>{
+    event.preventDefault();
+    if(contents!==mainWindow?.webContents||!ports.length){callback('');return}
+    dialog.showMessageBox(mainWindow,{
+      title:'Adaptador OBD-II',message:'Selecione a porta serial do adaptador ELM327',
+      type:'question',buttons:['Cancelar',...ports.map((p,i)=>p.displayName||('Porta '+(i+1)))],
+      defaultId:0,cancelId:0
+    }).then(({response})=>callback(response?ports[response-1]?.portId||'':''))
+      .catch(()=>callback(''));
+  });
   mainWindow.once('ready-to-show', () => mainWindow?.show());
   mainWindow.on('closed', () => { mainWindow = null; });
 

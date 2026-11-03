@@ -14,7 +14,9 @@ import {assertSecureNetwork} from './platform/network.js';
 import { createCustomer, listCustomers, updateCustomer, getCustomer, createMachine, listMachines, updateMachine, getMachine, createTechnician, listTechnicians, updateTechnician } from './services/catalog.js';
 import { createWorkOrder, listWorkOrders, listWorkOrdersPage, getWorkOrder, updateWorkOrder, transitionWorkOrder, getWorkOrderHistory, machineHistory } from './services/work-orders.js';
 import { saveQuote, getQuote, submitQuote, approveQuote, rejectQuote } from './services/quotes.js';
-import { renderDocument, renderPdfDocument } from './documents.js';
+import { renderDocument, renderPdfDocument, renderDiagnosticPdf } from './documents.js';
+import {listDiagnosticAdapters} from './services/diagnostics.js';
+import {executeDiagnosticWorker,isLocalHardwareRequest} from './platform/diagnostic-hardware.js';
 import { createPart, listParts, updatePart, addInventoryMovement, consumePart, reverseWorkOrderPart, listWorkOrderParts, lowStockParts } from './services/inventory.js';
 import { createScheduleEvent, listSchedule, updateScheduleEvent, createChecklistTemplate, getChecklistTemplate, listChecklistTemplates, createWorkOrderChecklist, listWorkOrderChecklists, saveAttachment, listAttachments } from './services/operations.js';
 import { addReceipt, reverseReceipt, listReceipts, getPaymentSummary, createExpense, updateExpense, listExpenses, financeSummary } from './services/finance.js';
@@ -24,6 +26,8 @@ import { createFiscalDraft, getFiscalDocument, listFiscalDocuments, listFiscalEv
 import { getFiscalSettings, setFiscalSettings } from './services/fiscal-settings.js';
 import { seed } from './seed.js';
 import {listServiceRecords,createServiceRecord} from './services/vehicle-maintenance.js';
+import {savePartFitment,listPartFitments,deletePartFitment,listCompatibleParts,createDiagnosticScan,listDiagnosticScans,
+  createMaintenancePlan,listMaintenancePlans,listMaintenanceAlerts,completeMaintenancePlan} from './services/automotive.js';
 import {isSetupRequired,initializeAdmin} from './setup.js';
 
 const __dirname=fileURLToPath(new URL('.',import.meta.url));
@@ -61,7 +65,7 @@ function requireVersion(body){
  return version;
 }
 
-function createRouter({db,storageDir}){
+function createRouter({db,storageDir,diagnosticRunner=executeDiagnosticWorker}){
   const r=new Router(); const add=(m,p,roles,h,o)=>r.add(m,p,roles,h,o);
   add('GET','/api/health',null,()=>({ok:true}),{publicRoute:true});
   add('GET','/api/setup/status',null,()=>({required:isSetupRequired(db)}),{publicRoute:true});
@@ -87,12 +91,31 @@ function createRouter({db,storageDir}){
   add('GET','/api/machines/:id/history',ROLE_ALL,({params})=>machineHistory(db,int(params.id)));
   add('GET','/api/machines/:id/maintenance',ROLE_ALL,({params})=>listServiceRecords(db,int(params.id)));
   add('POST','/api/machines/:id/maintenance',ROLE_OFFICE,({params,body})=>createServiceRecord(db,int(params.id),body));
+  add('GET','/api/machines/:id/compatible-parts',ROLE_ALL,({params})=>listCompatibleParts(db,int(params.id)));
+  add('GET','/api/diagnostics/adapters',ROLE_ALL,()=>listDiagnosticAdapters());
+  // A ponte física só opera no computador principal, jamais através de acesso LAN.
+  add('GET','/api/diagnostics/hardware',ROLE_TECH,({req})=>{
+    if(!isLocalHardwareRequest(req))throw new Error('Permissão: diagnóstico físico somente no computador principal');
+    return diagnosticRunner('probe');
+  });
+  add('GET','/api/diagnostics/capture',ROLE_TECH,({req,url})=>{
+    if(!isLocalHardwareRequest(req))throw new Error('Permissão: diagnóstico físico somente no computador principal');
+    const params=Object.fromEntries(url.searchParams);
+    return diagnosticRunner('capture',params);
+  });
+  add('GET','/api/machines/:id/obd-scans',ROLE_ALL,({params})=>listDiagnosticScans(db,int(params.id)));
+  add('GET','/api/machines/:id/obd-scans/:scanId/pdf',ROLE_ALL,({params})=>({__binary:renderDiagnosticPdf(db,int(params.id),int(params.scanId)),mimeType:'application/pdf',filename:'Diagnostico-'+int(params.scanId)+'.pdf'}));
+  add('POST','/api/machines/:id/obd-scans',ROLE_TECH,({params,body})=>createDiagnosticScan(db,int(params.id),body));
+  add('GET','/api/machines/:id/maintenance-plans',ROLE_ALL,({params})=>listMaintenancePlans(db,int(params.id)));
+  add('POST','/api/machines/:id/maintenance-plans',ROLE_OFFICE,({params,body})=>createMaintenancePlan(db,int(params.id),body));
+  add('POST','/api/maintenance-plans/:id/complete',ROLE_TECH,({params,body})=>completeMaintenancePlan(db,int(params.id),body));
+  add('GET','/api/maintenance-alerts',ROLE_ALL,()=>listMaintenanceAlerts(db));
   add('GET','/api/technicians',ROLE_ALL,()=>listTechnicians(db,{includeInactive:true}));
   add('POST','/api/technicians',['ADMIN'],({body})=>createTechnician(db,body));
   add('PATCH','/api/technicians/:id',['ADMIN'],({params,body})=>updateTechnician(db,int(params.id),body));
 
-  add('GET','/api/work-orders',ROLE_ALL,({url})=>listWorkOrders(db,{status:url.searchParams.get('status')||undefined,search:url.searchParams.get('search')||''}));
-  add('GET','/api/work-orders/page',ROLE_ALL,({url})=>listWorkOrdersPage(db,{status:url.searchParams.get('status')||'',search:url.searchParams.get('search')||'',cursor:url.searchParams.get('cursor'),limit:url.searchParams.get('limit')||60}));
+  add('GET','/api/work-orders',ROLE_ALL,({url})=>listWorkOrders(db,{status:url.searchParams.get('status')||undefined,scope:url.searchParams.get('scope')||undefined,search:url.searchParams.get('search')||'',limit:url.searchParams.get('limit')||undefined,offset:url.searchParams.get('offset')||0}));
+  add('GET','/api/work-orders/page',ROLE_ALL,({url})=>listWorkOrdersPage(db,{status:url.searchParams.get('status')||'',scope:url.searchParams.get('scope')||'',search:url.searchParams.get('search')||'',cursor:url.searchParams.get('cursor'),limit:url.searchParams.get('limit')||60}));
   add('POST','/api/work-orders',ROLE_OFFICE,({body,user})=>createWorkOrder(db,{...body,createdBy:user.id}));
   add('POST','/api/work-orders/:id/duplicate',ROLE_OFFICE,({params,body,user})=>
     duplicateWorkOrderWithQuote(db,int(params.id),body,{createdBy:user.id}));
@@ -111,6 +134,9 @@ function createRouter({db,storageDir}){
 
   add('GET','/api/parts',ROLE_ALL,({url})=>listParts(db,{includeInactive:url.searchParams.get('includeInactive')==='1',search:url.searchParams.get('search')||''}));
   add('POST','/api/parts',ROLE_OFFICE,({body})=>createPart(db,body));
+  add('GET','/api/parts/:id/fitments',ROLE_ALL,({params})=>listPartFitments(db,int(params.id)));
+  add('POST','/api/parts/:id/fitments',ROLE_OFFICE,({params,body})=>savePartFitment(db,int(params.id),body));
+  add('DELETE','/api/parts/:id/fitments/:fitmentId',ROLE_OFFICE,({params})=>deletePartFitment(db,int(params.id),int(params.fitmentId)));
   add('PATCH','/api/parts/:id',ROLE_OFFICE,({params,body})=>updatePart(db,int(params.id),body));
   add('POST','/api/inventory/movements',ROLE_OFFICE,({body,user})=>addInventoryMovement(db,int(body.partId),{...body,createdBy:user.id,userRole:user.role}));
   add('GET','/api/inventory/low-stock',ROLE_ALL,()=>lowStockParts(db));
@@ -163,8 +189,8 @@ function serveStatic(req,res,path){
   res.writeHead(200,{'Content-Type':MIME[extname(file)]||'application/octet-stream','Cache-Control':rel==='index.html'?'no-cache':'public, max-age=3600'});res.end(readFileSync(file));return true;
 }
 
-export function createAppServer({db=openDatabase(),storageDir=process.env.STORAGE_DIR||'./storage/uploads',eventRuntime=null,fiscalProvider=null}={}){
-  migrate(db); const router=createRouter({db,storageDir});
+export function createAppServer({db=openDatabase(),storageDir=process.env.STORAGE_DIR||'./storage/uploads',eventRuntime=null,fiscalProvider=null,diagnosticRunner=executeDiagnosticWorker}={}){
+  migrate(db); const router=createRouter({db,storageDir,diagnosticRunner});
   return createServer(async(req,res)=>{
     const url=new URL(req.url||'/','http://localhost'); const route=router.match(req.method||'GET',url.pathname);
     hardenHttpResponse(res,req);
@@ -204,7 +230,7 @@ export function createAppServer({db=openDatabase(),storageDir=process.env.STORAG
             body.requestId??req.headers['idempotency-key'],{body},invoke);
           if(!res.writableEnded)enqueueHttpEvent(db,req.method,url.pathname,output,{requestId:body.requestId??req.headers['idempotency-key'],actorId:user?.id??null});
           return output;
-        }):invoke();
+        }):await invoke();
         if(res.writableEnded)return;
         if(req.method==='POST'&&url.pathname==='/api/auth/logout')clearBrowserCookie(res,req);
         if(isMutation&&eventRuntime)void dispatchOutbox(db,eventRuntime).catch(e=>console.error('[outbox]',e.message));

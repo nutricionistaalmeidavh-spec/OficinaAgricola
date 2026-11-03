@@ -50,13 +50,29 @@ function parseOdometer(value){
   if(!Number.isFinite(n)||n<0)throw new Error('Quilometragem inválida');
   return n;
 }
+function normalizeRenavam(value){
+  const v=text(value).replace(/[.\s-]/g,'');
+  if(v&&!/^\d{11}$/.test(v))throw new Error('RENAVAM inválido (11 dígitos)');
+  return v||null;
+}
+const FUEL_TYPES=new Set(['GASOLINA','ETANOL','FLEX','DIESEL','GNV','ELETRICO','HIBRIDO','OUTRO']);
+function fuelType(value){
+  const v=text(value).toUpperCase();
+  if(v&&!FUEL_TYPES.has(v))throw new Error('Combustível inválido');
+  return v||null;
+}
+function engineText(value){
+  const v=text(value);if(v.length>100)throw new Error('Motorização excede 100 caracteres');
+  return v;
+}
 export function createMachine(db,input){
   const owner=db.prepare('SELECT id FROM customers WHERE id=?').get(input.customerId); if(!owner) throw new Error('Cliente não encontrado');
   const hour=Number(input.hourMeter??0); if(!Number.isFinite(hour)||hour<0) throw new Error('Horímetro inválido');
   const year=input.year==null||input.year===''?null:Number(input.year); if(year!==null && (!Number.isInteger(year)||year<1900||year>2200)) throw new Error('Ano inválido');
-  const t=nowIso(); const result=db.prepare(`INSERT INTO machines(customer_id,type,brand,model,year,serial_number,internal_id,hour_meter,license_plate,vin,odometer_km,notes,active,created_at,updated_at)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(input.customerId,requireName(input.type,'Tipo da máquina'),text(input.brand),text(input.model),year,text(input.serialNumber),text(input.internalId),hour,
+  const t=nowIso(); const result=db.prepare(`INSERT INTO machines(customer_id,type,brand,model,year,serial_number,internal_id,hour_meter,license_plate,vin,odometer_km,renavam,engine,fuel_type,notes,active,created_at,updated_at)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(input.customerId,requireName(input.type,'Tipo da máquina'),text(input.brand),text(input.model),year,text(input.serialNumber),text(input.internalId),hour,
       normalizePlate(input.plate),normalizeVin(input.vin),parseOdometer(input.odometerKm),
+      normalizeRenavam(input.renavam),engineText(input.engine),fuelType(input.fuelType),
       text(input.notes),boolInt(input.active),t,t);
   return getMachine(db,Number(result.lastInsertRowid));
 }
@@ -64,7 +80,7 @@ export function getMachine(db,id){ const row=db.prepare('SELECT * FROM machines 
 export function listMachines(db,{customerId,includeInactive=false,search=''}={}){
   const clauses=['(?=1 OR m.active=1)']; const params=[includeInactive?1:0];
   if(customerId){clauses.push('m.customer_id=?');params.push(customerId)}
-  if(search){clauses.push('(m.type LIKE ? OR m.brand LIKE ? OR m.model LIKE ? OR m.serial_number LIKE ? OR m.license_plate LIKE ? OR m.vin LIKE ? OR c.name LIKE ?)'); const q=`%${text(search)}%`;params.push(q,q,q,q,q,q,q)}
+  if(search){clauses.push('(m.type LIKE ? OR m.brand LIKE ? OR m.model LIKE ? OR m.serial_number LIKE ? OR m.license_plate LIKE ? OR m.vin LIKE ? OR m.renavam LIKE ? OR m.engine LIKE ? OR c.name LIKE ?)'); const q=`%${text(search)}%`;params.push(q,q,q,q,q,q,q,q,q)}
   return db.prepare(`SELECT m.*, c.name customer_name FROM machines m JOIN customers c ON c.id=m.customer_id WHERE ${clauses.join(' AND ')} ORDER BY m.id DESC`).all(...params);
 }
 export function listCustomerMachines(db,customerId){ getCustomer(db,customerId); return listMachines(db,{customerId,includeInactive:true}); }
@@ -74,13 +90,16 @@ export function updateMachine(db,id,input){
   const t=nowIso();
   const year=input.year===undefined?old.year:(input.year==null||input.year===''?null:Number(input.year));
   if(year!==null&&(!Number.isInteger(year)||year<1900||year>2200))throw new Error('Ano inválido');
-  db.prepare(`UPDATE machines SET customer_id=?,type=?,brand=?,model=?,year=?,serial_number=?,internal_id=?,hour_meter=?,license_plate=?,vin=?,odometer_km=?,notes=?,active=?,updated_at=? WHERE id=?`).run(
+  db.prepare(`UPDATE machines SET customer_id=?,type=?,brand=?,model=?,year=?,serial_number=?,internal_id=?,hour_meter=?,license_plate=?,vin=?,odometer_km=?,renavam=?,engine=?,fuel_type=?,notes=?,active=?,updated_at=? WHERE id=?`).run(
     customerId,input.type===undefined?old.type:requireName(input.type,'Tipo da máquina'),input.brand===undefined?old.brand:text(input.brand),input.model===undefined?old.model:text(input.model),
     year,input.serialNumber===undefined?old.serial_number:text(input.serialNumber),
     input.internalId===undefined?old.internal_id:text(input.internalId),hour,
     input.plate===undefined?old.license_plate:normalizePlate(input.plate),
     input.vin===undefined?old.vin:normalizeVin(input.vin),
     input.odometerKm===undefined?old.odometer_km:parseOdometer(input.odometerKm),
+    input.renavam===undefined?old.renavam:normalizeRenavam(input.renavam),
+    input.engine===undefined?old.engine:engineText(input.engine),
+    input.fuelType===undefined?old.fuel_type:fuelType(input.fuelType),
     input.notes===undefined?old.notes:text(input.notes),boolInt(input.active,old.active),t,id);
   return getMachine(db,id);
 }

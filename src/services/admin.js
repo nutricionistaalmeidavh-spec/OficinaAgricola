@@ -5,12 +5,15 @@ const roles=new Set(['ADMIN','ATENDIMENTO','TECNICO','FINANCEIRO']);
 export function getCompanySettings(db){
  return db.prepare('SELECT * FROM company_settings WHERE id=1').get();
 }
+const PROFILES=new Set(['MISTA','AUTOMOTIVA','AGRICOLA']);
 export function updateCompanySettings(db,input){
  return transaction(db,()=>{
    const old=getCompanySettings(db);
-   db.prepare(`UPDATE company_settings SET name=?,document=?,phone=?,email=?,address=?,updated_at=? WHERE id=1`)
+   const profile=input.serviceProfile??old.service_profile;
+   if(!PROFILES.has(profile))throw new Error('Perfil de oficina inválido');
+   db.prepare(`UPDATE company_settings SET name=?,document=?,phone=?,email=?,address=?,service_profile=?,updated_at=? WHERE id=1`)
      .run(input.name??old.name,input.document??old.document,input.phone??old.phone,
-       input.email??old.email,input.address??old.address,nowIso());
+       input.email??old.email,input.address??old.address,profile,nowIso());
    return getCompanySettings(db);
  });
 }

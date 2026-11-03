@@ -36,22 +36,27 @@ export function getWorkOrder(db,id){
     FROM work_orders wo JOIN customers c ON c.id=wo.customer_id JOIN machines m ON m.id=wo.machine_id LEFT JOIN technicians t ON t.id=wo.technician_id WHERE wo.id=?`).get(id);
   if(!row) throw new Error('Ordem de serviço não encontrada'); return row;
 }
-export function listWorkOrders(db,{status,search='',limit=200}={}){
+export function listWorkOrders(db,{status,scope,search='',limit=200,offset=0}={}){
   const clauses=[]; const params=[];
+  if(scope==='closed')clauses.push("wo.status IN ('ENTREGUE','CANCELADA','REPROVADA')");
+  if(scope==='active')clauses.push("wo.status NOT IN ('ENTREGUE','CANCELADA','REPROVADA')");
   if(status){clauses.push('wo.status=?');params.push(status)}
   if(search){const q=`%${text(search)}%`;clauses.push('(CAST(wo.os_number AS TEXT) LIKE ? OR c.name LIKE ? OR m.model LIKE ? OR wo.problem_reported LIKE ?)');params.push(q,q,q,q)}
   params.push(Math.min(Math.max(Number(limit)||200,1),1000));
+  params.push(Math.min(Math.max(Math.trunc(Number(offset)||0),0),1000000));
   return db.prepare(`SELECT wo.*,c.name customer_name,m.type machine_type,m.brand machine_brand,m.model machine_model,t.name technician_name
     FROM work_orders wo JOIN customers c ON c.id=wo.customer_id JOIN machines m ON m.id=wo.machine_id LEFT JOIN technicians t ON t.id=wo.technician_id
-    ${clauses.length?'WHERE '+clauses.join(' AND '):''} ORDER BY wo.id DESC LIMIT ?`).all(...params);
+    ${clauses.length?'WHERE '+clauses.join(' AND '):''} ORDER BY wo.id DESC LIMIT ? OFFSET ?`).all(...params);
 }
 
 // Paginação keyset sobre a tabela canônica: sem limite global de 200 OS.
-export function listWorkOrdersPage(db,{status='',search='',cursor=null,limit=60}={}){
+export function listWorkOrdersPage(db,{status='',scope='',search='',cursor=null,limit=60}={}){
   const size=Math.min(100,Math.max(1,Number(limit)||60));
   const next=cursor==null||cursor===''?null:Number(cursor);
   if(next!==null&&(!Number.isSafeInteger(next)||next<=0))throw new Error('Cursor inválido');
   const q=String(search||'').trim(),where=[],args=[];
+  if(scope==='closed')where.push("wo.status IN ('ENTREGUE','CANCELADA','REPROVADA')");
+  if(scope==='active')where.push("wo.status NOT IN ('ENTREGUE','CANCELADA','REPROVADA')");
   if(status){where.push('wo.status=?');args.push(status)}
   if(q){where.push('(CAST(wo.os_number AS TEXT) LIKE ? OR c.name LIKE ? OR m.model LIKE ? OR wo.problem_reported LIKE ?)');const like='%'+q+'%';args.push(like,like,like,like)}
   const base=' FROM work_orders wo JOIN customers c ON c.id=wo.customer_id JOIN machines m ON m.id=wo.machine_id LEFT JOIN technicians t ON t.id=wo.technician_id';
