@@ -91,8 +91,8 @@ function createRouter({db,storageDir}){
   add('POST','/api/technicians',['ADMIN'],({body})=>createTechnician(db,body));
   add('PATCH','/api/technicians/:id',['ADMIN'],({params,body})=>updateTechnician(db,int(params.id),body));
 
-  add('GET','/api/work-orders',ROLE_ALL,({url})=>listWorkOrders(db,{status:url.searchParams.get('status')||undefined,search:url.searchParams.get('search')||''}));
-  add('GET','/api/work-orders/page',ROLE_ALL,({url})=>listWorkOrdersPage(db,{status:url.searchParams.get('status')||'',search:url.searchParams.get('search')||'',cursor:url.searchParams.get('cursor'),limit:url.searchParams.get('limit')||60}));
+  add('GET','/api/work-orders',ROLE_ALL,({url})=>listWorkOrders(db,{status:url.searchParams.get('status')||undefined,scope:url.searchParams.get('scope')||undefined,search:url.searchParams.get('search')||'',limit:url.searchParams.get('limit')||undefined,offset:url.searchParams.get('offset')||0}));
+  add('GET','/api/work-orders/page',ROLE_ALL,({url})=>listWorkOrdersPage(db,{status:url.searchParams.get('status')||'',scope:url.searchParams.get('scope')||'',search:url.searchParams.get('search')||'',cursor:url.searchParams.get('cursor'),limit:url.searchParams.get('limit')||60}));
   add('POST','/api/work-orders',ROLE_OFFICE,({body,user})=>createWorkOrder(db,{...body,createdBy:user.id}));
   add('POST','/api/work-orders/:id/duplicate',ROLE_OFFICE,({params,body,user})=>
     duplicateWorkOrderWithQuote(db,int(params.id),body,{createdBy:user.id}));
