@@ -149,6 +149,9 @@ export async function submitFiscalDocument(db,id,{provider}={}){
     taxRegime:settings.tax_regime,stateRegistration:settings.state_registration,
     municipalRegistration:settings.municipal_registration,environment:settings.environment
   };
+  // ACBr exige INI tributário completo e biblioteca local prontos ANTES de registrar
+  // tentativa de envio. Falha de pré-validação não pode ficar indeterminada.
+  if(typeof provider.prepare==='function')provider.prepare({document:doc,issuer});
   const attemptId=randomUUID(),providerName=text(provider.name||'local');
   transaction(db,()=>{
     const change=db.prepare("UPDATE fiscal_documents SET status='INDETERMINADO',provider_name=?,attempt_id=?,issuer_snapshot_json=?,updated_at=? WHERE id=? AND status='RASCUNHO'")
