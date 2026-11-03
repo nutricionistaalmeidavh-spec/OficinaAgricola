@@ -1,0 +1,30 @@
+[Unit]
+Description=ArtiSys Oficina multiempresa (self-hosted)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=artisys
+Group=artisys
+WorkingDirectory=/opt/artisys-oficina
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=3344
+Environment=DATABASE_PATH=/srv/artisys-oficina/data/artisys-oficina.sqlite
+Environment=STORAGE_DIR=/srv/artisys-oficina/storage/uploads
+Environment=TENANCY_REGISTRY_PATH=/srv/artisys-oficina/data/oficina-registry.sqlite
+Environment=TENANCY_DATA_ROOT=/srv/artisys-oficina/data/oficina-tenants
+Environment=BACKUP_ROOT=/srv/artisys-oficina/backups
+ExecStart=/usr/bin/node /opt/artisys-oficina/src/start-multitenant.js
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/srv/artisys-oficina
+
+[Install]
+WantedBy=multi-user.target
