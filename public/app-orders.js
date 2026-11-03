@@ -1,5 +1,68 @@
-const OS_COLUMNS=[['ENTRADA','Entrada'],['DIAGNOSTICO','Diagnóstico'],['AGUARDANDO_APROVACAO','Aguard. aprovação'],['EM_SERVICO','Em serviço'],['PRONTA','Pronta']];
-async function renderWorkOrders(){pageTitle('Ordens de Serviço','OFICINA');const [orders,customers,machines,techs]=await Promise.all([api('/api/work-orders'),api('/api/customers'),api('/api/machines'),api('/api/technicians')]);setContent(`<div class="section-head"><div><h2>Fluxo da oficina</h2><span class="muted">Da entrada à entrega</span></div><button id="newOS" class="btn primary">+ Abrir OS</button></div><div class="kanban">${OS_COLUMNS.map(([status,label])=>{const items=orders.filter(o=>o.status===status||(status==='ENTRADA'&&['ORCAMENTO','APROVADA'].includes(o.status)));return `<div class="kanban-col"><div class="kanban-title"><span>${label}</span><b>${items.length}</b></div>${items.map(o=>`<button type="button" class="os-card" data-os="${o.id}"><strong>OS #${o.os_number} · ${esc(o.customer_name)}</strong><p>${esc(o.machine_brand)} ${esc(o.machine_model)}<br>${esc(o.problem_reported)}</p>${badge(o.status)}</button>`).join('')}</div>`}).join('')}</div>`);$('#newOS').onclick=()=>workOrderModal(customers,machines,techs);$$('[data-os]').forEach(c=>c.onclick=()=>openWorkOrder(c.dataset.os))}
+const OS_COLUMNS=[['ENTRADA','Entrada'],['DIAGNOSTICO','Diagnóstico'],['ORCAMENTO','Orçamento'],['AGUARDANDO_APROVACAO','Aguard. aprovação'],['APROVADA','Aprovada'],['EM_SERVICO','Em serviço'],['PRONTA','Pronta']];
+const OS_CLOSED_STATUSES=['ENTREGUE','CANCELADA','REPROVADA'];
+function osCard(order){
+  return `<button type="button" class="os-card" data-os="${order.id}" aria-label="Abrir OS ${order.os_number}"><strong>OS #${order.os_number} · ${esc(order.customer_name)}</strong><p>${esc(order.machine_brand)} ${esc(order.machine_model)}<br>${esc(order.problem_reported)}</p>${badge(order.status)}</button>`;
+}
+function bindOrderCards(host=document){
+  $$('[data-os]',host).forEach(card=>{
+    const open=()=>openWorkOrder(card.dataset.os);
+    card.onclick=open;
+    // Botão nativo preserva acionamento por teclado sem handler duplicado.
+  });
+}
+async function renderWorkOrders(){
+  pageTitle('Ordens de Serviço','OFICINA');
+  const [orders,customers,machines,techs,summary]=await Promise.all([
+    api('/api/work-orders?scope=active&limit=1000'),
+    api('/api/customers'),api('/api/machines'),api('/api/technicians'),api('/api/dashboard')
+  ]);
+  const canCreate=['ADMIN','ATENDIMENTO'].includes(state.user.role);
+  setContent(`<div class="section-head"><div><h2>Fluxo da oficina</h2><span class="muted">Da entrada à entrega · status reais do sistema</span></div>${canCreate?'<button id="newOS" class="btn primary">+ Abrir OS</button>':''}</div>
+  <div class="kanban">${OS_COLUMNS.map(([status,label])=>{
+    const items=orders.filter(order=>order.status===status);
+    const total=summary.counts[status]||0;
+    return `<div class="kanban-col"><div class="kanban-title"><span>${label}</span><b>${total}</b></div>${items.map(osCard).join('')}${total>items.length?`<small class="muted">${total-items.length} OS adicionais não exibidas nesta visão.</small>`:''}</div>`;
+  }).join('')}</div>
+  <section class="card" style="margin-top:18px">
+    <div class="section-head"><div><h2>Histórico de OS encerradas</h2><span class="muted">Entregues, canceladas e reprovadas · consulta paginada ao banco</span></div></div>
+    <div class="action-row" style="margin-bottom:14px;flex-wrap:wrap">
+      <label>Status <select id="osArchiveStatus"><option value="">Todos os encerramentos</option>${OS_CLOSED_STATUSES.map(status=>`<option value="${status}">${status.replaceAll('_',' ')}</option>`).join('')}</select></label>
+      <label>Pesquisar OS <input id="osArchiveSearch" type="search" placeholder="Nº, cliente, modelo ou problema"></label>
+      <button id="osArchiveFilter" class="btn sm" type="button">Buscar</button>
+    </div>
+    <div id="osArchiveCount" class="muted" aria-live="polite"></div>
+    <div id="osArchiveRows" class="list"><div class="empty">Carregando histórico…</div></div>
+    <button id="osArchiveMore" class="btn sm soft" type="button" hidden>Carregar mais</button>
+  </section>`);
+  const newOS=$('#newOS');if(newOS)newOS.onclick=()=>workOrderModal(customers,machines,techs);
+  bindOrderCards($('#content'));
+  let archive=[],sequence=0;
+  const loadArchive=async({more=false}={})=>{
+    const request=++sequence;
+    const status=$('#osArchiveStatus')?.value||'';
+    const search=$('#osArchiveSearch')?.value.trim()||'';
+    const query=new URLSearchParams({scope:'closed',limit:'50',offset:String(more?archive.length:0)});
+    if(status)query.set('status',status);
+    if(search)query.set('search',search);
+    const rows=await api('/api/work-orders?'+query.toString());
+    const host=$('#osArchiveRows');
+    if(request!==sequence||!host||!host.isConnected)return;
+    archive=more?archive.concat(rows):rows;
+    const markup=archive.length?archive.map(order=>`<div class="list-item" style="align-items:center">${osCard(order)}<small>${order.delivered_at?'Entrega: '+dt(order.delivered_at):'Encerrada · '+dt(order.updated_at)}</small></div>`).join(''):'<div class="empty">Nenhuma OS encerrada encontrada.</div>';
+    const template=document.createElement('template');template.innerHTML=markup;
+    reconcileChildren(host,template.content);
+    bindOrderCards(host);
+    $('#osArchiveCount').textContent=archive.length+' OS carregada(s)';
+    $('#osArchiveMore').hidden=rows.length<50;
+  };
+  $('#osArchiveStatus').onchange=()=>loadArchive().catch(error=>toast(error.message,true));
+  $('#osArchiveSearch').onchange=()=>loadArchive().catch(error=>toast(error.message,true));
+  $('#osArchiveSearch').onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();loadArchive().catch(error=>toast(error.message,true))}};
+  $('#osArchiveFilter').onclick=()=>loadArchive().catch(error=>toast(error.message,true));
+  $('#osArchiveMore').onclick=()=>loadArchive({more:true}).catch(error=>toast(error.message,true));
+  await loadArchive();
+}
+
 function workOrderModal(customers,machines,techs){const requestId=newCommandId();showModal('Abrir ordem de serviço',`<form class="form-stack"><div class="field-row"><label>Cliente<select name="customerId" id="osCustomer" required><option value="">Selecione</option>${customers.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></label><label>Equipamento<select name="machineId" id="osMachine" required><option value="">Selecione o cliente</option></select></label></div><label>Problema relatado<textarea name="problemReported" required></textarea></label><div class="field-row"><label>Técnico<select name="technicianId"><option value="">Não definido</option>${techs.filter(t=>t.active).map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select></label><label>Prioridade<select name="priority"><option>NORMAL</option><option>ALTA</option><option>URGENTE</option><option>BAIXA</option></select></label></div><label>Previsão de entrega<input type="datetime-local" name="estimatedDelivery"></label><button class="btn primary" type="submit">Abrir OS</button></form>`,async fd=>{const o=formObj(fd);o.customerId=Number(o.customerId);o.machineId=Number(o.machineId);if(o.technicianId)o.technicianId=Number(o.technicianId);else delete o.technicianId;if(o.estimatedDelivery)o.estimatedDelivery=new Date(o.estimatedDelivery).toISOString();await api('/api/work-orders',{method:'POST',body:{...o,requestId}});toast('OS aberta');await refreshCurrentPage()});$('#osCustomer').onchange=e=>{const opts=machines.filter(m=>String(m.customer_id)===e.target.value);renderRegion($('#osMachine'),'<option value="">Selecione</option>'+opts.map(m=>`<option value="${m.id}">${esc([m.brand,m.model,m.type].filter(Boolean).join(' '))}</option>`).join(''))} }
 
 async function openWorkOrder(id){const safe=async p=>{try{return await api(p)}catch{return null}};const [os,quote,parts,checklists,attachments,payment,templates,stock]=await Promise.all([api(`/api/work-orders/${id}`),safe(`/api/work-orders/${id}/quote`),api(`/api/work-orders/${id}/parts`),api(`/api/work-orders/${id}/checklists`),api(`/api/work-orders/${id}/attachments`),api(`/api/work-orders/${id}/payment`),api('/api/checklist-templates'),api('/api/parts')]);const next={ENTRADA:['DIAGNOSTICO'],DIAGNOSTICO:[],ORCAMENTO:['AGUARDANDO_APROVACAO'],AGUARDANDO_APROVACAO:[],APROVADA:['EM_SERVICO'],EM_SERVICO:['PRONTA'],PRONTA:['ENTREGUE']}[os.status]||[];showModal(`OS #${os.os_number} — ${os.customer_name}`,`
