@@ -24,6 +24,16 @@ server.stdout.on('data',d=>logs.push(d.toString()));
 server.stderr.on('data',d=>logs.push(d.toString()));
 
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+// QA usa os mesmos destinos reais da UI, inclusive o menu Mais no celular.
+async function navigateQa(page,target){
+  const direct=page.locator('[data-page="'+target+'"]');
+  if(await direct.isVisible())return direct.click();
+  const more=page.locator('#mobileMoreBtn');
+  await more.click();
+  const destination=page.locator('#mobileMorePanel [data-mobile-page="'+target+'"]');
+  await destination.waitFor({state:'visible'});
+  await destination.click();
+}
 async function waitForHealth(){
   const end=Date.now()+30000;
   while(Date.now()<end){
@@ -53,7 +63,7 @@ try{
   await sleep(700);
   await page.screenshot({path:path.join(outputDir,'01-dashboard.png'),fullPage:true});
 
-  await page.locator('[data-page="work-orders"]').click();
+  await navigateQa(page,'work-orders');
   await page.locator('.os-card').first().waitFor({state:'visible'});
   const ordersText=(await page.locator('#content').textContent())||'';
   if(!ordersText.includes('João Silva')||!ordersText.includes('Dell'))throw new Error('Dados técnicos de demonstração não aparecem nas OS');
@@ -69,7 +79,7 @@ try{
 
   // Pós-save: a seção da lista deve manter o mesmo nó e não receber rerender total.
   await page.locator('#modalClose').click();
-  await page.locator('[data-page="customers"]').click();
+  await navigateQa(page,'customers');
   await page.locator('#newCustomer').waitFor({state:'visible'});
   await page.evaluate(()=>{window.__qaCustomerHeader=document.querySelector('#content .section-head')});
   await page.locator('#newCustomer').click();
@@ -134,7 +144,7 @@ try{
     return route.continue();
   };
   await page.route('**/api/customers',noNetwork);
-  await page.locator('[data-page="customers"]').click();
+  await navigateQa(page,'customers');
   await page.locator('#newCustomer').click();
   await page.locator('#modalBody input[name="name"]').fill(manualName);
   await page.locator('#modalBody button[type="submit"]').click();
@@ -158,7 +168,7 @@ try{
 
 
   // Draft settings form: a background refresh must preserve the node, focus and user edit.
-  await page.locator('[data-page="settings"]').click();
+  await navigateQa(page,'settings');
   const companyName=page.locator('#companyForm input[name="name"]');
   await companyName.waitFor({state:'visible'});
   await companyName.fill('Rascunho QA não salvo');
@@ -173,7 +183,7 @@ try{
     throw new Error('Atualização parcial descartou campo, foco ou nó de formulário não salvo');
 
   // Automotivo: criação e leitura real de placa/VIN/km, revisão e garantia.
-  await page.locator('[data-page="machines"]').click();
+  await navigateQa(page,'machines');
   await page.locator('#newMachine').click();
   await page.locator('#modalBody select[name="customerId"]').selectOption({index:1});
   await page.locator('#modalBody input[name="type"]').fill('Carro');
