@@ -50,7 +50,7 @@ async function showWorkOrderHistory(id){
 
 async function downloadWorkOrderPdf(id,number){
   try{
-    const res=await fetch(`/api/work-orders/${id}/documents/work-order/pdf`,{headers:{Authorization:`Bearer ${state.token}`}}); if(!res.ok){let msg=await res.text();try{msg=JSON.parse(msg).error}catch{}throw new Error(msg)}
+    const res=await fetch(`/api/work-orders/${id}/documents/work-order/pdf`,{credentials:'same-origin'}); if(!res.ok){let msg=await res.text();try{msg=JSON.parse(msg).error}catch{}throw new Error(msg)}
     const blob=await res.blob(); const url=URL.createObjectURL(blob); const a=document.createElement('a');a.href=url;a.download=`OS-${number}.pdf`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);toast('PDF da OS gerado');
   }catch(e){toast(e.message,true)}
 }
