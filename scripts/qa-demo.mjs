@@ -141,6 +141,7 @@ try{
   await page.locator('#pendingCommands').waitFor({state:'visible'});
   await page.unroute('**/api/customers',noNetwork);
   await page.locator('#pendingCommands').click();
+  await page.locator('#retryPendingAll').click();
   await page.locator('#pendingCommands').waitFor({state:'hidden',timeout:20000});
   const manualCustomers=await page.evaluate(()=>api('/api/customers'));
   if(manualCustomers.filter(c=>c.name===manualName).length!==1)

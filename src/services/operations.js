@@ -10,6 +10,17 @@ const CHECKLIST_KINDS=new Set(['ENTRADA','ENTREGA','PERSONALIZADO']);
 const RESPONSES=new Set(['OK','ATENCAO','NAO_SE_APLICA']);
 const ATTACHMENT_CATEGORIES=new Set(['ENTRADA','DIAGNOSTICO','SERVICO','ENTREGA','OUTRO']);
 const MIME_EXT=new Map([['image/jpeg','.jpg'],['image/png','.png'],['image/webp','.webp'],['application/pdf','.pdf']]);
+const UPLOAD_LIMIT_BYTES=5*1024*1024;
+function verifyUploadSignature(bytes,mime){
+  const sig={
+    'image/jpeg':()=>bytes.length>=3&&bytes[0]===0xff&&bytes[1]===0xd8&&bytes[2]===0xff,
+    'image/png':()=>bytes.length>=8&&bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])),
+    'image/webp':()=>bytes.length>=12&&bytes.toString('ascii',0,4)==='RIFF'&&bytes.toString('ascii',8,12)==='WEBP',
+    'application/pdf':()=>bytes.length>=5&&bytes.toString('ascii',0,5)==='%PDF-'
+  };
+  if(!sig[mime]?.())throw new Error('Conteúdo do arquivo não corresponde ao tipo declarado');
+}
+
 const text=(v)=>v==null?'':String(v).trim();
 
 function ensureOptionalLink(db,table,id,label){if(id!=null&&id!==''&&!db.prepare(`SELECT id FROM ${table} WHERE id=?`).get(id))throw new Error(`${label} não encontrado`)}
@@ -140,9 +151,12 @@ export function saveAttachment(db,workOrderId,input){
       const ext=MIME_EXT.get(command.mimeType);
       if(!ext)throw new Error('Tipo de arquivo não permitido');
       const raw=Buffer.from(String(command.base64||''),'base64');
-      const maxBytes=Number(command.maxBytes??5*1024*1024);
+      const requestedMax=Number(command.maxBytes??UPLOAD_LIMIT_BYTES);
+      const maxBytes=Number.isFinite(requestedMax)&&requestedMax>0
+        ?Math.min(UPLOAD_LIMIT_BYTES,requestedMax):UPLOAD_LIMIT_BYTES;
       if(raw.length===0)throw new Error('Arquivo vazio');
       if(raw.length>maxBytes)throw new Error('Arquivo excede o limite permitido');
+      verifyUploadSignature(raw,command.mimeType);
       const root=resolve(command.storageDir||process.env.STORAGE_DIR||'./storage/uploads');
       const targetDir=join(root,String(workOrderId));
       mkdirSync(targetDir,{recursive:true});

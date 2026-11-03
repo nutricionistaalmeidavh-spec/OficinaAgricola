@@ -8,7 +8,8 @@ import {runIdempotent} from './platform/idempotency.js';
 import {auditInvariants} from './services/reconciliation.js';
 import {duplicateWorkOrderWithQuote} from './services/work-order-duplication.js';
 import {getCompanySettings,updateCompanySettings,listStaffUsers,createStaffUser,updateStaffUser} from './services/admin.js';
-import { login, logout, validateSession } from './auth.js';
+import { loginAsync, logout, validateSession } from './auth.js';
+import { createLoginLimiter } from './platform/login-throttle.js';
 import { createCustomer, listCustomers, updateCustomer, getCustomer, createMachine, listMachines, updateMachine, getMachine, createTechnician, listTechnicians, updateTechnician } from './services/catalog.js';
 import { createWorkOrder, listWorkOrders, getWorkOrder, updateWorkOrder, transitionWorkOrder, getWorkOrderHistory, machineHistory } from './services/work-orders.js';
 import { saveQuote, getQuote, submitQuote, approveQuote, rejectQuote } from './services/quotes.js';
@@ -46,18 +47,41 @@ async function readJson(req,max=8*1024*1024){
   if(!chunks.length)return {}; const raw=Buffer.concat(chunks).toString('utf8');try{return JSON.parse(raw)}catch{throw new Error('JSON inválido')}
 }
 function tokenFrom(req){const auth=req.headers.authorization||'';if(auth.startsWith('Bearer '))return auth.slice(7).trim();return null}
-function statusFor(error){const m=String(error?.message||'');if(/Credenciais|Sessão/.test(m))return 401;if(/Permissão/.test(m))return 403;if(/não encontrad|não encontrado|não encontrada/i.test(m))return 404;if(/Transição inválida|não pode|já |insuficiente|saldo pendente|não aguarda|UNIQUE constraint|pertence/i.test(m))return 409;return 400}
+function statusFor(error){if(error?.statusCode)return error.statusCode;const m=String(error?.message||'');if(/Credenciais|Sessão/.test(m))return 401;if(/Permissão/.test(m))return 403;if(/não encontrad|não encontrado|não encontrada/i.test(m))return 404;if(/Transição inválida|não pode|já |insuficiente|saldo pendente|não aguarda|UNIQUE constraint|pertence|Conflito|alterada por outro/i.test(m))return 409;return 400}
 function roleGuard(user,roles){if(!roles||roles.length===0)return;if(!user||!roles.includes(user.role))throw new Error('Permissão insuficiente')}
 const int=(v)=>{const n=Number(v);if(!Number.isInteger(n)||n<=0)throw new Error('Identificador inválido');return n};
 
-function createRouter({db,storageDir}){
+function createRouter({db,storageDir,loginLimiter}){
   const r=new Router(); const add=(m,p,roles,h,o)=>r.add(m,p,roles,h,o);
   add('GET','/api/health',null,()=>({ok:true}),{publicRoute:true});
   add('GET','/api/setup/status',null,()=>({required:isSetupRequired(db)}),{publicRoute:true});
   add('POST','/api/setup/initialize',null,({req,body})=>initializeAdmin(db,req,body),{publicRoute:true});
-  add('POST','/api/auth/login',null,({body})=>login(db,body.username,body.password),{publicRoute:true});
+  add('POST','/api/auth/login',null,async ({body,req})=>{
+    const ip=req.socket?.remoteAddress||'unknown';
+    loginLimiter.check(body.username,ip);
+    try{
+      const result=await loginAsync(db,body.username,body.password);
+      loginLimiter.success(body.username,ip);
+      return result;
+    }catch(error){
+      loginLimiter.fail(body.username,ip);
+      throw error;
+    }
+  },{publicRoute:true});
   add('POST','/api/auth/logout',ROLE_ALL,({token})=>{logout(db,token);return {ok:true}});
   add('GET','/api/auth/me',ROLE_ALL,({user})=>user);
+  add('GET','/api/commands/:requestId/status',ROLE_ALL,({params,url,user})=>{
+    const method=String(url.searchParams.get('method')||'POST').toUpperCase();
+    const path=String(url.searchParams.get('path')||'');
+    if(!['POST','PATCH','PUT','DELETE'].includes(method)||!/^\/api\/[a-z0-9/_:-]+$/i.test(path))
+      throw new Error('Comando inválido');
+    const scope=`http:${method}:${path}:user:${user.id}`;
+    const row=db.prepare('SELECT 1 FROM command_idempotency WHERE scope=? AND request_id=?')
+      .get(scope,params.requestId);
+    // Resposta mínima: não expor outros dados de usuários ou entidades.
+    return {state:row?'CONFIRMED':'UNKNOWN'};
+  });
+
 
   add('GET','/api/company',ROLE_ALL,()=>getCompanySettings(db));
   add('PATCH','/api/company',['ADMIN'],({body})=>updateCompanySettings(db,body));
@@ -104,7 +128,7 @@ function createRouter({db,storageDir}){
   add('GET','/api/inventory/low-stock',ROLE_ALL,()=>lowStockParts(db));
   add('GET','/api/work-orders/:id/parts',ROLE_ALL,({params})=>listWorkOrderParts(db,int(params.id)));
   add('POST','/api/work-orders/:id/parts',ROLE_TECH,({params,body,user})=>consumePart(db,int(params.id),int(body.partId),{...body,createdBy:user.id,userRole:user.role}));
-  add('POST','/api/work-orders/:id/parts/:itemId/reverse',ROLE_TECH,({params,body,user})=>reverseWorkOrderPart(db,int(params.itemId),{note:body.note,createdBy:user.id}));
+  add('POST','/api/work-orders/:id/parts/:itemId/reverse',ROLE_TECH,({params,body,user})=>reverseWorkOrderPart(db,int(params.itemId),{workOrderId:int(params.id),note:body.note,createdBy:user.id}));
 
   add('GET','/api/schedule',ROLE_ALL,({url})=>listSchedule(db,{from:url.searchParams.get('from')||undefined,to:url.searchParams.get('to')||undefined}));
   add('POST','/api/schedule',ROLE_TECH,({body})=>createScheduleEvent(db,body));
@@ -127,7 +151,7 @@ function createRouter({db,storageDir}){
   add('PATCH','/api/expenses/:id',ROLE_FIN,({params,body})=>updateExpense(db,int(params.id),body));
   add('GET','/api/finance/summary',ROLE_FIN,({url})=>financeSummary(db,{from:url.searchParams.get('from')||undefined,to:url.searchParams.get('to')||undefined}));
   add('GET','/api/admin/reconciliation',['ADMIN'],()=>auditInvariants(db));
-  add('GET','/api/dashboard',ROLE_ALL,()=>dashboardData(db));
+  add('GET','/api/dashboard',ROLE_ALL,({user})=>dashboardData(db,{includeFinance:['ADMIN','FINANCEIRO'].includes(user.role)}));
   return r;
 }
 
@@ -137,7 +161,7 @@ function serveStatic(req,res,path){
 }
 
 export function createAppServer({db=openDatabase(),storageDir=process.env.STORAGE_DIR||'./storage/uploads',eventRuntime=null}={}){
-  migrate(db); const router=createRouter({db,storageDir});
+  migrate(db); const loginLimiter=createLoginLimiter();const router=createRouter({db,storageDir,loginLimiter});
   return createServer(async(req,res)=>{
     const url=new URL(req.url||'/','http://localhost'); const route=router.match(req.method||'GET',url.pathname);
     try{
@@ -145,7 +169,7 @@ export function createAppServer({db=openDatabase(),storageDir=process.env.STORAG
         const isMutation=['POST','PUT','PATCH','DELETE'].includes(req.method||'');
         const invoke=()=>route.handler({req,res,url,params:route.params,body,user,token,db});
         // Uma confirmação: comando de negócio + registro de evento imutável.
-        const data=isMutation?transaction(db,()=>{
+        const data=url.pathname==='/api/auth/login'?await invoke():isMutation?transaction(db,()=>{
           // Nunca persistir tokens de login/segredos no cache de respostas idempotentes.
           const securityRoute=['/api/auth/login','/api/auth/logout','/api/setup/initialize'].includes(url.pathname);
           const output=securityRoute?invoke():runIdempotent(db,

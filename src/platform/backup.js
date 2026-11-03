@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, lstatSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
+import {tmpdir} from 'node:os';
 
 function hashFile(filePath) {
   return createHash('sha256').update(readFileSync(filePath)).digest('hex');
@@ -13,6 +14,7 @@ function listFiles(root) {
   const walk = current => {
     for (const name of readdirSync(current)) {
       const path = join(current, name);
+      if(lstatSync(path).isSymbolicLink())throw new Error('Backup não aceita links simbólicos');
       const stat = statSync(path);
       if (stat.isDirectory()) walk(path);
       else if (stat.isFile()) files.push(path);
@@ -41,7 +43,7 @@ export function verifyBackup(backupDir) {
   if (manifest.version !== 1 || !Array.isArray(manifest.files)) throw new Error('Manifesto de backup inválido');
   for (const entry of manifest.files) {
     const filePath = safePath(backupDir, entry.path);
-    if (!existsSync(filePath) || hashFile(filePath) !== entry.sha256 || statSync(filePath).size !== entry.size) throw new Error(`Falha de integridade no backup: ${entry.path}`);
+    if (!existsSync(filePath) || lstatSync(filePath).isSymbolicLink() || hashFile(filePath) !== entry.sha256 || statSync(filePath).size !== entry.size) throw new Error(`Falha de integridade no backup: ${entry.path}`);
   }
   return manifest;
 }
@@ -106,4 +108,33 @@ export function restoreBackup({ backupDir, databasePath, uploadsPath }) {
     rmSync(uploadsStage, { recursive: true, force: true });
     throw error;
   }
+}
+
+/**
+ * Confere backup por hash, restaura em diretório temporário e executa
+ * PRAGMA integrity_check. Só depois remove cópias excedentes.
+ */
+export function backupAndVerify({databasePath,uploadsPath,backupRoot,keep=7,now=new Date()}){
+  if(!Number.isInteger(keep)||keep<2)throw new Error('Retenção mínima: 2 cópias');
+  const {backupDir}=createBackup({databasePath,uploadsPath,backupRoot,now});
+  const scratch=mkdtempSync(join(tmpdir(),'oficina-restore-check-'));
+  try{
+    const manifest=verifyBackup(backupDir);
+    if(!manifest.files.some(f=>f.path==='database.sqlite'))
+      throw new Error('Backup sem banco SQLite');
+    const restoredDb=join(scratch,'restored.sqlite');
+    const restoredFiles=join(scratch,'uploads');
+    restoreBackup({backupDir,databasePath:restoredDb,uploadsPath:restoredFiles});
+    const verifyDb=new DatabaseSync(restoredDb,{readOnly:true});
+    try{
+      const result=verifyDb.prepare('PRAGMA integrity_check').get();
+      if(!result||Object.values(result)[0]!=='ok')
+        throw new Error('Falha na restauração SQLite');
+    }finally{verifyDb.close()}
+    const snapshots=readdirSync(backupRoot,{withFileTypes:true})
+      .filter(d=>d.isDirectory()&&!d.name.endsWith('.tmp'))
+      .map(d=>join(backupRoot,d.name)).sort().reverse();
+    for(const dir of snapshots.slice(keep))rmSync(dir,{recursive:true,force:true});
+    return {backupDir,verified:true,retained:snapshots.slice(0,keep).length};
+  }finally{rmSync(scratch,{recursive:true,force:true})}
 }

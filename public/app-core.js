@@ -11,6 +11,18 @@ const commandQueue=window.OficinaCommands?.createQueue({
     if(state.token)headers.Authorization='Bearer '+state.token;
     const transport=window.localRuntime?.request||fetch;
     return transport(path,{method,headers,body:JSON.stringify(body)});
+  },
+  checkStatus:async record=>{
+    const headers={};
+    if(state.token)headers.Authorization='Bearer '+state.token;
+    const qs=new URLSearchParams({method:record.method,path:record.path});
+    const url='/api/commands/'+encodeURIComponent(record.body.requestId)+'/status?'+qs;
+    const transport=window.localRuntime?.request||fetch;
+    const response=await transport(url,{headers,cache:'no-store'});
+    if(response.status===401||response.status===403)return 'AUTH_REQUIRED';
+    if(!response.ok)throw new Error('Não foi possível consultar a confirmação da operação');
+    const receipt=await response.json();
+    return receipt.state;
   }
 });
 async function updatePendingCommands(){
@@ -24,14 +36,63 @@ async function updatePendingCommands(){
     const count=pending.length;
     button.classList.toggle('hidden',count===0);
     button.textContent=count===0?'':count===1
-      ?'1 operação aguardando confirmação · Tentar novamente'
-      :count+' operações aguardando confirmação · Tentar novamente';
+      ?'1 operação aguardando confirmação · Ver detalhes'
+      :count+' operações aguardando confirmação · Ver detalhes';
   }catch(error){
     // Erro de armazenamento não pode ser tratado como operação confirmada.
     button.classList.remove('hidden');
     button.textContent='Verificar armazenamento local de operações';
     button.title=error.message;
   }
+}
+function commandLabel(record){
+  const p=record.path||'';
+  if(p.includes('/receipts'))return 'Recebimento da OS';
+  if(p.includes('/parts')||p.includes('/inventory'))return 'Movimentação de estoque';
+  if(p.includes('/expenses'))return 'Despesa';
+  if(p.includes('/cash'))return 'Movimentação de caixa';
+  if(p.includes('/sales'))return 'Venda';
+  if(p.includes('/work-orders'))return 'Ordem de serviço';
+  if(p.includes('/machines'))return 'Equipamento';
+  if(p.includes('/customers'))return 'Cliente';
+  if(p.includes('/schedule'))return 'Agenda';
+  return 'Operação do sistema';
+}
+async function openPendingCommands(){
+  if(!commandQueue||!state.user)return;
+  const owner=currentCommandOwner();
+  const entries=(await commandQueue.list(owner)).sort((a,b)=>a.createdAt-b.createdAt);
+  const rows=entries.map(record=>{
+    const label=commandLabel(record);
+    const date=new Date(record.createdAt).toLocaleString('pt-BR');
+    const details=record.body?.name||record.body?.description||'';
+    const requiresReview=record.autoReplay===false;
+    const status=record.status==='AGUARDANDO_LOGIN'?'Aguardando autenticação':
+      record.status==='INCERTO'?'Confirmação incerta':'Enviado ao servidor';
+    return `<article class="pending-item">
+      <div><strong>${esc(label)}</strong>
+        <small>${esc(date)} · ${esc(status)}</small>
+        ${details?`<p>${esc(String(details).slice(0,100))}</p>`:''}
+        ${requiresReview?'<small class="pending-warning">Reenvio exige conferência manual</small>':''}
+      </div></article>`;
+  }).join('');
+  showModal('Operações aguardando confirmação',`
+    <section class="pending-list" aria-label="Operações não confirmadas">
+      <p>Antes de reenviar, o sistema consulta se cada operação já foi registrada.
+        Não é necessário informar identificadores técnicos.</p>
+      ${rows||'<p>Nenhuma operação pendente.</p>'}
+      <div class="action-row">
+        <button id="retryPendingAll" class="btn primary" type="button"
+          ${!entries.length?'disabled':''}>Conferir e tentar novamente</button>
+        <button id="closePending" class="btn" type="button">Fechar</button>
+      </div>
+    </section>`,null,{entityKey:'pending-queue'});
+  $('#retryPendingAll').onclick=async e=>{
+    e.currentTarget.disabled=true;
+    await resumePendingCommands(true);
+    if(state.modalKey==='pending-queue')closeModal();
+  };
+  $('#closePending').onclick=closeModal;
 }
 async function resumePendingCommands(manual=false){
   if(!commandQueue||!state.user)return;
@@ -347,6 +408,17 @@ async function refreshCurrentPage(){
   catch(error){if(epoch===state.pageEpoch&&error?.name!=='AbortError')toast(error.message,true)}
   finally{refreshPromise=null;refreshQueued=false}
 }
+function openMoreModules(){
+  const secondary=$$('#nav button[data-page]:not([data-primary-nav])');
+  showModal('Mais módulos',`<div class="more-modules" role="group" aria-label="Outras áreas do sistema">
+    ${secondary.map(button=>`<button type="button" class="btn" data-more-page="${esc(button.dataset.page)}">
+      ${esc(button.textContent.trim())}</button>`).join('')}
+  </div>`,null,{entityKey:'more-modules'});
+  $$('#modalBody [data-more-page]').forEach(button=>button.onclick=()=>{
+    const destination=button.dataset.morePage;
+    closeModal();void navigate(destination);
+  });
+}
 async function navigate(page,{force=false}={}){
   if(state.page===page&&state.pageReady){
     if(force)return refreshCurrentPage();
@@ -357,10 +429,16 @@ async function navigate(page,{force=false}={}){
   const epoch=++state.pageEpoch;
   state.pageReady=false;
   state.page=page;
-  $$('#nav button').forEach(b=>{
+  $('#nav button[data-page]').forEach(b=>{
     const active=b.dataset.page===page;b.classList.toggle('active',active);
     if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');
   });
+  const more=$('#moreModules');
+  if(more){
+    const secondary=!['dashboard','work-orders','schedule','customers'].includes(page);
+    more.classList.toggle('active',secondary);
+    if(secondary)more.setAttribute('aria-current','page');else more.removeAttribute('aria-current');
+  }
   setContent('<div class="card"><div class="empty">Carregando…</div></div>');
   try{
     await pageRenderer(page)();

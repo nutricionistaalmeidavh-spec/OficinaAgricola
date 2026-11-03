@@ -13,10 +13,10 @@ test('Electron ArtiSys Oficina inicia com banco novo e expõe LAN na porta 3344'
   assert.ok(source.includes("join(root, 'data', 'artisys-oficina.sqlite')"));
   assert.ok(!source.includes('assistencia-tecnica.sqlite'));
   assert.ok(!source.includes('OficinaAgro'));
-  assert.ok(source.includes("process.env.HOST='0.0.0.0'"));
+  assert.ok(source.includes("process.env.HOST='127.0.0.1'"));
   assert.ok(source.includes("process.env.PORT='3344'"));
   assert.match(source, /migrate\(db\);/);
   assert.match(source, /migrateAssistencia\(db\);/);
-  assert.ok(source.includes("server.listen(port, '0.0.0.0'"));
+  assert.ok(source.includes("server.listen(port, '127.0.0.1'"));
   assert.ok(source.includes('serverUrl = `http://127.0.0.1:${port}`'));
 });

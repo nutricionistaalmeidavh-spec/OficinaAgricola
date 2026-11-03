@@ -5,14 +5,28 @@
  const MAX_BYTES=128*1024,MAX_PENDING=80,DB_NAME='artisys-oficina-commands-v1';
  const privateKey=/^(?:password|confirmPassword|secret|token|accessToken|refreshToken|base64|file|attachment|apiKey)$/i;
  const forbiddenPath=/^\/api\/(?:auth(?:\/|$)|setup(?:\/|$)|users(?:\/|$))|\/attachments(?:\/|$)|\/documents(?:\/|$)/i;
+ const allowedCommands=[
+   /^POST \/api\/(?:customers|machines|schedule|parts|work-orders|inventory\/movements|expenses|sales)$/,
+   /^POST \/api\/(?:cash\/current\/(?:open|close|movements)|work-orders\/\d+\/(?:parts|receipts|checklists)|work-orders\/\d+\/duplicate)$/,
+   /^PATCH \/api\/(?:customers|machines|work-orders|schedule|expenses|parts)\/\d+$/,
+   /^PUT \/api\/work-orders\/\d+\/quote$/
+ ];
+ const manualConfirm=/^POST \/api\/(?:sales|expenses|inventory\/movements|cash\/|work-orders\/\d+\/(?:parts|receipts))/;
+ function commandClassification(method,path){
+   const command=method+' '+path;
+   return allowedCommands.some(re=>re.test(command))
+     ?{autoReplay:!manualConfirm.test(command)}:null;
+ }
+
  function stringify(value){return JSON.stringify(value);}
  function hasPrivateValue(value){
    if(!value||typeof value!=='object')return false;
    if(Array.isArray(value))return value.some(hasPrivateValue);
    return Object.keys(value).some(k=>privateKey.test(k)||hasPrivateValue(value[k]));
  }
- function isQueueable(path,body){
+ function isQueueable(path,body,method='POST'){
    if(typeof path!=='string'||!path.startsWith('/api/')||forbiddenPath.test(path))return false;
+   if(!commandClassification(String(method).toUpperCase(),path))return false;
    if(!body||typeof body!=='object'||Array.isArray(body)||hasPrivateValue(body))return false;
    try{return stringify(body).length<=MAX_BYTES}catch{return false}
  }
@@ -41,11 +55,16 @@
    function db(){
      if(!promise)promise=new Promise((resolve,reject)=>{
        if(!indexedDB){reject(new Error('Armazenamento local indisponível. Nenhuma operação foi enviada.'));return}
-       const request=indexedDB.open(dbName,1);
+       const request=indexedDB.open(dbName,2);
        request.onupgradeneeded=()=>{
          const database=request.result;
-         const store=database.createObjectStore('commands',{keyPath:'id'});
-         store.createIndex('ownerId','ownerId',{unique:false});
+         const store=database.objectStoreNames.contains('commands')
+           ?request.transaction.objectStore('commands')
+           :database.createObjectStore('commands',{keyPath:'id'});
+         if(!store.indexNames.contains('ownerId'))
+           store.createIndex('ownerId','ownerId',{unique:false});
+         if(!store.indexNames.contains('ownerFingerprint'))
+           store.createIndex('ownerFingerprint','ownerFingerprint',{unique:true});
        };
        request.onsuccess=()=>resolve(request.result);
        request.onerror=()=>reject(request.error||new Error('Erro ao abrir armazenamento local'));
@@ -72,7 +91,7 @@
      list:ownerId=>operation('readonly',store=>store.index('ownerId').getAll(String(ownerId)))
    };
  }
- function createQueue({store=openIndexedDB(),send,bus=createEventBus(),now=()=>Date.now(),
+ function createQueue({store=openIndexedDB(),send,checkStatus=null,bus=createEventBus(),now=()=>Date.now(),
    createId=()=>root.crypto?.randomUUID?.()||('op-'+Date.now()+'-'+Math.random().toString(36).slice(2))}={}){
    if(typeof send!=='function')throw new Error('Transportador de comandos obrigatório');
    const inFlight=new Map();
@@ -90,7 +109,7 @@
        let response;
        try{response=await send({method:record.method,path:record.path,body:record.body,ownerId:record.ownerId})}
        catch(error){
-         await store.put({...record,status:'pending',lastAttemptAt:now(),lastError:'Sem conexão'});
+         await store.put({...record,status:'INCERTO',lastAttemptAt:now(),lastError:'Sem conexão'});
          notify('pending',record);
          throw pendingError();
        }
@@ -100,12 +119,12 @@
          return response;
        }
        if(response?.status===401||response?.status===403){
-         await store.put({...record,status:'auth',lastAttemptAt:now(),lastError:'Acesso necessário'});
+         await store.put({...record,status:'AGUARDANDO_LOGIN',lastAttemptAt:now(),lastError:'Acesso necessário'});
          notify('pending',record);
          return response;
        }
        if(!response||response.status===408||response.status===429||response.status>=500){
-         await store.put({...record,status:'pending',lastAttemptAt:now(),lastError:'Sem confirmação do servidor'});
+         await store.put({...record,status:'INCERTO',lastAttemptAt:now(),lastError:'Sem confirmação do servidor'});
          notify('pending',record);
          throw pendingError();
        }
@@ -119,7 +138,7 @@
    }
    async function execute({ownerId,path,method='POST',body={}}){
      const verb=String(method).toUpperCase();
-     if(!isQueueable(path,body))return send({ownerId,path,method:verb,body});
+     if(!isQueueable(path,body,verb))return send({ownerId,path,method:verb,body});
      if(ownerId===null||ownerId===undefined||ownerId==='')throw new Error('Sessão necessária para salvar operação');
      const user=String(ownerId);
      const requestId=String(body.requestId||createId());
@@ -135,8 +154,10 @@
        if(pending.some(r=>fingerprint(r.method,r.path,r.body)===hash))
          throw pendingError();
      }
+     const classification=commandClassification(verb,path);
      const record=existing||{id,ownerId:user,method:verb,path,body:payload,
-       createdAt:now(),status:'sending'};
+       ownerFingerprint:user+':'+hash,autoReplay:classification.autoReplay,
+       createdAt:now(),status:'ENVIADO'};
      // Persistência ANTES de chamar HTTP: em caso de queda nada é perdido.
      await store.put(record);
      return attempt(record);
@@ -148,9 +169,19 @@
        let count=0;
        const entries=(await store.list(String(ownerId))).sort((a,b)=>a.createdAt-b.createdAt);
        for(const record of entries){
-         if(!manual&&now()-record.createdAt>maxAutoAgeMs)continue;
-         if(record.status==='auth'&&!manual)continue;
+         if(!manual&&(now()-record.createdAt>maxAutoAgeMs||record.autoReplay===false))continue;
+         if(record.status==='AGUARDANDO_LOGIN'&&!manual)continue;
          try{
+           if(checkStatus){
+             const state=await checkStatus(record);
+             if(state==='CONFIRMED'){
+               await store.delete(record.id);
+               notify('confirmed',record);
+               count++;
+               continue;
+             }
+             if(state!=='UNKNOWN')break;
+           }
            const response=await attempt(record);
            if(response?.ok)count++;
            else if(response?.status===401||response?.status===403)break;
@@ -163,7 +194,7 @@
      })().finally(()=>{replaying=null});
      return replaying;
    }
-   return {execute,replay,list:ownerId=>store.list(String(ownerId)),bus};
+   return {execute,replay,list:ownerId=>store.list(String(ownerId)),bus,commandClassification};
  }
  root.OficinaCommands={createQueue,createEventBus,openIndexedDB,isQueueable};
 })(window);
