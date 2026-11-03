@@ -188,6 +188,9 @@ try {
     return part.id;
   });
   if (!seedPart) throw new Error('Peca de QA nao foi criada');
+  await page.locator('#modalClose').click();
+  await page.locator('#modal').waitFor({ state: 'hidden' });
+  await page.locator('.os-card[data-os="' + exceptionId + '"]').click();
   await page.locator('#partBtn').click();
   await page.locator('#modalBody select[name="partId"]').selectOption(String(seedPart));
   await page.locator('#modalBody input[name="quantity"]').fill('1');
