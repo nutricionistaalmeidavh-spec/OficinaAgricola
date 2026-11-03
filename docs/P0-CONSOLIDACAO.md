@@ -29,3 +29,20 @@ Anexos Windows: `%LOCALAPPDATA%\\ArtiSys\\Oficina\\storage\\uploads`.
 - Módulo fiscal não foi conectado à oficina nesta fase.
 - Unificação não é a migração automática de bases de clientes distintas.
 - Confirmação real de hardware/impressoras e homologação fiscal não fazem parte do P0.
+
+## Perfil multimarcas (branch P0)
+
+- O mesmo banco e runtime oferecem perfis MISTA, AUTOMOTIVA e AGRICOLA, configuráveis na empresa, sem migração destrutiva e sem mudança de ID de instalação.
+- Veículos: placa, VIN, RENAVAM (formato de 11 dígitos, sem consulta DETRAN), motorização, combustível, km e horímetro.
+- Peças: cadastro de aplicações por marca/modelo/faixa de ano/motor/combustível. Apenas aplicações explícitas aparecem na consulta; elas NÃO confirmam homologação OEM.
+- OBD-II: leitura de DTCs armazenados via ELM327 USB/serial (Web Serial) no PC principal, com comandos somente leitura e captura opcional da OS. Requer dispositivo físico compatível e avaliação em veículo real; sem adapter, não há captura real. Suporta quadro mode 03 com e sem contador CAN; não executa apagamento de DTCs ou escrita na ECU.
+- Manutenção: planos com vencimento por qualquer limite atingido (data/km/horas), alertas locais na Agenda, registro de execução e recálculo dos próximos marcos, com histórico vinculado ao veículo/OS. Alertas são calculados ao consultar, sem push remoto.
+- Núcleo local R$0. Não adiciona dependência, serviço externo ou segredo. Integração fiscal real continua independente e desativada.
+
+
+## Interfaces físicas J2534 e J1939 (branch)
+- J2534 ISO15765: captura de consultas OBD-II genéricas de leitura em Windows quando existe driver Pass-Thru 04.04 registrado e compatível com a arquitetura do Python instalado. O operador escolhe o driver instalado. Não oferece codificação, apagar DTC ou programação de ECU.
+- J1939: captura **passiva** de mensagens CAN de máquinas agrícolas/comerciais, sem transmitir no barramento. Linux SocketCAN nativo ou biblioteca opcional open source `python-can` com interface compatível (PCAN, Kvaser, Vector, etc.); decodifica PGNs padrão de RPM, temperatura, horímetro e DM1 SPN/FMI. A cobertura por ECU depende dos PGNs efetivamente transmitidos; não há garantia de DM1 multipacote.
+- Seleção disponível na UI; sondagem do driver e erros explícitos se não houver dispositivo. Operação restrita ao computador principal (loopback), com login e RBAC; leituras gravadas na ficha/OS somente após validação canônica.
+- No Windows, Python 3 e o driver do hardware são requisitos **opcionais** somente para J2534/J1939; nunca são cobrados automaticamente. O núcleo do ArtiSys Oficina não depende desses componentes.
+- Scripts Python incluídos no instalador fora do ASAR; não instala driver de terceiros nem altera segredos.

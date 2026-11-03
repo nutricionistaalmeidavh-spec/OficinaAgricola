@@ -1,6 +1,7 @@
 import { lowStockParts } from './inventory.js';
 import { listSchedule } from './operations.js';
 import { financeSummary } from './finance.js';
+import {listMaintenanceAlerts} from './automotive.js';
 
 export function dashboardData(db,{now=new Date(),role='ADMIN'}={}){
   const statuses=['ENTRADA','DIAGNOSTICO','ORCAMENTO','AGUARDANDO_APROVACAO','APROVADA','EM_SERVICO','PRONTA','ENTREGUE','CANCELADA','REPROVADA']; const counts={};
@@ -26,5 +27,5 @@ export function dashboardData(db,{now=new Date(),role='ADMIN'}={}){
   const upcoming=listSchedule(db,{from:now.toISOString(),to:new Date(now.getTime()+30*24*60*60*1000).toISOString()}).slice(0,8);
   const lowStock=lowStockParts(db);
   counts.ESTOQUE_CRITICO=lowStock.length;
-  return {...(finance?{finance}:{}),counts,board,upcoming,lowStock};
+  return {...(finance?{finance}:{}),counts,board,upcoming,lowStock,maintenanceAlerts:listMaintenanceAlerts(db).slice(0,8)};
 }

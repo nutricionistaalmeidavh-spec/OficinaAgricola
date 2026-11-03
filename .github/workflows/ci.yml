@@ -31,7 +31,7 @@ jobs:
         run: npm run lint
       - name: ACBrLib Python syntax and offline unit tests
         run: |
-          python3 -m py_compile src/platform/acbrlib-worker.py
+          python3 -m py_compile src/platform/acbrlib-worker.py src/platform/diagnostic-worker.py
           python3 -m unittest discover -s tests/python -p 'test_*.py'
       - name: Test
         run: npm test
