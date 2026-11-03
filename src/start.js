@@ -1,4 +1,5 @@
 import { resolveDatabasePath, resolveStoragePath } from './platform/data-location.js';
+import {readFileSync} from 'node:fs';
 import { openDatabase, migrate } from './db.js';
 import { seed } from './seed.js';
 import { migrateAssistencia } from './assistencia-schema.js';
@@ -38,12 +39,16 @@ function reconcile(){
 }
 const reconciliationTimer=setInterval(reconcile,60000);
 reconciliationTimer.unref?.();
-const server = createAssistenciaServer({ db, storageDir: process.env.STORAGE_DIR, eventRuntime });
 const { port, host } = resolveServerConfig(process.env);
+const tls=process.env.HTTPS_CERT_FILE&&process.env.HTTPS_KEY_FILE?{
+  cert:readFileSync(process.env.HTTPS_CERT_FILE),
+  key:readFileSync(process.env.HTTPS_KEY_FILE)
+}:null;
+const server = createAssistenciaServer({ db, storageDir: process.env.STORAGE_DIR, eventRuntime, tls });
 
 server.listen(port, host, () => {
-  console.log(`ArtiSys Oficina em http://${host}:${port}`);
-  for (const url of listLanUrls({ port })) console.log(`Rede local: ${url}`);
+  console.log(`ArtiSys Oficina em ${tls?'https':'http'}://${host}:${port}`);
+  if(tls)for(const url of listLanUrls({ port }))console.log(`Rede local HTTPS: ${url}`);
   flushEvents();
   reconcile();
 });
