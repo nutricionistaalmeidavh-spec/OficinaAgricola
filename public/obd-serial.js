@@ -32,7 +32,9 @@ async function readElm327StoredDtc(baudRate=38400){
     await issue('ATL0');
     await issue('ATS1');
     await issue('ATH0');
-    return await issue('03');
+    const protocol=(await issue('ATDP')).replace(/>/g,'').trim().slice(0,70);
+    const rawResponse=await issue('03');
+    return {rawResponse,protocol};
   }finally{
     try{await reader?.cancel()}catch{}
     try{reader?.releaseLock()}catch{}

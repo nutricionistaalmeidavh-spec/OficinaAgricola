@@ -29,3 +29,12 @@ Anexos Windows: `%LOCALAPPDATA%\\ArtiSys\\Oficina\\storage\\uploads`.
 - Módulo fiscal não foi conectado à oficina nesta fase.
 - Unificação não é a migração automática de bases de clientes distintas.
 - Confirmação real de hardware/impressoras e homologação fiscal não fazem parte do P0.
+
+## Perfil multimarcas (branch P0)
+
+- O mesmo banco e runtime oferecem perfis MISTA, AUTOMOTIVA e AGRICOLA, configuráveis na empresa, sem migração destrutiva e sem mudança de ID de instalação.
+- Veículos: placa, VIN, RENAVAM (formato de 11 dígitos, sem consulta DETRAN), motorização, combustível, km e horímetro.
+- Peças: cadastro de aplicações por marca/modelo/faixa de ano/motor/combustível. Apenas aplicações explícitas aparecem na consulta; elas NÃO confirmam homologação OEM.
+- OBD-II: leitura de DTCs armazenados via ELM327 USB/serial (Web Serial) no PC principal, com comandos somente leitura e captura opcional da OS. Requer dispositivo físico compatível e avaliação em veículo real; sem adapter, não há captura real. Suporta quadro mode 03 com e sem contador CAN; não executa apagamento de DTCs ou escrita na ECU.
+- Manutenção: planos com vencimento por qualquer limite atingido (data/km/horas), alertas locais na Agenda, registro de execução e recálculo dos próximos marcos, com histórico vinculado ao veículo/OS. Alertas são calculados ao consultar, sem push remoto.
+- Núcleo local R$0. Não adiciona dependência, serviço externo ou segredo. Integração fiscal real continua independente e desativada.

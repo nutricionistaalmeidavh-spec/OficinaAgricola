@@ -95,10 +95,10 @@ function obdScanModal(machineId){
     const button=$('#obdRead'),progress=$('#obdProgress');button.disabled=true;
     progress.textContent='Solicitando porta serial e consultando ECU...';
     try{
-      const rawResponse=await readElm327StoredDtc(Number($('#obdBaud').value));
+      const {rawResponse,protocol}=await readElm327StoredDtc(Number($('#obdBaud').value));
       const os=Number($('#obdWorkOrder').value);
       const saved=await api('/api/machines/'+machineId+'/obd-scans',{method:'POST',body:{
-        protocol:'ELM327 Web Serial (Modo 03)',rawResponse,
+        protocol:'ELM327 '+protocol,rawResponse,
         ...(os?{workOrderId:os}:{}),requestId:newCommandId()}});
       const codes=JSON.parse(saved.codes_json);
       toast(codes.length?'Códigos registrados: '+codes.join(', '):'Leitura registrada: sem DTCs');
