@@ -44,11 +44,15 @@ test('Windows fiscal bundle é obrigatório no NSIS e validado em instalação l
  assert.doesNotMatch(flow,/acbrlib-pro|download.*demo|ACBr Pro/i);
 });
 
-test('Smoke NSIS executa o bloco fiscal íntegro antes de iniciar o app (sem trecho duplicado)',()=>{
+test('Smoke NSIS executa bloco fiscal íntegro antes de iniciar app (sem trecho duplicado)',()=>{
  const smoke=readFileSync('scripts/smoke-installer.ps1','utf8');
- assert.equal((smoke.match(/\\$hostUrl = 'http:\/\/127\\.0\\.0\\.1:3344'/g)||[]).length,1);
- assert.equal((smoke.match(/\\$appProcess = \\$null/g)||[]).length,1);
- assert.equal((smoke.match(/PACOTE ACBr adulterado|Pacote ACBr adulterado/g)||[]).length,1);
- assert.match(smoke,/foreach \(\\$file in \\$manifest\\.files\\.PSObject\\.Properties\) \{[\\s\\S]*?\\$worker = Join-Path \\$fiscalDir 'acbrlib-worker\\.exe'/);
- assert.ok(smoke.indexOf("PASS: worker standalone") < smoke.indexOf("$hostUrl = 'http://127.0.0.1:3344'"));
+ const count=fragment=>smoke.split(fragment).length-1;
+ assert.equal(count("$hostUrl = 'http://127.0.0.1:3344'"),1);
+ assert.equal(count('$appProcess = $null'),1);
+ assert.equal(count('Pacote ACBr adulterado'),1);
+ const iter=smoke.indexOf('foreach ($file in $manifest.files.PSObject.Properties) {');
+ const worker=smoke.indexOf("$worker = Join-Path $fiscalDir 'acbrlib-worker.exe'");
+ const host=smoke.indexOf("$hostUrl = 'http://127.0.0.1:3344'");
+ assert.ok(iter>=0 && worker>iter && host>worker);
+ assert.ok(smoke.indexOf('PASS: worker standalone')<host);
 });
