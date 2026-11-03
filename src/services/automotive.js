@@ -103,7 +103,14 @@ export function createDiagnosticScan(db,machineId,input){
     const notes=text(input.notes);
     if(notes.length>1500)throw new Error('Observação excede 1500 caracteres');
     let raw,protocol,codes,adapterId='ELM327_SERIAL',source='REAL',details={};
-    if(input.responses){
+    if(input.adapterId==='J1939'){
+      const captured=parseDiagnosticCapture(input);
+      raw=JSON.stringify(captured.j1939.frames.slice(0,20));
+      protocol=captured.protocol;
+      codes=captured.storedCodes;
+      adapterId='J1939';source='REAL';
+      details=captured;
+    }else if(input.responses){
       const captured=parseDiagnosticCapture(input);
       raw=String(input.responses['03']||Object.values(input.responses)[0]||'');
       protocol=captured.protocol;
