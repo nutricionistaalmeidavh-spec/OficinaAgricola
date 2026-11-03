@@ -100,7 +100,7 @@ try{
   await page.locator('#pendingCommands').waitFor({state:'visible'});
   if(!swallowedReply)throw new Error('Interceptação de resposta perdida não ocorreu');
   const queued=await page.evaluate(async()=>{
-    const commands=await window.OficinaCommands.openIndexedDB().list(state.user.id);
+    const commands=await window.OficinaCommands.openIndexedDB().list(currentCommandOwner());
     return commands.map(c=>({
       method:c.method,path:c.path,requestId:c.body.requestId,
       hasToken:JSON.stringify(c).includes('Bearer ')
@@ -114,7 +114,7 @@ try{
   await page.locator('#appView').waitFor({state:'visible'});
   await page.waitForFunction(async()=>{
     if(!state.user)return false;
-    return (await window.OficinaCommands.openIndexedDB().list(state.user.id)).length===0;
+    return (await window.OficinaCommands.openIndexedDB().list(currentCommandOwner())).length===0;
   },null,{timeout:20000});
   const afterReplay=await page.evaluate(()=>api('/api/customers'));
   if(afterReplay.filter(c=>c.name===missingReplyName).length!==1)
