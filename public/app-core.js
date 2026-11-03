@@ -1,6 +1,9 @@
 const $=(s,root=document)=>root.querySelector(s); const $$=(s,root=document)=>[...root.querySelectorAll(s)];
 const state={token:localStorage.getItem('oficina_token')||'',user:null,page:'dashboard',pageReady:false,pageEpoch:0,pageController:null,modalToken:null,modalKey:null};
 const dirtyInputs=new WeakSet();
+// ID + usuário evita reenviar comandos para outra conta quando um banco for recriado.
+const currentCommandOwner=()=>state.user?
+  String(state.user.id)+':'+String(state.user.username||''):null;
 const commandQueue=window.OficinaCommands?.createQueue({
   send:({path,method,body})=>{
     // Autorizações nunca entram no IndexedDB; cada envio usa a sessão atual.
@@ -14,10 +17,10 @@ async function updatePendingCommands(){
   const button=$('#pendingCommands');
   if(!button)return;
   if(!commandQueue||!state.user){button.classList.add('hidden');return}
-  const owner=String(state.user.id);
+  const owner=currentCommandOwner();
   try{
     const pending=await commandQueue.list(owner);
-    if(!state.user||String(state.user.id)!==owner)return;
+    if(!state.user||currentCommandOwner()!==owner)return;
     const count=pending.length;
     button.classList.toggle('hidden',count===0);
     button.textContent=count===0?'':count===1
@@ -32,10 +35,10 @@ async function updatePendingCommands(){
 }
 async function resumePendingCommands(manual=false){
   if(!commandQueue||!state.user)return;
-  const owner=String(state.user.id);
+  const owner=currentCommandOwner();
   try{
     const confirmed=await commandQueue.replay(owner,{manual});
-    if(!state.user||String(state.user.id)!==owner)return;
+    if(!state.user||currentCommandOwner()!==owner)return;
     if(confirmed>0){
       toast(confirmed===1?'Operação pendente confirmada':confirmed+' operações confirmadas');
       await refreshCurrentPage();
@@ -137,7 +140,7 @@ async function api(path,{method='GET',body,raw=false}={}){
   const isRead=method==='GET',epoch=state.pageEpoch;
   const signal=isRead?state.pageController?.signal:undefined;
   const res=!isRead&&!raw&&commandQueue&&state.user
-    ?await commandQueue.execute({ownerId:state.user.id,path,method,body:body||{}})
+    ?await commandQueue.execute({ownerId:currentCommandOwner(),path,method,body:body||{}})
     :await requester(path,{method,headers,signal,body:body===undefined?undefined:JSON.stringify(body)});
   if(isRead&&(signal?.aborted||epoch!==state.pageEpoch))throw new DOMException('Consulta obsoleta','AbortError');
   if(res.status===401){logout();throw new Error('Sessão expirada')}
