@@ -25,6 +25,6 @@ O core funciona sem Cloudflare, AWS, serviço de banco pago ou licenciamento men
 
 ## Segurança de rede
 
-O processo Node permanece ligado a 127.0.0.1 e o reverse proxy no mesmo host encerra HTTPS. Não configure HOST=0.0.0.0 sem certificados válidos diretamente no Node; a aplicação impede abertura remota em HTTP por padrão.
+O processo Node permanece ligado a 127.0.0.1 e o reverse proxy no mesmo host encerra HTTPS. Configure TRUST_LOOPBACK_PROXY=1 para validar Origin HTTPS, cookies Secure e HSTS; cabeçalhos enviados de conexões não-loopback nunca são aceitos como prova de TLS. Não configure HOST=0.0.0.0 sem certificados válidos diretamente no Node; a aplicação impede abertura remota em HTTP por padrão.
 
 Para várias empresas completamente isoladas, use empresas/unidades com autenticação no registro central e confirme sempre o contexto antes das operações.
