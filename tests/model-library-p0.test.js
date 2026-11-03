@@ -38,6 +38,7 @@ test('P0: tela está integrada à navegação desktop e mobile, sem baixar GLBs'
   const core = await read('public/app-core.js');
   const sw = await read('public/sw.js');
   const css = await read('public/model-library.css');
+  const machines = await read('public/app-catalog.js');
   assert.match(html,/data-page="model-library"/);
   assert.match(html,/data-mobile-page="model-library"/);
   assert.match(html,/src="\/model-library\.js"/);
@@ -46,6 +47,8 @@ test('P0: tela está integrada à navegação desktop e mobile, sem baixar GLBs'
   assert.match(sw,/\/carros3d\/catalog\.json/);
   assert.match(sw,/\/model-library\.js/);
   assert.match(css,/@media/);
+  assert.match(machines,/id="openModelLibrary"/);
+  assert.match(machines,/navigate\('model-library'\)/);
   const assets = await readdir(new URL('../public/carros3d/', import.meta.url));
   assert.ok(!assets.some(name=>name.endsWith('.glb')));
 });
