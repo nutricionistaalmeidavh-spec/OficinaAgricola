@@ -20,7 +20,11 @@ Write-Host '[5/6] E2E...'
 npm run test:e2e
 if ($LASTEXITCODE -ne 0) { throw 'E2E falhou.' }
 
-Write-Host '[6/6] Gerando instalador Electron Windows x64...'
+Write-Host '[6/7] Compilando a ponte offline de diagnóstico (Python embutido)...'
+& (Join-Path $PSScriptRoot 'build-diagnostic-bridge.ps1')
+if ($LASTEXITCODE -ne 0) { throw 'Falha no empacotamento da ponte de diagnóstico' }
+
+Write-Host '[7/7] Gerando instalador Electron Windows x64...'
 npx electron-builder --win nsis --x64 --publish never
 if ($LASTEXITCODE -ne 0) { throw 'Empacotamento Electron falhou.' }
 
