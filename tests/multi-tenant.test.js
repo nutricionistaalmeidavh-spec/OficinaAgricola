@@ -89,4 +89,8 @@ test('HTTP isolation: company and unit records, member roles and revoked access'
   const revocation=await request('PATCH','/api/tenancy/memberships',{unitId:unit.data.id,userId:member.data.id,role:'TECNICO',active:false});
   assert.equal(revocation.status,200);
   assert.equal((await request('GET','/api/customers',undefined,unit.data.id,staffToken)).status,403);
+  const audit=await request('GET','/api/tenancy/audit?companyId='+newCompany.data.id);
+  assert.equal(audit.status,200,JSON.stringify(audit.data));
+  assert.ok(audit.data.some(entry=>entry.action==='MEMBERSHIP_CHANGED'&&entry.target_user_id===member.data.id));
+  assert.equal((await request('GET','/api/tenancy/audit?companyId='+newCompany.data.id,undefined,unit.data.id,staffToken)).status,403);
 });
