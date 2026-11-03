@@ -43,3 +43,12 @@ test('Windows fiscal bundle é obrigatório no NSIS e validado em instalação l
  assert.match(stage,/acbr-bundle\.json/);
  assert.doesNotMatch(flow,/acbrlib-pro|download.*demo|ACBr Pro/i);
 });
+
+test('Smoke NSIS executa o bloco fiscal íntegro antes de iniciar o app (sem trecho duplicado)',()=>{
+ const smoke=readFileSync('scripts/smoke-installer.ps1','utf8');
+ assert.equal((smoke.match(/\\$hostUrl = 'http:\/\/127\\.0\\.0\\.1:3344'/g)||[]).length,1);
+ assert.equal((smoke.match(/\\$appProcess = \\$null/g)||[]).length,1);
+ assert.equal((smoke.match(/PACOTE ACBr adulterado|Pacote ACBr adulterado/g)||[]).length,1);
+ assert.match(smoke,/foreach \(\\$file in \\$manifest\\.files\\.PSObject\\.Properties\) \{[\\s\\S]*?\\$worker = Join-Path \\$fiscalDir 'acbrlib-worker\\.exe'/);
+ assert.ok(smoke.indexOf("PASS: worker standalone") < smoke.indexOf("$hostUrl = 'http://127.0.0.1:3344'"));
+});
