@@ -32,7 +32,7 @@ test('critical workshop flow works end-to-end through HTTP API', async (t)=>{
   await request(base,`/api/work-orders/${os.id}/parts`,{method:'POST',token,body:{partId:part.id,quantity:1}});
   const templates=await request(base,'/api/checklist-templates',{token}); const entry=templates.find(x=>x.kind==='ENTRADA');
   await request(base,`/api/work-orders/${os.id}/checklists`,{method:'POST',token,body:{templateId:entry.id,responses:[{position:1,response:'OK'}]}});
-  await request(base,`/api/work-orders/${os.id}/attachments`,{method:'POST',token,body:{category:'DIAGNOSTICO',caption:'Bomba',originalName:'bomba.jpg',mimeType:'image/jpeg',base64:Buffer.from('foto').toString('base64')}});
+  await request(base,`/api/work-orders/${os.id}/attachments`,{method:'POST',token,body:{category:'DIAGNOSTICO',caption:'Bomba',originalName:'bomba.jpg',mimeType:'image/jpeg',base64:Buffer.from([0xff,0xd8,0xff,0xd9]).toString('base64')}});
   const attachments=await request(base,`/api/work-orders/${os.id}/attachments`,{token}); assert.equal(attachments.length,1);
   const file=await request(base,`/api/attachments/${attachments[0].id}/file`,{token,raw:true}); assert.equal(file,'foto');
   await request(base,`/api/work-orders/${os.id}/status`,{method:'POST',token,body:{status:'EM_SERVICO'}});
