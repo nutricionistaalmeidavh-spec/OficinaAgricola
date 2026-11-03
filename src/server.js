@@ -133,8 +133,8 @@ function createRouter({db,storageDir}){
     const method=url.searchParams.get('method'),path=url.searchParams.get('path'),requestId=url.searchParams.get('requestId');
     if(!['POST','PATCH','PUT','DELETE'].includes(method)||!path?.startsWith('/api/')||!/^[A-Za-z0-9_:.-]{3,128}$/.test(requestId||''))throw new Error('Consulta de operação inválida');
     const scope=`http:${method}:${path}:user:${user.id}`;
-    const found=db.prepare('SELECT 1 FROM command_idempotency WHERE scope=? AND request_id=?').get(scope,requestId);
-    return {status:found?'CONFIRMED':'UNKNOWN',requestId};
+    const found=db.prepare('SELECT result_json FROM command_idempotency WHERE scope=? AND request_id=?').get(scope,requestId);
+    return {status:found?'CONFIRMED':'UNKNOWN',requestId,...(found?{result:JSON.parse(found.result_json)}:{})};
   });
   add('GET','/api/dashboard',ROLE_ALL,({user})=>dashboardData(db,{role:user.role}));
   return r;
