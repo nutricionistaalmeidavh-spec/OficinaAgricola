@@ -14,7 +14,7 @@ import { createApprovalLink } from '../services/market-parity.js';
 import {
   migrateTenantRegistry, registerInitialAdmin, listUserUnits, requireUnitMembership,
   requireCompanyAdmin, createTenantCompany, createTenantUnit, grantUnitMembership,
-  changeUnitMembership, listUnitMembers
+  changeUnitMembership, listUnitMembers, markLegacyRegistryLink
 } from './tenant-registry.js';
 
 const json=(res,status,data)=>{if(res.writableEnded)return;res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(data));};
@@ -108,6 +108,7 @@ export function createMultiTenantServer({
       const user=transaction(registryDb,()=>{
         const created=initializeAdmin(registryDb,req,body);
         registerInitialAdmin(registryDb,created.id);
+        markLegacyRegistryLink(legacyDb);
         return created;
       });
       return json(res,200,user);
