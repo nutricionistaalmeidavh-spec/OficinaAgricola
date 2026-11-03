@@ -141,13 +141,20 @@ export async function submitFiscalDocument(db,id,{provider}={}){
   if(doc.status==='INDETERMINADO')throw new Error('Documento fiscal indeterminado: consulte e concilie antes de nova tentativa');
   if(doc.status!=='RASCUNHO')throw new Error('Documento fiscal não permite nova transmissão');
   if(!provider||typeof provider.transmit!=='function')throw new Error('Emissor fiscal não configurado: nenhuma nota foi enviada');
-  assertFiscalReady(db,doc);
+  const settings=assertFiscalReady(db,doc);
+  // Snapshot fiscal do emitente é imutável a partir da primeira tentativa.
+  // Nunca armazenar certificado digital, senha ou tokens em SQLite.
+  const issuer={
+    cnpj:settings.issuer_cnpj,uf:settings.issuer_uf,municipalityIbge:settings.municipality_ibge,
+    taxRegime:settings.tax_regime,stateRegistration:settings.state_registration,
+    municipalRegistration:settings.municipal_registration,environment:settings.environment
+  };
   const attemptId=randomUUID(),providerName=text(provider.name||'local');
   transaction(db,()=>{
-    const change=db.prepare("UPDATE fiscal_documents SET status='INDETERMINADO',provider_name=?,attempt_id=?,updated_at=? WHERE id=? AND status='RASCUNHO'")
-      .run(providerName,attemptId,nowIso(),id);
+    const change=db.prepare("UPDATE fiscal_documents SET status='INDETERMINADO',provider_name=?,attempt_id=?,issuer_snapshot_json=?,updated_at=? WHERE id=? AND status='RASCUNHO'")
+      .run(providerName,attemptId,JSON.stringify(issuer),nowIso(),id);
     if(change.changes!==1)throw new Error('Documento fiscal já está em processamento');
-    addEvent(db,id,'TRANSMISSAO_INICIADA',{attemptId,provider:providerName});
+    addEvent(db,id,'TRANSMISSAO_INICIADA',{attemptId,provider:providerName,issuerSnapshotHash:sha(JSON.stringify(issuer))});
   });
   try{
     const result=await provider.transmit({document:getFiscalDocument(db,id),attemptId});
