@@ -123,7 +123,16 @@ export function duplicateWorkOrder(db,id,input={}){
 export function transitionWorkOrderInTransaction(db,id,toStatus,{reason='',changedBy=null,expectedVersion=null}={}){
   const old=getWorkOrder(db,id);
   if(expectedVersion!==null&&Number(expectedVersion)!==Number(old.version))throw new Error('Conflito de versão: OS alterada por outro funcionário');
-  assertTransition(old.status,toStatus); const t=nowIso();
+  assertTransition(old.status,toStatus);
+  // Nunca encerrar uma OS com baixa de estoque ou dinheiro ainda ativos.
+  // Os estornos permanecem atos explícitos e auditáveis: nada é compensado silenciosamente.
+  if(toStatus==='CANCELADA'){
+    const parts=db.prepare('SELECT COUNT(*) n FROM work_order_parts WHERE work_order_id=? AND reversed_at IS NULL').get(id).n;
+    if(parts)throw new Error('A OS não pode ser cancelada enquanto houver peças consumidas sem estorno');
+    const receipts=db.prepare('SELECT COUNT(*) n FROM receipts WHERE work_order_id=? AND reversed_at IS NULL').get(id).n;
+    if(receipts)throw new Error('A OS não pode ser cancelada enquanto houver recebimentos sem estorno');
+  }
+  const t=nowIso();
   let completed=old.completed_at, delivered=old.delivered_at;
   if(toStatus==='PRONTA') completed=t;
   if(toStatus==='ENTREGUE') delivered=t;

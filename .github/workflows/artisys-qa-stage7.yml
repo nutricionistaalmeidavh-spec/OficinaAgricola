@@ -44,6 +44,12 @@ jobs:
         run: |
           node scripts/qa-demo.mjs ${{ matrix.viewport }} "$PWD/qa-artifacts"
 
+      - name: Full customer to delivery UI journey (isolated DB)
+        run: |
+          rm -rf .qa
+          DATABASE_PATH=.qa/artisys-oficina.sqlite STORAGE_DIR=.qa/uploads EVENT_LOG_PATH=.qa/events.jsonl NODE_ENV=development node scripts/seed-qa-demo.mjs
+          node scripts/qa-cliente-os.mjs ${{ matrix.viewport }} "$PWD/qa-artifacts/jornada"
+
       - name: Upload QA screenshots, video and logs
         if: always()
         uses: actions/upload-artifact@v4

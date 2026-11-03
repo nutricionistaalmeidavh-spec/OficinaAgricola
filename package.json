@@ -11,7 +11,7 @@
     "dev": "node --watch src/start.js",
     "start": "node src/start.js",
     "test": "node --test tests/*.test.js",
-    "test:e2e": "node --test tests/e2e.test.js",
+    "test:e2e": "node --test tests/e2e.test.js tests/jornada-cliente-os.e2e.test.js tests/jornada-resiliencia.e2e.test.js",
     "lint": "node scripts/lint.mjs",
     "build": "node scripts/build.mjs",
     "ci": "npm run lint && npm test && npm run build && npm run test:e2e",

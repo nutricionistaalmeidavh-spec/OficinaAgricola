@@ -14,6 +14,7 @@ export function saveQuote(db,workOrderId,input){
   return transaction(db,()=>{
     let os=getWorkOrder(db,workOrderId);
     if(['APROVADA','EM_SERVICO','PRONTA','ENTREGUE','CANCELADA'].includes(os.status)) throw new Error('Orçamento não pode ser alterado neste status');
+    if(os.status==='AGUARDANDO_APROVACAO') throw new Error('Orçamento não pode ser alterado enquanto aguarda aprovação; reprove e reenvie a proposta');
     if(os.status==='DIAGNOSTICO') os=transitionWorkOrderInTransaction(db,os.id,'ORCAMENTO',{reason:'Orçamento iniciado'});
     else if(os.status==='REPROVADA') os=transitionWorkOrderInTransaction(db,os.id,'ORCAMENTO',{reason:'Orçamento revisado'});
     if(os.status!=='ORCAMENTO' && os.status!=='AGUARDANDO_APROVACAO') throw new Error('OS não está pronta para orçamento');
