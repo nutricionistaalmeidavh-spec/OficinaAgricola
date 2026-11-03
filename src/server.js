@@ -70,6 +70,18 @@ function createRouter({db,storageDir,loginLimiter}){
   },{publicRoute:true});
   add('POST','/api/auth/logout',ROLE_ALL,({token})=>{logout(db,token);return {ok:true}});
   add('GET','/api/auth/me',ROLE_ALL,({user})=>user);
+  add('GET','/api/commands/:requestId/status',ROLE_ALL,({params,url,user})=>{
+    const method=String(url.searchParams.get('method')||'POST').toUpperCase();
+    const path=String(url.searchParams.get('path')||'');
+    if(!['POST','PATCH','PUT','DELETE'].includes(method)||!/^\/api\/[a-z0-9/_:-]+$/i.test(path))
+      throw new Error('Comando inválido');
+    const scope=`http:${method}:${path}:user:${user.id}`;
+    const row=db.prepare('SELECT 1 FROM command_idempotency WHERE scope=? AND request_id=?')
+      .get(scope,params.requestId);
+    // Resposta mínima: não expor outros dados de usuários ou entidades.
+    return {state:row?'CONFIRMED':'UNKNOWN'};
+  });
+
 
   add('GET','/api/company',ROLE_ALL,()=>getCompanySettings(db));
   add('PATCH','/api/company',['ADMIN'],({body})=>updateCompanySettings(db,body));
