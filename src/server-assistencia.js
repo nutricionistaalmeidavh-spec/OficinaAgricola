@@ -5,6 +5,7 @@ import { createAppServer } from './server.js';
 import { migrateAssistencia } from './assistencia-schema.js';
 import {enqueueHttpEvent,dispatchOutbox} from './platform/outbox.js';
 import {runIdempotent} from './platform/idempotency.js';
+import {sessionTokenFrom,assertTrustedOrigin,setSecurityHeaders} from './platform/http-security.js';
 import {
   addCashMovement,
   cancelSale,
@@ -45,10 +46,7 @@ async function readJson(req, max = 4 * 1024 * 1024) {
   catch { throw new Error('JSON inválido'); }
 }
 
-function tokenFrom(req) {
-  const auth = req.headers.authorization || '';
-  return auth.startsWith('Bearer ') ? auth.slice(7).trim() : null;
-}
+const tokenFrom=sessionTokenFrom;
 
 function requireUser(db, req, allowed) {
   const user = validateSession(db, tokenFrom(req));
@@ -156,12 +154,14 @@ export function createAssistenciaServer({
   const baseServer = createAppServer({ db, storageDir, eventRuntime });
 
   return createServer(async (req, res) => {
+    setSecurityHeaders(res);
     const url = new URL(req.url || '/', 'http://localhost');
     if (!isAssistenciaApi(url.pathname)) {
       baseServer.emit('request', req, res);
       return;
     }
     try {
+      assertTrustedOrigin(req);
       const mutation=['POST','PUT','PATCH','DELETE'].includes(req.method||'');
       const body=mutation?await readJson(req):{};
       const actor=mutation?validateSession(db,tokenFrom(req)):null;
