@@ -109,7 +109,12 @@ function createRouter({db,storageDir,loginLimiter}){
   add('POST','/api/work-orders/:id/duplicate',ROLE_OFFICE,({params,body,user})=>
     duplicateWorkOrderWithQuote(db,int(params.id),body,{createdBy:user.id}));
   add('GET','/api/work-orders/:id',ROLE_ALL,({params})=>getWorkOrder(db,int(params.id)));
-  add('PATCH','/api/work-orders/:id',ROLE_TECH,({params,body,user})=>updateWorkOrder(db,int(params.id),body,{changedBy:user.id}));
+  add('PATCH','/api/work-orders/:id',ROLE_TECH,({params,body,user})=>{
+    if(!Number.isInteger(body.expectedVersion)||body.expectedVersion<1){
+      const error=new Error('Versão da OS obrigatória para evitar sobrescrita');error.statusCode=428;throw error;
+    }
+    return updateWorkOrder(db,int(params.id),body,{changedBy:user.id});
+  });
   add('POST','/api/work-orders/:id/status',ROLE_TECH,({params,body,user})=>transitionWorkOrder(db,int(params.id),body.status,{reason:body.reason,changedBy:user.id}));
   add('GET','/api/work-orders/:id/history',ROLE_ALL,({params})=>getWorkOrderHistory(db,int(params.id)));
 
