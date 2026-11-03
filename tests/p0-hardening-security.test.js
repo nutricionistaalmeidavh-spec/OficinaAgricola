@@ -98,3 +98,19 @@ test('P0 consulta do comando: status é isolado por usuário e retorna apenas re
  const foreign=await api.send('/api/commands/status'+qs,{token:tech});
  assert.equal(foreign.status,200);assert.equal(foreign.data.status,'UNKNOWN');
 });
+
+test('P0 API: escrita de OS exige versão explícita e rejeita comando de outra revisão',async t=>{
+ const {db,os}=database();
+ const api=await server(t,db),token=await api.login('admin');
+ const noVersion=await api.send(`/api/work-orders/${os.id}`,{method:'PATCH',token,body:{diagnosis:'Sem versão'}});
+ assert.equal(noVersion.status,428);
+ const first=await api.send(`/api/work-orders/${os.id}`,{method:'PATCH',token,
+   body:{diagnosis:'Atualização primeira',expectedVersion:1,requestId:'os-edit-p0-001'}});
+ assert.equal(first.status,200);assert.equal(first.data.version,2);
+ const stale=await api.send(`/api/work-orders/${os.id}`,{method:'PATCH',token,
+   body:{diagnosis:'Não pode sobrescrever',expectedVersion:1,requestId:'os-edit-p0-002'}});
+ assert.equal(stale.status,409);
+ const status=await api.send(`/api/work-orders/${os.id}/status`,{method:'POST',token,
+   body:{status:'DIAGNOSTICO'}});
+ assert.equal(status.status,428);
+});
