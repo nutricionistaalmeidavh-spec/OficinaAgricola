@@ -50,6 +50,14 @@ export function decodePid(pid,raw,{freezeFrame=false}={}){
  const value=Math.round(spec.convert(bytes)*100)/100;
  return {pid:key,name:spec.name,unit:spec.unit,value};
 }
+export function decodeReadiness(raw){
+ const data=extract(raw,'41');
+ if(data[0]!=='01')throw new Error('Resposta de prontidão inválida');
+ if(data.length<5)throw new Error('Resposta de prontidão truncada');
+ const bytes=data.slice(1,5).map(x=>parseInt(x,16));
+ if(bytes.some(v=>!Number.isInteger(v)))throw new Error('Prontidão inválida');
+ return {mil:!!(bytes[0]&128),storedDtcCount:bytes[0]&127,monitorBytes:bytes.slice(1)};
+}
 export function decodeDtcMode(mode,raw,{can=false}={}){
  const key=String(mode??'').toUpperCase(),header={'03':'43','07':'47','0A':'4A'}[key];
  if(!header)throw new Error('Modo de códigos não suportado');
@@ -99,7 +107,7 @@ export function parseDiagnosticCapture(input){
  const size=JSON.stringify({responses:input.responses,samples:input.samples||[]}).length;
  if(size>30000)throw new Error('Captura excede limite de tamanho');
  const result={adapterId,source,protocol:String(input.protocol||'').slice(0,80),storedCodes:[],
-  pendingCodes:[],permanentCodes:[],readings:{},freezeFrame:{},vin:null,samples:[],issues:[]};
+  pendingCodes:[],permanentCodes:[],readings:{},readiness:null,freezeFrame:{},vin:null,samples:[],issues:[]};
  let count=0;
  const pushIssue=(key,error)=>{if(result.issues.length<30)result.issues.push(key+': '+error.message.slice(0,110))};
  for(const [rawKey,raw] of Object.entries(input.responses)){
@@ -109,6 +117,7 @@ export function parseDiagnosticCapture(input){
     if(key==='03')result.storedCodes=decodeDtcMode('03',raw);
     else if(key==='07')result.pendingCodes=decodeDtcMode('07',raw);
     else if(key==='0A')result.permanentCodes=decodeDtcMode('0A',raw);
+    else if(key==='0101')result.readiness=decodeReadiness(raw);
     else if(specs[key])result.readings[key]=decodePid(key,raw);
     else if(key.startsWith('02')&&specs['01'+key.slice(2)])result.freezeFrame[key]=
       decodePid('01'+key.slice(2),raw,{freezeFrame:true});
