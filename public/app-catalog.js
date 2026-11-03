@@ -26,9 +26,9 @@ async function machineHistoryModal(id){
  $('#newWarranty').onclick=()=>maintenanceModal(id,'GARANTIA');
  $('#newMaintenancePlan').onclick=()=>maintenancePlanModal(id,m);
  $('#newObdScan').onclick=()=>diagnosticCaptureModal(id);
- $('[data-complete-plan]').forEach(b=>b.onclick=()=>completeMaintenancePlanModal(Number(b.dataset.completePlan),id,m));
- $('[data-diagnostic-id]').forEach(b=>b.onclick=()=>diagnosticDetailModal(id,scans.find(s=>String(s.id)===b.dataset.diagnosticId)));
- $('[data-download-diagnostic]').forEach(b=>b.onclick=async()=>{try{await diagnosticDownload(id,Number(b.dataset.downloadDiagnostic))}catch(e){toast(e.message,true)}});
+ $$('[data-complete-plan]').forEach(b=>b.onclick=()=>completeMaintenancePlanModal(Number(b.dataset.completePlan),id,m));
+ $$('[data-diagnostic-id]').forEach(b=>b.onclick=()=>diagnosticDetailModal(id,scans.find(s=>String(s.id)===b.dataset.diagnosticId)));
+ $$('[data-download-diagnostic]').forEach(b=>b.onclick=async()=>{try{await diagnosticDownload(id,Number(b.dataset.downloadDiagnostic))}catch(e){toast(e.message,true)}});
 }
 function maintenanceModal(machineId,kind){const requestId=newCommandId();
  const review=kind==='REVISAO';
