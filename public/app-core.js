@@ -339,6 +339,10 @@ function closeModal(){
   }
 }
 function formObj(fd){return Object.fromEntries([...fd.entries()].map(([k,v])=>[k,typeof v==='string'?v.trim():v]))}
+function workOrderSelector(orders,{name='workOrderId',id='',label='OS vinculada (opcional)'}={}){
+ const options=(orders||[]).map(o=>'<option value="'+Number(o.id)+'">OS #'+esc(o.os_number)+' · '+esc(o.problem_reported||'Sem descrição')+'</option>').join('');
+ return '<label>'+esc(label)+'<select '+(id?'id="'+id+'" ':'')+'name="'+name+'"><option value="">Sem vínculo com OS</option>'+options+'</select></label>';
+}
 function badge(status){const cls=/PRONTA|ENTREGUE|APROVADA|PAGO/.test(status)?'green':/AGUARDANDO|ORCAMENTO|PARCIAL/.test(status)?'orange':/CANCELADA|REPROVADA/.test(status)?'red':'blue';return `<span class="pill ${cls}">${esc(status.replaceAll('_',' '))}</span>`}
 function pageTitle(title,eyebrow='OFICINA'){ document.title=title+' · ArtiSys Oficina'; $('#pageTitle').textContent=title;$('#pageEyebrow').textContent=eyebrow }
 function renderRegion(host,html){

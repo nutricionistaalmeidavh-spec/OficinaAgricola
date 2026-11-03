@@ -102,7 +102,7 @@ function diagnosticDetailModal(machineId,scan){
  let details={};try{details=JSON.parse(scan.details_json||'{}')}catch{}
  const readings=Object.values(details.readings||{});
  const rows=(list,label)=>'<p><strong>'+label+':</strong> '+esc((list||[]).join(', ')||'Nenhum registrado')+'</p>';
- showModal('Diagnóstico #'+scan.id,
+ showModal('Registro de diagnóstico',
  '<div class="form-stack">'+
  '<p><strong>'+esc(scan.source==='SIMULATED'?'SIMULAÇÃO — não é diagnóstico real':'Leitura registrada')+'</strong> · '+esc(scan.created_at||'')+'</p>'+
  '<p class="muted">'+esc(scan.adapter_id||'ELM327_SERIAL')+' · '+esc(scan.protocol||'')+'</p>'+
@@ -121,10 +121,10 @@ function diagnosticDetailModal(machineId,scan){
  $('#diagBack').onclick=()=>machineHistoryModal(machineId);
 }
 async function diagnosticCaptureModal(machineId){
- const registry=await api('/api/diagnostics/adapters');
+ const [registry,orders]=await Promise.all([api('/api/diagnostics/adapters'),api('/api/machines/'+machineId+'/history')]);
  let detection=null,probeError='';
  try{detection=await api('/api/diagnostics/hardware')}catch(error){probeError=error.message}
- const options=registry.map(d=>'<option value="'+esc(d.id)+'">'+esc(d.label)+'</option>').join('');
+ const options=registry.filter(adapter=>adapter.id!=='SIMULATOR').map(d=>'<option value="'+esc(d.id)+'">'+esc(d.label)+'</option>').join('');
  showModal('Diagnóstico OBD-II multimarcas','<div class="form-stack">'+
  '<p>Selecione o equipamento. Os recursos disponíveis dependem da central eletrônica e do driver. Nenhum comando altera ou apaga dados da ECU.</p>'+
  '<label>Interface de diagnóstico<select id="diagAdapter">'+options+'</select></label>'+
@@ -139,10 +139,10 @@ async function diagnosticCaptureModal(machineId){
  '<label>Tempo de escuta<select id="diagCanSeconds"><option value="5">5 segundos</option><option value="10">10 segundos</option><option value="15">15 segundos</option></select></label></div>'+
  '<label>Velocidade serial<select id="diagBaud"><option value="38400">38400</option><option value="9600">9600</option><option value="115200">115200</option></select></label>'+
  '<label>Amostras de RPM<select id="diagSamples"><option value="3">3</option><option value="5">5</option><option value="10">10</option></select></label>'+
- '<label>OS vinculada (opcional)<input id="diagOs" type="number" min="1"></label>'+
+ workOrderSelector(orders,{id:'diagOs'})+
  '<label>Observações técnicas<textarea id="diagNotes" maxlength="1500" placeholder="Descreva sintomas, testes e observações"></textarea></label>'+
- '<p class="muted">ELM327/OBDLink: USB serial. J2534: driver 04.04 no Windows. J1939: interface CAN compatível, leitura passiva. A ponte e o python-can já acompanham o aplicativo instalado no Windows; o driver específico do fabricante do adaptador ainda pode ser necessário. A leitura real depende do equipamento e veículo.</p>'+
- '<p class="muted">'+esc(probeError||(!detection?.j2534?.ready?'J2534: driver não encontrado neste computador. ':'')+(!detection?.j1939?.ready?'J1939: configure o adaptador CAN e seu driver, se necessário.':''))+'</p>'+
+ '<details><summary>Informações avançadas sobre os adaptadores</summary><p class="muted">ELM327/OBDLink: USB serial. J2534: driver 04.04 no Windows. J1939: interface CAN compatível, leitura passiva. A ponte e o python-can já acompanham o aplicativo instalado no Windows; o driver específico do fabricante do adaptador ainda pode ser necessário. A leitura real depende do equipamento e veículo.</p>'+
+ '<p class="muted">'+esc(friendlyUiMessage(probeError)||(!detection?.j2534?.ready?'J2534: driver não encontrado neste computador. ':'')+(!detection?.j1939?.ready?'J1939: configure o adaptador CAN e seu driver, se necessário.':''))+'</p></details>'+
  '<div role="status" aria-live="polite" id="diagStatus"></div>'+
  '<button class="btn primary" id="diagStart" type="button">Conectar e registrar diagnóstico</button></div>');
  const selectAdapter=$('#diagAdapter'),serialControls=$('#diagBaud').closest('label');
@@ -175,6 +175,6 @@ async function diagnosticCaptureModal(machineId){
        ...result,notes,...(os?{workOrderId:os}:{}),requestId:newCommandId()}});
      toast(scan.source==='SIMULATED'?'Simulação identificada e registrada':'Leitura OBD-II registrada');
      diagnosticDetailModal(machineId,scan);
-   }catch(error){status.textContent=error.message;toast(error.message,true);button.disabled=false}
+   }catch(error){status.textContent=friendlyUiMessage(error.message);toast(error.message,true);button.disabled=false}
  };
 }
