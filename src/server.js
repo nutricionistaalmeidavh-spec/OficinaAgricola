@@ -19,6 +19,8 @@ import { addReceipt, reverseReceipt, listReceipts, getPaymentSummary, createExpe
 import { dashboardData } from './services/dashboard.js';
 import { seed } from './seed.js';
 import {listServiceRecords,createServiceRecord} from './services/vehicle-maintenance.js';
+import {savePartFitment,listPartFitments,deletePartFitment,listCompatibleParts,createDiagnosticScan,listDiagnosticScans,
+  createMaintenancePlan,listMaintenancePlans,listMaintenanceAlerts,completeMaintenancePlan} from './services/automotive.js';
 import {isSetupRequired,initializeAdmin} from './setup.js';
 
 const __dirname=fileURLToPath(new URL('.',import.meta.url));
@@ -76,6 +78,13 @@ function createRouter({db,storageDir}){
   add('GET','/api/machines/:id/history',ROLE_ALL,({params})=>machineHistory(db,int(params.id)));
   add('GET','/api/machines/:id/maintenance',ROLE_ALL,({params})=>listServiceRecords(db,int(params.id)));
   add('POST','/api/machines/:id/maintenance',ROLE_OFFICE,({params,body})=>createServiceRecord(db,int(params.id),body));
+  add('GET','/api/machines/:id/compatible-parts',ROLE_ALL,({params})=>listCompatibleParts(db,int(params.id)));
+  add('GET','/api/machines/:id/obd-scans',ROLE_ALL,({params})=>listDiagnosticScans(db,int(params.id)));
+  add('POST','/api/machines/:id/obd-scans',ROLE_TECH,({params,body})=>createDiagnosticScan(db,int(params.id),body));
+  add('GET','/api/machines/:id/maintenance-plans',ROLE_ALL,({params})=>listMaintenancePlans(db,int(params.id)));
+  add('POST','/api/machines/:id/maintenance-plans',ROLE_OFFICE,({params,body})=>createMaintenancePlan(db,int(params.id),body));
+  add('POST','/api/maintenance-plans/:id/complete',ROLE_TECH,({params,body})=>completeMaintenancePlan(db,int(params.id),body));
+  add('GET','/api/maintenance-alerts',ROLE_ALL,()=>listMaintenanceAlerts(db));
   add('GET','/api/technicians',ROLE_ALL,()=>listTechnicians(db,{includeInactive:true}));
   add('POST','/api/technicians',['ADMIN'],({body})=>createTechnician(db,body));
   add('PATCH','/api/technicians/:id',['ADMIN'],({params,body})=>updateTechnician(db,int(params.id),body));
@@ -99,6 +108,9 @@ function createRouter({db,storageDir}){
 
   add('GET','/api/parts',ROLE_ALL,({url})=>listParts(db,{includeInactive:url.searchParams.get('includeInactive')==='1',search:url.searchParams.get('search')||''}));
   add('POST','/api/parts',ROLE_OFFICE,({body})=>createPart(db,body));
+  add('GET','/api/parts/:id/fitments',ROLE_ALL,({params})=>listPartFitments(db,int(params.id)));
+  add('POST','/api/parts/:id/fitments',ROLE_OFFICE,({params,body})=>savePartFitment(db,int(params.id),body));
+  add('DELETE','/api/parts/:id/fitments/:fitmentId',ROLE_OFFICE,({params})=>deletePartFitment(db,int(params.id),int(params.fitmentId)));
   add('PATCH','/api/parts/:id',ROLE_OFFICE,({params,body})=>updatePart(db,int(params.id),body));
   add('POST','/api/inventory/movements',ROLE_OFFICE,({body,user})=>addInventoryMovement(db,int(body.partId),{...body,createdBy:user.id,userRole:user.role}));
   add('GET','/api/inventory/low-stock',ROLE_ALL,()=>lowStockParts(db));

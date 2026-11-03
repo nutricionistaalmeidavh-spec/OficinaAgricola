@@ -256,6 +256,53 @@ export function migrate(db) {
   if(!machineCols.has('odometer_km'))db.exec('ALTER TABLE machines ADD COLUMN odometer_km REAL CHECK(odometer_km >= 0)');
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_machines_plate ON machines(license_plate) WHERE license_plate IS NOT NULL AND license_plate<>''");
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_machines_vin ON machines(vin) WHERE vin IS NOT NULL AND vin<>''");
+  const companyCols=new Set(db.prepare("PRAGMA table_info('company_settings')").all().map(c=>c.name));
+  if(!companyCols.has('service_profile'))db.exec("ALTER TABLE company_settings ADD COLUMN service_profile TEXT NOT NULL DEFAULT 'MISTA' CHECK(service_profile IN ('MISTA','AUTOMOTIVA','AGRICOLA'))");
+  for(const [column,ddl] of [
+    ['renavam','renavam TEXT'],['engine','engine TEXT NOT NULL DEFAULT \'\''],['fuel_type','fuel_type TEXT']]){
+    if(!machineCols.has(column))db.exec('ALTER TABLE machines ADD COLUMN '+ddl);
+  }
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_machines_renavam ON machines(renavam) WHERE renavam IS NOT NULL AND renavam<>'';
+    CREATE TABLE IF NOT EXISTS part_fitments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      part_id INTEGER NOT NULL REFERENCES parts(id),
+      brand_key TEXT NOT NULL, model_key TEXT NOT NULL,
+      year_from INTEGER, year_to INTEGER, engine_key TEXT NOT NULL DEFAULT '',
+      fuel_type TEXT, notes TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_part_fitments_search ON part_fitments(brand_key,model_key);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_part_fitments_unique ON part_fitments(
+      part_id,brand_key,model_key,COALESCE(year_from,0),COALESCE(year_to,0),
+      engine_key,COALESCE(fuel_type,'')
+    );
+    CREATE TABLE IF NOT EXISTS obd_scans (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      machine_id INTEGER NOT NULL REFERENCES machines(id),
+      work_order_id INTEGER REFERENCES work_orders(id),
+      protocol TEXT NOT NULL DEFAULT '',
+      raw_response TEXT NOT NULL, codes_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_obd_scans_machine ON obd_scans(machine_id,id DESC);
+    CREATE TABLE IF NOT EXISTS maintenance_plans (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      machine_id INTEGER NOT NULL REFERENCES machines(id),
+      name TEXT NOT NULL, interval_days INTEGER, interval_km REAL, interval_hours REAL,
+      next_due_date TEXT, next_due_km REAL, next_due_hours REAL,
+      last_completed_at TEXT, notes TEXT NOT NULL DEFAULT '',
+      active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+      created_at TEXT NOT NULL,updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_maintenance_plans_machine ON maintenance_plans(machine_id,active);
+    CREATE TABLE IF NOT EXISTS maintenance_plan_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      plan_id INTEGER NOT NULL REFERENCES maintenance_plans(id),
+      work_order_id INTEGER REFERENCES work_orders(id),
+      performed_at TEXT NOT NULL, odometer_km REAL, hour_meter REAL,
+      created_at TEXT NOT NULL
+    );
+  `);
   const inventoryCols=new Set(db.prepare("PRAGMA table_info('inventory_movements')").all().map(c=>c.name));
   if(!inventoryCols.has('source_type'))db.exec('ALTER TABLE inventory_movements ADD COLUMN source_type TEXT');
   if(!inventoryCols.has('source_item_id'))db.exec('ALTER TABLE inventory_movements ADD COLUMN source_item_id INTEGER');
