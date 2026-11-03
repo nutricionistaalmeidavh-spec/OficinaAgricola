@@ -108,6 +108,67 @@ export async function verifyUiContract(page,viewportName,outputDir){
   await page.keyboard.press('Escape');
   await page.getByRole('button',{name:'Limpar busca'}).click();
 
+  // Regressão P0: desistir do cancelamento nunca solicita estorno ao servidor.
+  const fakeSale={
+    id:999992,sale_number:992,status:'CONCLUIDA',customer_name:'Cliente QA',
+    created_at:'2026-11-03T12:00:00.000Z',payment_method:'DINHEIRO',
+    total_cents:3500,subtotal_cents:3500,discount_cents:0,
+    items:[{description:'Peça QA',quantity:1,unit_price_cents:3500,total_cents:3500}]
+  };
+  let cancelRequests=0,cancelBody=null;
+  const salesRoute=async route=>{
+    const url=new URL(route.request().url()),method=route.request().method();
+    if(url.pathname==='/api/sales'&&method==='GET')
+      return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify([fakeSale])});
+    if(url.pathname==='/api/sales/'+fakeSale.id&&method==='GET')
+      return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(fakeSale)});
+    if(url.pathname==='/api/sales/'+fakeSale.id+'/cancel'&&method==='POST'){
+      cancelRequests++;cancelBody=route.request().postDataJSON();
+      return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({...fakeSale,status:'CANCELADA'})});
+    }
+    return route.continue();
+  };
+  await page.route('**/api/sales**',salesRoute);
+  if(viewportName==='mobile'){
+    await page.locator('#mobileMoreBtn').click();
+    await page.locator('[data-mobile-page="sales"]').click();
+  }else await page.locator('[data-page="sales"]').click();
+  await page.locator('[data-sale="'+fakeSale.id+'"]').click();
+  await page.locator('#cancelSale').click();
+  const cancelDialog=page.getByRole('dialog',{name:'Confirmar cancelamento da venda #'+fakeSale.sale_number});
+  await cancelDialog.waitFor({state:'visible'});
+  assert.equal(await cancelDialog.locator('textarea[name="reason"]').getAttribute('required'),'');
+  await cancelDialog.getByRole('button',{name:'Manter venda'}).click();
+  assert.equal(cancelRequests,0,'Cancelar o formulário disparou uma transação financeira');
+  await page.locator('[data-sale="'+fakeSale.id+'"]').click();
+  await page.locator('#cancelSale').click();
+  await cancelDialog.getByRole('button',{name:'Confirmar cancelamento e estorno'}).click();
+  assert.equal(cancelRequests,0,'Validação HTML permitiu motivo vazio');
+  await cancelDialog.locator('textarea[name="reason"]').fill('Devolução aprovada QA');
+  await cancelDialog.getByRole('button',{name:'Confirmar cancelamento e estorno'}).click();
+  await cancelDialog.waitFor({state:'hidden'});
+  assert.equal(cancelRequests,1);
+  assert.equal(cancelBody.reason,'Devolução aprovada QA');
+  assert.ok(cancelBody.requestId,'Falta chave de idempotência na confirmação');
+  await page.unroute('**/api/sales**',salesRoute);
+
+  // P1: seleção fiscal é por operação pesquisável, não por ID interno.
+  if(viewportName==='mobile'){
+    await page.locator('#mobileMoreBtn').click();
+    await page.locator('[data-mobile-page="fiscal"]').click();
+  }else await page.locator('[data-page="fiscal"]').click();
+  await page.locator('#fiscalNew').click();
+  const fiscalDialog=page.getByRole('dialog',{name:'Preparar documento fiscal'});
+  await fiscalDialog.waitFor({state:'visible'});
+  assert.equal(await fiscalDialog.locator('#fiscalDraftSubmit').isDisabled(),true);
+  await fiscalDialog.locator('#fiscalOriginType').selectOption('SALE');
+  await fiscalDialog.locator('#fiscalOriginSearch').fill('zz-venda-inexistente-qa');
+  await fiscalDialog.getByText('Nenhuma operação encontrada. Tente outro número ou nome.').waitFor({state:'visible'});
+  assert.equal(await fiscalDialog.locator('#fiscalDraftSubmit').isDisabled(),true);
+  await page.keyboard.press('Escape');
+  await page.getByRole('button',{name:'Descartar alterações',exact:true}).click();
+  await fiscalDialog.waitFor({state:'hidden'});
+
   await page.locator('[data-page="dashboard"]').click();
   await page.locator('.oa-order-mini').first().focus();
   await page.keyboard.press('Enter');
