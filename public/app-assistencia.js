@@ -66,7 +66,7 @@ async function renderSales({cursor=null,loaded=[]}={}) {
   const saleButton = $('#newSale'); if (saleButton) saleButton.onclick = () => saleModal();
   const moveButton = $('#cashMove'); if (moveButton) moveButton.onclick = cashMoveModal;
   const closeButton = $('#closeCash'); if (closeButton) closeButton.onclick = () => closeCashModal(cash.expectedCashCents || 0);
-  $('[data-sale]').forEach(button => button.onclick = () => saleDetails(button.dataset.sale));
+  $$('[data-sale]').forEach(button => button.onclick = () => saleDetails(button.dataset.sale));
   showPagedLoadMore({cursor:page.nextCursor,loaded:sales.length,total:page.total,onMore:()=>renderSales({cursor:page.nextCursor,loaded:sales})});
 }
 
