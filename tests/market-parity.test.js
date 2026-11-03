@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {openDatabase,migrate} from '../src/db.js';
-import {createCustomer,createMachine,createPart} from '../src/services/catalog.js';
+import {createCustomer,createMachine} from '../src/services/catalog.js';
 import {createWorkOrder,transitionWorkOrder,updateWorkOrder,getWorkOrder} from '../src/services/work-orders.js';
 import {saveQuote,submitQuote} from '../src/services/quotes.js';
 import {
@@ -62,7 +62,7 @@ test('P3: oficinas e frotas são cadastráveis, sem permitir cruzar propriedade 
 
 test('P3: códigos técnicos são referências declaradas, sem falsa homologação OEM',()=>{
  const {db}=fixture();
- const part=db.prepare("INSERT INTO parts(sku,description,unit,quantity,min_quantity,sale_price_cents,created_at,updated_at) VALUES('T1','Filtro','UN',1,0,1200,datetime('now'),datetime('now'))").run();
+ const part=db.prepare("INSERT INTO parts(sku,description,unit,quantity,min_stock,sale_price_cents,created_at,updated_at) VALUES('T1','Filtro','UN',1,0,1200,datetime('now'),datetime('now'))").run();
  const ref=createTechnicalReference(db,{partId:Number(part.lastInsertRowid),manufacturer:'Marca X',oemCode:'123-ABC',notes:'Referência não homologada'});
  assert.equal(ref.verified,0);
  assert.equal(listTechnicalReferences(db,{partId:Number(part.lastInsertRowid)}).length,1);
