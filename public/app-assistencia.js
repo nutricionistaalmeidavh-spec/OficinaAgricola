@@ -34,13 +34,14 @@ function serviceModal(service = {}) {
   });
 }
 
-async function renderSales() {
+async function renderSales({cursor=null,loaded=[]}={}) {
   pageTitle('Vendas & Caixa', 'BALCÃO');
   if (!['ADMIN', 'ATENDIMENTO', 'FINANCEIRO'].includes(state.user.role)) {
     setContent('<div class="card"><div class="empty">Seu perfil não possui acesso a vendas e caixa.</div></div>');
     return;
   }
-  const [sales, cash] = await Promise.all([api('/api/sales?limit=80'), api('/api/cash/current/summary')]);
+  const [page, cash] = await Promise.all([api('/api/sales/page?limit=50'+(cursor?'&cursor='+encodeURIComponent(cursor):'')), api('/api/cash/current/summary')]);
+  const sales=loaded.concat(page.items);
   const open = cash.session;
   const canCash = ['ADMIN', 'ATENDIMENTO', 'FINANCEIRO'].includes(state.user.role);
   setContent(`
@@ -65,7 +66,8 @@ async function renderSales() {
   const saleButton = $('#newSale'); if (saleButton) saleButton.onclick = () => saleModal();
   const moveButton = $('#cashMove'); if (moveButton) moveButton.onclick = cashMoveModal;
   const closeButton = $('#closeCash'); if (closeButton) closeButton.onclick = () => closeCashModal(cash.expectedCashCents || 0);
-  $$('[data-sale]').forEach(button => button.onclick = () => saleDetails(button.dataset.sale));
+  $('[data-sale]').forEach(button => button.onclick = () => saleDetails(button.dataset.sale));
+  showPagedLoadMore({cursor:page.nextCursor,loaded:sales.length,total:page.total,onMore:()=>renderSales({cursor:page.nextCursor,loaded:sales})});
 }
 
 async function saleModal() {
