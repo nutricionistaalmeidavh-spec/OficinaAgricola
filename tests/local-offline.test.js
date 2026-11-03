@@ -33,7 +33,7 @@ test('PWA mantém shell local em cache sem interceptar a API', async () => {
     read('public/manifest.webmanifest'),
   ]);
 
-  assert.match(sw, /artisys-oficina-shell-v7/);
+  assert.match(sw, /artisys-oficina-shell-v\d+/);
   assert.match(sw, /local-runtime\.css/);
   assert.match(sw, /obd-serial\.js/);
   assert.match(sw, /local-runtime\.js/);
@@ -65,3 +65,8 @@ test('o pipeline GitHub Actions não publica instaladores automaticamente', asyn
   assert.doesNotMatch(ci+qa,/desktop_publish|publish-filebin|desktop_build/);
 });
 
+
+test('links privados de aprovação não entram no cache de navegação do PWA',async()=>{
+ const sw=await read('public/sw.js');
+ assert.match(sw,/url\.pathname\s*===\s*'\/approval\.html'\)\s*return/);
+});

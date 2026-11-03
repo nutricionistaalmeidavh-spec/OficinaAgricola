@@ -1,5 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { migrateFiscal } from './fiscal-schema.js';
+import { migrateMarketParity } from './services/market-parity.js';
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
@@ -19,7 +20,7 @@ export function openDatabase(path = process.env.DATABASE_PATH || './data/artisys
 export function migrate(db) {
   db.exec("CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY, applied_at TEXT NOT NULL)");
   const version='2026-11-03-main-p0-p3';
-  if(db.prepare('SELECT 1 FROM schema_migrations WHERE version=?').get(version))return;
+  if(db.prepare('SELECT 1 FROM schema_migrations WHERE version=?').get(version)){migrateMarketParity(db);return;}
   return transaction(db,()=>{
   db.exec(`
     CREATE TABLE IF NOT EXISTS company_settings (
@@ -334,6 +335,7 @@ export function migrate(db) {
     SELECT 'OS_RECEIPT',id,'REFUNDED',-amount_cents,method,NULL,reversed_at FROM receipts WHERE reversed_at IS NOT NULL;
   `);
   migrateFiscal(db);
+  migrateMarketParity(db);
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_work_orders_status_id ON work_orders(status,id DESC);
     CREATE INDEX IF NOT EXISTS idx_work_orders_customer ON work_orders(customer_id,id DESC);
