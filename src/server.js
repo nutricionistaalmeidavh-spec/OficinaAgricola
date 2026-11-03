@@ -131,7 +131,7 @@ function createRouter({db,storageDir}){
   add('GET','/api/admin/reconciliation',['ADMIN'],()=>auditInvariants(db));
   add('GET','/api/commands/status',ROLE_ALL,({user,url})=>{
     const method=url.searchParams.get('method'),path=url.searchParams.get('path'),requestId=url.searchParams.get('requestId');
-    if(!['POST','PATCH','PUT','DELETE'].includes(method)||!path?.startsWith('/api/')||!/^[\\w:.-]{3,128}$/.test(requestId||''))throw new Error('Consulta de operação inválida');
+    if(!['POST','PATCH','PUT','DELETE'].includes(method)||!path?.startsWith('/api/')||!/^[A-Za-z0-9_:.-]{3,128}$/.test(requestId||''))throw new Error('Consulta de operação inválida');
     const scope=`http:${method}:${path}:user:${user.id}`;
     const found=db.prepare('SELECT 1 FROM command_idempotency WHERE scope=? AND request_id=?').get(scope,requestId);
     return {status:found?'CONFIRMED':'UNKNOWN',requestId};
