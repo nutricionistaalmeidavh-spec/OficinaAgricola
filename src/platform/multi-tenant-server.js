@@ -173,6 +173,10 @@ export function createMultiTenantServer({
     // This endpoint intentionally returns the current unit's report, not an
     // unauthorized cross-company aggregation.
     const runtime=syncShadowSession(user,token,unit);
+    // Fiscal provider credentials are process-wide in the legacy runtime.
+    // Never allow an independent company to emit using the wrong certificate.
+    if(unit.companyId!==1 && /^\/api\/fiscal\/\d+\/(submit|reconcile)$/.test(path))
+      throw httpError('Emissão fiscal multiempresa requer provedor fiscal isolado por empresa e homologação',409);
     if(method==='POST'&&/^\/api\/work-orders\/\d+\/quote\/approval-link$/.test(path)){
       if(!['ADMIN','ATENDIMENTO'].includes(unit.role))throw httpError('Permissão insuficiente',403);
       const id=positive(path.split('/')[3]);
