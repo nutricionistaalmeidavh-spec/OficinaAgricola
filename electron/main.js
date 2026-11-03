@@ -42,7 +42,7 @@ async function startLocalServer() {
   mkdirSync(storageDir,{recursive:true});
   process.env.DATABASE_PATH=dbPath;
   process.env.STORAGE_DIR=storageDir;
-  process.env.HOST='0.0.0.0';
+  process.env.HOST='127.0.0.1';
   process.env.PORT='3344';
 
   db = openDatabase(dbPath);
@@ -58,7 +58,7 @@ async function startLocalServer() {
   await new Promise((resolve, reject) => {
     const onError = (error) => reject(error);
     server.once('error', onError);
-    server.listen(port, '0.0.0.0', () => {
+    server.listen(port, '127.0.0.1', () => {
       server.off('error', onError);
       resolve();
     });
