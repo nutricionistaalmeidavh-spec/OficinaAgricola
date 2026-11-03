@@ -67,6 +67,7 @@ test('HTTP isolation: company and unit records, member roles and revoked access'
   assert.deepEqual(bAgain.data.map(x=>x.name),['Cliente da empresa B']);
   const sku=await request('POST','/api/parts',{sku:'PART-A-ONLY',description:'Componente exclusivo'},1);
   assert.equal(sku.status,200,JSON.stringify(sku.data));
+  assert.equal((await request('POST','/api/fiscal/1/submit',{},second)).status,409,'fiscal provider must be isolated per company');
   const partsOfB=await request('GET','/api/parts',undefined,second);
   assert.equal(partsOfB.status,200);
   assert.deepEqual(partsOfB.data,[],'inventory is physically isolated');
