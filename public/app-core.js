@@ -408,6 +408,17 @@ async function refreshCurrentPage(){
   catch(error){if(epoch===state.pageEpoch&&error?.name!=='AbortError')toast(error.message,true)}
   finally{refreshPromise=null;refreshQueued=false}
 }
+function openMoreModules(){
+  const secondary=$$('#nav button[data-page]:not([data-primary-nav])');
+  showModal('Mais módulos',`<div class="more-modules" role="group" aria-label="Outras áreas do sistema">
+    ${secondary.map(button=>`<button type="button" class="btn" data-more-page="${esc(button.dataset.page)}">
+      ${esc(button.textContent.trim())}</button>`).join('')}
+  </div>`,null,{entityKey:'more-modules'});
+  $$('#modalBody [data-more-page]').forEach(button=>button.onclick=()=>{
+    const destination=button.dataset.morePage;
+    closeModal();void navigate(destination);
+  });
+}
 async function navigate(page,{force=false}={}){
   if(state.page===page&&state.pageReady){
     if(force)return refreshCurrentPage();
@@ -418,10 +429,16 @@ async function navigate(page,{force=false}={}){
   const epoch=++state.pageEpoch;
   state.pageReady=false;
   state.page=page;
-  $$('#nav button').forEach(b=>{
+  $('#nav button[data-page]').forEach(b=>{
     const active=b.dataset.page===page;b.classList.toggle('active',active);
     if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');
   });
+  const more=$('#moreModules');
+  if(more){
+    const secondary=!['dashboard','work-orders','schedule','customers'].includes(page);
+    more.classList.toggle('active',secondary);
+    if(secondary)more.setAttribute('aria-current','page');else more.removeAttribute('aria-current');
+  }
   setContent('<div class="card"><div class="empty">Carregando…</div></div>');
   try{
     await pageRenderer(page)();
