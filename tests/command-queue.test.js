@@ -94,3 +94,29 @@ test('RED: queued commands announce pending and confirmed transitions to the UI 
  await q2.replay(1);
  assert.deepEqual(events.map(x=>x.join(':')),['pending:bus-123','confirmed:bus-123']);
 });
+
+test('queue never sends an eligible write if durable storage is unavailable',async()=>{
+ const mod=loadQueue();
+ let calls=0;
+ const q=mod.createQueue({
+   store:{async get(){throw new Error('IndexedDB indisponível')},async list(){return []}},
+   send:async()=>{calls++;return ok()}
+ });
+ await assert.rejects(q.execute({ownerId:9,path:'/api/expenses',method:'POST',
+   body:{requestId:'no-storage-001',description:'Despesas',amountCents:100}}),/IndexedDB indisponível/);
+ assert.equal(calls,0);
+});
+
+test('old pending commands require explicit user retry instead of silent delayed financial execution',async()=>{
+ const mod=loadQueue(),store=memoryStore();
+ const queue=mod.createQueue({store,now:()=>1000,send:async()=>offline()});
+ await assert.rejects(queue.execute({ownerId:1,path:'/api/cash/current/movements',method:'POST',
+   body:{requestId:'cash-stale-1',type:'SUPRIMENTO',amountCents:1000}}));
+ let calls=0;
+ const recovered=mod.createQueue({store,now:()=>1000+31*60*1000,send:async()=>{calls++;return ok()}});
+ assert.equal(await recovered.replay(1),0);
+ assert.equal(calls,0);
+ assert.equal((await store.list('1')).length,1);
+ assert.equal(await recovered.replay(1,{manual:true}),1);
+ assert.equal(calls,1);
+});
