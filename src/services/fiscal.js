@@ -1,5 +1,6 @@
 import {createHash,randomUUID} from 'node:crypto';
 import {nowIso,transaction} from '../db.js';
+import {getFiscalSettings,assertFiscalReady} from './fiscal-settings.js';
 export {migrateFiscal} from '../fiscal-schema.js';
 
 const TYPES=new Set(['NFE','NFSE']);
@@ -15,7 +16,7 @@ export function getFiscalDocument(db,id){
 }
 export function listFiscalDocuments(db,{status='',limit=100}={}){
   const max=Math.min(1000,Math.max(1,Number(limit)||100));
-  if(status&&!['RASCUNHO','INDETERMINADO','REJEITADA','AUTORIZADA','CANCELADA'].includes(status))
+  if(status&&!['RASCUNHO','INDETERMINADO','REJEITADA','AUTORIZADA','AUTORIZADA_HOMOLOGACAO','CANCELADA'].includes(status))
     throw new Error('Estado fiscal inválido');
   return db.prepare('SELECT * FROM fiscal_documents WHERE (?=\'\' OR status=?) ORDER BY id DESC LIMIT ?').all(status,status,max);
 }
@@ -93,6 +94,7 @@ export function createFiscalDraft(db,input){
     const inserted=db.prepare("INSERT INTO fiscal_documents (kind,origin_type,origin_id,status,amount_cents,snapshot_json,snapshot_hash,request_id,created_at,updated_at) VALUES (?,?,?,'RASCUNHO',?,?,?,?,?,?)")
       .run(kind,originType,originId,amount,snapshot,hash,requestId,now,now);
     const id=Number(inserted.lastInsertRowid);
+    db.prepare('UPDATE fiscal_documents SET environment=? WHERE id=?').run(getFiscalSettings(db).environment,id);
     db.prepare("INSERT INTO fiscal_events(document_id,event_type,details_json,created_at) VALUES(?,'CRIADO',?,?)").run(id,JSON.stringify({snapshotHash:hash}),now);
     return getFiscalDocument(db,id);
   });
@@ -104,12 +106,16 @@ function addEvent(db,id,eventType,details={}){
 function applyProviderResult(db,id,result,providerName){
   const status=text(result?.status).toUpperCase();
   if(status==='AUTORIZADA'){
+    const environment=text(result.environment).toUpperCase();
+    const doc=getFiscalDocument(db,id);
+    if(environment!==doc.environment)throw new Error('Ambiente fiscal da resposta não corresponde ao rascunho');
+    const authorizedStatus=environment==='HOMOLOGACAO'?'AUTORIZADA_HOMOLOGACAO':'AUTORIZADA';
     const key=text(result.accessKey),protocol=text(result.protocol),xml=text(result.xml);
     if(!key||!protocol||!xml.startsWith('<'))throw new Error('Retorno autorizado incompleto; consultar o fisco antes de repetir');
     const now=nowIso();
-    db.prepare("UPDATE fiscal_documents SET status='AUTORIZADA',access_key=?,protocol=?,authorized_xml=?,response_json=?,last_error='',authorized_at=?,updated_at=? WHERE id=?")
-      .run(key,protocol,xml,JSON.stringify({status,provider:providerName}),now,now,id);
-    addEvent(db,id,'AUTORIZADA',{protocol,accessKey:key,provider:providerName});
+    db.prepare("UPDATE fiscal_documents SET status=?,access_key=?,protocol=?,authorized_xml=?,response_json=?,last_error='',authorized_at=?,updated_at=? WHERE id=?")
+      .run(authorizedStatus,key,protocol,xml,JSON.stringify({status:authorizedStatus,provider:providerName,environment}),now,now,id);
+    addEvent(db,id,authorizedStatus,{protocol,accessKey:key,provider:providerName,environment});
   }else if(status==='REJEITADA'){
     const message=text(result.message).slice(0,500);
     db.prepare("UPDATE fiscal_documents SET status='REJEITADA',response_json=?,last_error=?,updated_at=? WHERE id=?")
@@ -133,6 +139,7 @@ export async function submitFiscalDocument(db,id,{provider}={}){
   if(doc.status==='INDETERMINADO')throw new Error('Documento fiscal indeterminado: consulte e concilie antes de nova tentativa');
   if(doc.status!=='RASCUNHO')throw new Error('Documento fiscal não permite nova transmissão');
   if(!provider||typeof provider.transmit!=='function')throw new Error('Emissor fiscal não configurado: nenhuma nota foi enviada');
+  assertFiscalReady(db,doc);
   const attemptId=randomUUID(),providerName=text(provider.name||'local');
   transaction(db,()=>{
     const change=db.prepare("UPDATE fiscal_documents SET status='INDETERMINADO',provider_name=?,attempt_id=?,updated_at=? WHERE id=? AND status='RASCUNHO'")
