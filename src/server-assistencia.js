@@ -107,7 +107,7 @@ function handleAssistenciaApi({ req, res, url, db, body }) {
 
   if (path === '/api/sales' && method === 'GET') {
     requireUser(db, req, SALES_ROLES);
-    return respond(200, listSales(db, { limit: url.searchParams.get('limit') || 100 }));
+    return respond(200, listSales(db, { limit: url.searchParams.get('limit') || 100, search: url.searchParams.get('search') || '', status: url.searchParams.get('status') || '' }));
   }
   if (path === '/api/sales' && method === 'POST') {
     const user = requireUser(db, req, SALES_ROLES);
