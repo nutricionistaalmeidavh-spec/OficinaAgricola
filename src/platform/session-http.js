@@ -18,13 +18,19 @@ export function isCookieSession(req){
  return !String(req.headers?.authorization||'').startsWith('Bearer ')&&
    String(req.headers?.cookie||'').split(';').some(c=>c.trim().startsWith(sessionName+'='));
 }
+export function effectiveHttps(req){
+  if(req.socket?.encrypted)return true;
+  if(process.env.TRUST_LOOPBACK_PROXY!=='1'||!loopbackAddress(req.socket?.remoteAddress))return false;
+  const proto=req.headers?.['x-forwarded-proto'];
+  return typeof proto==='string'&&proto.toLowerCase()==='https';
+}
 export function assertSameOrigin(req){
  if(!mutating.has(req.method||'GET')||!isCookieSession(req))return;
  const fetchSite=String(req.headers['sec-fetch-site']||'');
  if(fetchSite==='cross-site')throw new Error('Origem não autorizada');
  const origin=req.headers.origin;
  const host=String(req.headers.host||'');
- const protocol=req.socket?.encrypted?'https:':'http:';
+ const protocol=effectiveHttps(req)?'https:':'http:';
  // Requisições de browser precisam comprovar a origem; nunca confiar só no cookie.
  if(!origin||!host)throw new Error('Origem não autorizada');
  let actual;
@@ -35,11 +41,11 @@ export function prefersCookie(req){
  return String(req.headers?.['x-session-transport']||'').toLowerCase()==='cookie';
 }
 export function issueBrowserCookie(res,req,token){
- const secure=req.socket?.encrypted?'; Secure':'';
+ const secure=effectiveHttps(req)?'; Secure':'';
  res.setHeader('Set-Cookie',`${sessionName}=${encodeURIComponent(token)}; Path=/api; HttpOnly; SameSite=Strict; Max-Age=43200${secure}`);
 }
 export function clearBrowserCookie(res,req){
- const secure=req.socket?.encrypted?'; Secure':'';
+ const secure=effectiveHttps(req)?'; Secure':'';
  res.setHeader('Set-Cookie',`${sessionName}=; Path=/api; HttpOnly; SameSite=Strict; Max-Age=0${secure}`);
 }
 export function hardenHttpResponse(res,req){
@@ -47,5 +53,5 @@ export function hardenHttpResponse(res,req){
  res.setHeader('X-Frame-Options','DENY');
  res.setHeader('Referrer-Policy','no-referrer');
  res.setHeader('Content-Security-Policy',"default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'");
- if(req.socket?.encrypted)res.setHeader('Strict-Transport-Security','max-age=31536000');
+ if(effectiveHttps(req))res.setHeader('Strict-Transport-Security','max-age=31536000');
 }
