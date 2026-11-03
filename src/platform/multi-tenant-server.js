@@ -3,7 +3,7 @@ import { createServer as createHttpsServer } from 'node:https';
 import { createHash, randomBytes } from 'node:crypto';
 import { resolve, join } from 'node:path';
 import { mkdirSync } from 'node:fs';
-import { openDatabase, migrate, nowIso } from '../db.js';
+import { openDatabase, migrate, nowIso, transaction } from '../db.js';
 import { migrateAssistencia } from '../assistencia-schema.js';
 import { createAssistenciaServer } from '../server-assistencia.js';
 import { initializeAdmin, isSetupRequired } from '../setup.js';
@@ -101,11 +101,15 @@ export function createMultiTenantServer({
   }
   async function controlApi(req,res,url){
     const method=req.method||'GET',path=url.pathname,token=authTokenFrom(req);
+    if(path==='/api/health'&&method==='GET')return json(res,200,{ok:true,mode:'multiempresa'});
     if(path==='/api/setup/status'&&method==='GET')return json(res,200,{required:isSetupRequired(registryDb)});
     if(path==='/api/setup/initialize'&&method==='POST'){
       const body=await readJson(req);
-      const user=initializeAdmin(registryDb,req,body);
-      registerInitialAdmin(registryDb,user.id);
+      const user=transaction(registryDb,()=>{
+        const created=initializeAdmin(registryDb,req,body);
+        registerInitialAdmin(registryDb,created.id);
+        return created;
+      });
       return json(res,200,user);
     }
     if(path==='/api/auth/login'&&method==='POST'){
