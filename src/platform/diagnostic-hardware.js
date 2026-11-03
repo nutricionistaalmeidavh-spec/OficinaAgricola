@@ -37,7 +37,7 @@ export function resolveDiagnosticRunner({
  python=process.env.DIAGNOSTIC_PYTHON||(process.platform==='win32'?'python':'python3'),
  exists=existsSync
 }={}){
- const packed=/(?:^|[\\/])app\\.asar(?:[\\/]|$)/.test(modulePath);
+ const packed=modulePath.replaceAll(String.fromCharCode(92),'/').split('/').includes('app.asar');
  if(packed){
    if(platform!=='win32')throw new Error('Ponte de diagnóstico embutida ainda não disponível para este sistema');
    const binary=resourcesPath&&join(resourcesPath,'diagnostics','ArtiSys-Diagnostic-Bridge','ArtiSys-Diagnostic-Bridge.exe');
