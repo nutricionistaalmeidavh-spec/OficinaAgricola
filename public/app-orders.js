@@ -9,7 +9,7 @@ function bindOrderCards(host=document){
   host.querySelectorAll('[data-os]').forEach(card=>card.onclick=()=>openWorkOrder(card.dataset.os));
 }
 function osColumnContent(status,label,total,items){
- const cards=items.map(osCard).join('')||'<div class="empty">Nenhuma OS nesta etapa.</div>';
+ const cards=items.length?items.map(osCard).join(''):total>0?'<div class="empty">Há OS nesta etapa. Carregue as ordens para visualizar.</div>':'<div class="empty">Nenhuma OS nesta etapa.</div>';
  const more=total>items.length?'<button type="button" class="btn sm soft" data-os-more="'+status+'">Carregar mais ('+(total-items.length)+')</button>':'';
  return '<div class="kanban-title"><span>'+label+'</span><b>'+total+'</b></div>'+cards+more;
 }
