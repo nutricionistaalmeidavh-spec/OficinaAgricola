@@ -1,6 +1,59 @@
 const $=(s,root=document)=>root.querySelector(s); const $$=(s,root=document)=>[...root.querySelectorAll(s)];
 const state={token:localStorage.getItem('oficina_token')||'',user:null,page:'dashboard',pageReady:false,pageEpoch:0,pageController:null,modalToken:null,modalKey:null};
 const dirtyInputs=new WeakSet();
+const commandQueue=window.OficinaCommands?.createQueue({
+  send:({path,method,body})=>{
+    // Autorizações nunca entram no IndexedDB; cada envio usa a sessão atual.
+    const headers={'Content-Type':'application/json'};
+    if(state.token)headers.Authorization='Bearer '+state.token;
+    const transport=window.localRuntime?.request||fetch;
+    return transport(path,{method,headers,body:JSON.stringify(body)});
+  }
+});
+async function updatePendingCommands(){
+  const button=$('#pendingCommands');
+  if(!button)return;
+  if(!commandQueue||!state.user){button.classList.add('hidden');return}
+  const owner=String(state.user.id);
+  try{
+    const pending=await commandQueue.list(owner);
+    if(!state.user||String(state.user.id)!==owner)return;
+    const count=pending.length;
+    button.classList.toggle('hidden',count===0);
+    button.textContent=count===0?'':count===1
+      ?'1 operação aguardando confirmação · Tentar novamente'
+      :count+' operações aguardando confirmação · Tentar novamente';
+  }catch(error){
+    // Erro de armazenamento não pode ser tratado como operação confirmada.
+    button.classList.remove('hidden');
+    button.textContent='Verificar armazenamento local de operações';
+    button.title=error.message;
+  }
+}
+async function resumePendingCommands(manual=false){
+  if(!commandQueue||!state.user)return;
+  const owner=String(state.user.id);
+  try{
+    const confirmed=await commandQueue.replay(owner,{manual});
+    if(!state.user||String(state.user.id)!==owner)return;
+    if(confirmed>0){
+      toast(confirmed===1?'Operação pendente confirmada':confirmed+' operações confirmadas');
+      await refreshCurrentPage();
+    }else if(manual){
+      const left=await commandQueue.list(owner);
+      if(left.length)toast('Não foi possível confirmar todas as operações. Tente novamente quando o servidor voltar.',true);
+    }
+  }catch(error){if(manual)toast(error.message,true)}
+  finally{await updatePendingCommands()}
+}
+commandQueue?.bus.on('pending',()=>void updatePendingCommands());
+commandQueue?.bus.on('confirmed',()=>void updatePendingCommands());
+commandQueue?.bus.on('rejected',()=>void updatePendingCommands());
+window.addEventListener?.('online',()=>void resumePendingCommands());
+window.addEventListener?.('oficina:server-status',e=>{
+  if(e.detail?.available)void resumePendingCommands();
+});
+
 function newCommandId(){
   return globalThis.crypto?.randomUUID?.()||
     `cmd-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -83,7 +136,9 @@ async function api(path,{method='GET',body,raw=false}={}){
   const requester=window.localRuntime?.request||fetch;
   const isRead=method==='GET',epoch=state.pageEpoch;
   const signal=isRead?state.pageController?.signal:undefined;
-  const res=await requester(path,{method,headers,signal,body:body===undefined?undefined:JSON.stringify(body)});
+  const res=!isRead&&!raw&&commandQueue&&state.user
+    ?await commandQueue.execute({ownerId:state.user.id,path,method,body:body||{}})
+    :await requester(path,{method,headers,signal,body:body===undefined?undefined:JSON.stringify(body)});
   if(isRead&&(signal?.aborted||epoch!==state.pageEpoch))throw new DOMException('Consulta obsoleta','AbortError');
   if(res.status===401){logout();throw new Error('Sessão expirada')}
   const text=await res.text();
@@ -112,7 +167,10 @@ function showModal(title,html,onSubmit,{entityKey=null}={}){
       await onSubmit(new FormData(form));
       // Um callback pode abrir outro modal; não fechar seu sucessor.
       if(state.modalToken===token)closeModal();
-    }catch(err){toast(err.message,true)}
+    }catch(err){
+      if(err?.pending&&state.modalToken===token)closeModal();
+      toast(err.message,true);
+    }
     finally{if(btn)btn.disabled=false}
   };
 }
@@ -140,7 +198,12 @@ async function boot(){
     if(setup.required){state.token='';localStorage.removeItem('oficina_token');return showSetup()}
   }catch{ /* The login view will display server errors if offline. */ }
   if(!state.token)return showLogin();
-  try{state.user=await api('/api/auth/me');showApp();await navigate('dashboard')}catch{showLogin()}
+  try{
+    state.user=await api('/api/auth/me');
+    showApp();await navigate('dashboard');
+    void updatePendingCommands();
+    void resumePendingCommands();
+  }catch{showLogin()}
 }
 function showSetup(){
   $('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');
@@ -151,7 +214,11 @@ function showLogin(){
   $('#setupForm').classList.add('hidden');$('#loginForm').classList.remove('hidden');
 }
 function showApp(){$('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');$('#userName').textContent=state.user.name;$('#userRole').textContent=state.user.role;$('#avatar').textContent=state.user.name[0]?.toUpperCase()||'A'}
-function logout(){state.pageController?.abort();state.pageEpoch++;state.pageReady=false;state.token='';state.user=null;localStorage.removeItem('oficina_token');showLogin()}
+function logout(){
+  state.pageController?.abort();state.pageEpoch++;state.pageReady=false;
+  state.token='';state.user=null;localStorage.removeItem('oficina_token');
+  void updatePendingCommands();showLogin();
+}
 
 function pageRenderer(page){
   const dashboard=typeof renderDashboard==='function'?renderDashboard:async()=>{};
