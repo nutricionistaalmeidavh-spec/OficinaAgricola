@@ -68,6 +68,12 @@ Para automação administrada via terminal, a variável `ADMIN_PASSWORD` pode se
 
 Equipamentos do tipo carro/caminhão também registram **placa normalizada**, **VIN/chassi (17 caracteres)** e **quilometragem**, mantendo horímetro nos equipamentos agrícolas e técnicos. O histórico por equipamento permite registrar **revisões preventivas**, próximas revisões por data/km e **garantias** (data de vencimento), vinculadas opcionalmente a uma OS do mesmo veículo. Isso não emite notas fiscais.
 
+## Operações pendentes (Command Queue e EventBus)
+
+O funcionário não precisa conhecer chaves técnicas: ao salvar, o navegador registra previamente o comando no **IndexedDB local**, usa sempre o mesmo identificador ao reenviá-lo e exibe o aviso **“Operação aguardando confirmação · Tentar novamente”** caso a conexão falhe. O reenvio é automático quando o servidor local volta a responder (para pendências recentes) ou pode ser iniciado manualmente. O backend elimina a possibilidade de executar duas vezes a mesma operação identificada.
+
+O **EventBus do frontend** notifica a interface, enquanto o **outbox SQLite + EventBus do servidor** distribuem eventos persistidos. Tokens, senhas, uploads e payloads muito grandes não são armazenados na fila. Veja [contrato e limitações de recuperação](docs/COMMAND-QUEUE-RECOVERY.md).
+
 ## Instalação Windows e proteção da main
 
 O workflow GitHub Actions `Windows · Instalador limpo` compila o NSIS em máquina virtual Windows temporária, faz instalação silenciosa e testa bootstrap/admin/login sem publicar releases. Não substitui teste final em hardware do cliente. Instruções para configurar a proteção da `main` com os checks do GitHub: [docs/PROTEGER-MAIN.md](docs/PROTEGER-MAIN.md). O core local não depende de GitHub Actions para executar.

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { nowIso, transaction } from '../db.js';
 import { postStockMovement } from './inventory.js';
 import { postCashMovement, postPaymentEvent } from './payment-ledger.js';
+import {runIdempotent} from '../platform/idempotency.js';
 
 const text = (value) => value == null ? '' : String(value).trim();
 const positiveNumber = (value, label = 'Quantidade') => {
@@ -61,12 +62,14 @@ export function listCashSessions(db, { limit = 30 } = {}) {
     ORDER BY cs.id DESC LIMIT ?`).all(Math.max(1, Math.min(200, Number(limit) || 30)));
 }
 
-export function openCashSession(db, { openingCents = 0, note = '', userId = null } = {}) {
-  if (getOpenCashSession(db)) throw new Error('Já existe um caixa aberto');
-  const opening = cents(openingCents, 'Saldo inicial');
-  const result = db.prepare(`INSERT INTO cash_sessions(opened_at,opening_cents,opened_by,status,notes)
-    VALUES(?,?,?,'ABERTO',?)`).run(nowIso(), opening, userId, text(note));
-  return getOpenCashSession(db) || db.prepare('SELECT * FROM cash_sessions WHERE id=?').get(Number(result.lastInsertRowid));
+export function openCashSession(db,{openingCents=0,note='',userId=null,requestId=null}={}){
+  return runIdempotent(db,'cash:open',requestId,{openingCents,note,userId},()=>{
+    if(getOpenCashSession(db))throw new Error('Já existe um caixa aberto');
+    const opening=cents(openingCents,'Saldo inicial');
+    const result=db.prepare(`INSERT INTO cash_sessions(opened_at,opening_cents,opened_by,status,notes)
+      VALUES(?,?,?,'ABERTO',?)`).run(nowIso(),opening,userId,text(note));
+    return getOpenCashSession(db)||db.prepare('SELECT * FROM cash_sessions WHERE id=?').get(Number(result.lastInsertRowid));
+  });
 }
 
 function requireOpenCash(db) {
@@ -75,17 +78,19 @@ function requireOpenCash(db) {
   return session;
 }
 
-export function addCashMovement(db, { type, amountCents, note = '', userId = null } = {}) {
-  const allowed = new Set(['SUPRIMENTO', 'SANGRIA', 'AJUSTE']);
-  if (!allowed.has(type)) throw new Error('Tipo de movimentação de caixa inválido');
-  const session = requireOpenCash(db);
-  const value = cents(amountCents);
-  if (value <= 0) throw new Error('Valor deve ser maior que zero');
-  const signed = type === 'SANGRIA' ? -value : value;
-  return db.prepare('SELECT * FROM cash_movements WHERE id=?').get(
-    postCashMovement(db,{cashSessionId:session.id,type,amountCents:signed,
-      paymentMethod:'DINHEIRO',note,createdBy:userId})
-  );
+export function addCashMovement(db,{type,amountCents,note='',userId=null,requestId=null}={}){
+  return runIdempotent(db,'cash:manual',requestId,{type,amountCents,note,userId},()=>{
+    const allowed=new Set(['SUPRIMENTO','SANGRIA','AJUSTE']);
+    if(!allowed.has(type))throw new Error('Tipo de movimentação de caixa inválido');
+    const session=requireOpenCash(db);
+    const value=cents(amountCents);
+    if(value<=0)throw new Error('Valor deve ser maior que zero');
+    const signed=type==='SANGRIA'?-value:value;
+    return db.prepare('SELECT * FROM cash_movements WHERE id=?').get(
+      postCashMovement(db,{cashSessionId:session.id,type,amountCents:signed,
+        paymentMethod:'DINHEIRO',note,createdBy:userId})
+    );
+  });
 }
 
 function normalizeSaleItem(db, input) {
@@ -244,12 +249,14 @@ export function cashSummary(db) {
   return { session, movements, expectedCashCents, movementTotalCents, byMethod };
 }
 
-export function closeCashSession(db, { closingCents, note = '' } = {}) {
-  const session = requireOpenCash(db);
-  const closing = cents(closingCents, 'Saldo contado');
-  const summary = cashSummary(db);
-  const difference = closing - summary.expectedCashCents;
-  db.prepare(`UPDATE cash_sessions SET status='FECHADO',closed_at=?,closing_cents=?,expected_cents=?,difference_cents=?,notes=? WHERE id=?`)
-    .run(nowIso(), closing, summary.expectedCashCents, difference, text(note) || session.notes, session.id);
-  return db.prepare('SELECT * FROM cash_sessions WHERE id=?').get(session.id);
+export function closeCashSession(db,{closingCents,note='',requestId=null}={}){
+  return runIdempotent(db,'cash:close',requestId,{closingCents,note},()=>{
+    const session=requireOpenCash(db);
+    const closing=cents(closingCents,'Saldo contado');
+    const summary=cashSummary(db);
+    const difference=closing-summary.expectedCashCents;
+    db.prepare(`UPDATE cash_sessions SET status='FECHADO',closed_at=?,closing_cents=?,expected_cents=?,difference_cents=?,notes=? WHERE id=?`)
+      .run(nowIso(),closing,summary.expectedCashCents,difference,text(note)||session.notes,session.id);
+    return db.prepare('SELECT * FROM cash_sessions WHERE id=?').get(session.id);
+  });
 }

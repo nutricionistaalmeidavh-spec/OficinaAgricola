@@ -1,11 +1,81 @@
 const $=(s,root=document)=>root.querySelector(s); const $$=(s,root=document)=>[...root.querySelectorAll(s)];
-const state={token:localStorage.getItem('oficina_token')||'',user:null,page:'dashboard',pageReady:false,pageEpoch:0,pageController:null,modalToken:null};
+const state={token:localStorage.getItem('oficina_token')||'',user:null,page:'dashboard',pageReady:false,pageEpoch:0,pageController:null,modalToken:null,modalKey:null};
 const dirtyInputs=new WeakSet();
+// ID + usuário evita reenviar comandos para outra conta quando um banco for recriado.
+const currentCommandOwner=()=>state.user?
+  String(state.user.id)+':'+String(state.user.username||''):null;
+const commandQueue=window.OficinaCommands?.createQueue({
+  send:({path,method,body})=>{
+    // Autorizações nunca entram no IndexedDB; cada envio usa a sessão atual.
+    const headers={'Content-Type':'application/json'};
+    if(state.token)headers.Authorization='Bearer '+state.token;
+    const transport=window.localRuntime?.request||fetch;
+    return transport(path,{method,headers,body:JSON.stringify(body)});
+  }
+});
+async function updatePendingCommands(){
+  const button=$('#pendingCommands');
+  if(!button)return;
+  if(!commandQueue||!state.user){button.classList.add('hidden');return}
+  const owner=currentCommandOwner();
+  try{
+    const pending=await commandQueue.list(owner);
+    if(!state.user||currentCommandOwner()!==owner)return;
+    const count=pending.length;
+    button.classList.toggle('hidden',count===0);
+    button.textContent=count===0?'':count===1
+      ?'1 operação aguardando confirmação · Tentar novamente'
+      :count+' operações aguardando confirmação · Tentar novamente';
+  }catch(error){
+    // Erro de armazenamento não pode ser tratado como operação confirmada.
+    button.classList.remove('hidden');
+    button.textContent='Verificar armazenamento local de operações';
+    button.title=error.message;
+  }
+}
+async function resumePendingCommands(manual=false){
+  if(!commandQueue||!state.user)return;
+  const owner=currentCommandOwner();
+  try{
+    const confirmed=await commandQueue.replay(owner,{manual});
+    if(!state.user||currentCommandOwner()!==owner)return;
+    if(confirmed>0){
+      toast(confirmed===1?'Operação pendente confirmada':confirmed+' operações confirmadas');
+      await refreshCurrentPage();
+    }else if(manual){
+      const left=await commandQueue.list(owner);
+      if(left.length)toast('Não foi possível confirmar todas as operações. Tente novamente quando o servidor voltar.',true);
+    }
+  }catch(error){if(manual)toast(error.message,true)}
+  finally{await updatePendingCommands()}
+}
+commandQueue?.bus.on('pending',()=>void updatePendingCommands());
+commandQueue?.bus.on('confirmed',()=>void updatePendingCommands());
+commandQueue?.bus.on('rejected',()=>void updatePendingCommands());
+window.addEventListener?.('online',()=>void resumePendingCommands());
+window.addEventListener?.('oficina:server-status',e=>{
+  if(e.detail?.available)void resumePendingCommands();
+});
+
+function newCommandId(){
+  return globalThis.crypto?.randomUUID?.()||
+    `cmd-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
 // Reconciliação DOM local sem dependências externas. Somente nós diferentes mudam.
 function nodeIdentity(node){
   if(node?.nodeType!==1)return null;
-  for(const attr of ['id','data-os','data-sale','data-oa-os','data-edit-customer','data-edit-service','data-entry','data-history']){
+  const markers=['id','data-os','data-sale','data-oa-os','data-edit-customer',
+    'data-edit-service','data-entry','data-history','data-check-position','data-edit-machine'];
+  for(const attr of markers){
     if(node.hasAttribute(attr))return attr+':'+node.getAttribute(attr);
+  }
+  // Linhas de tabelas também precisam identidade estável quando a lista muda de ordem.
+  if(node.tagName==='TR'){
+    const child=node.querySelector?.('[data-edit-customer],[data-edit-service],[data-entry],[data-sale],[data-history]');
+    if(child){
+      for(const attr of markers)if(child.hasAttribute(attr))
+        return 'row:'+attr+':'+child.getAttribute(attr);
+    }
   }
   return null;
 }
@@ -42,6 +112,11 @@ function reconcileChildren(host,incoming){
     if(key&&nodeIdentity(present)!==key){
       const match=[...host.childNodes].slice(i+1).find(x=>nodeIdentity(x)===key);
       if(match){host.insertBefore(match,present);present=match;}
+      else if(present){
+        // Uma entidade nova não pode sobrescrever DOM de outra entidade.
+        host.insertBefore(desired.cloneNode(true),present);
+        continue;
+      }
     }
     if(!present){host.appendChild(desired.cloneNode(true));continue;}
     reconcileNode(present,desired);
@@ -64,7 +139,9 @@ async function api(path,{method='GET',body,raw=false}={}){
   const requester=window.localRuntime?.request||fetch;
   const isRead=method==='GET',epoch=state.pageEpoch;
   const signal=isRead?state.pageController?.signal:undefined;
-  const res=await requester(path,{method,headers,signal,body:body===undefined?undefined:JSON.stringify(body)});
+  const res=!isRead&&!raw&&commandQueue&&state.user
+    ?await commandQueue.execute({ownerId:currentCommandOwner(),path,method,body:body||{}})
+    :await requester(path,{method,headers,signal,body:body===undefined?undefined:JSON.stringify(body)});
   if(isRead&&(signal?.aborted||epoch!==state.pageEpoch))throw new DOMException('Consulta obsoleta','AbortError');
   if(res.status===401){logout();throw new Error('Sessão expirada')}
   const text=await res.text();
@@ -72,44 +149,145 @@ async function api(path,{method='GET',body,raw=false}={}){
   if(!res.ok){let msg=text;try{msg=JSON.parse(text).error}catch{}throw new Error(msg||'Erro na operação')}
   return raw?text:(text?JSON.parse(text):null);
 }
-function toast(msg,error=false){const el=$('#toast');el.textContent=msg;el.className=`toast${error?' error':''}`;setTimeout(()=>el.classList.add('hidden'),2800)}
-function showModal(title,html,onSubmit){
+let toastTimer=null;
+function toast(msg,error=false){
+  const el=$('#toast');
+  clearTimeout(toastTimer);
+  el.textContent=msg;el.className=`toast${error?' error':''}`;
+  toastTimer=setTimeout(()=>el.classList.add('hidden'),error?8000:4500);
+}
+let modalSession=null;
+function modalFocusables(){
+  const root=$('#modalDiscardPrompt')||$('#modal .modal-card');
+  return $$('button:not(:disabled),a[href],input:not(:disabled),select:not(:disabled),textarea:not(:disabled),[tabindex="0"]',root)
+    .filter(el=>el.getClientRects().length&&!el.closest('[inert]'));
+}
+function syncModalViewport(){
+  const dialog=$('#modal');
+  const viewport=window.visualViewport;
+  if(!viewport||!dialog?.style)return;
+  dialog.style.setProperty('--modal-viewport-height',viewport.height+'px');
+  dialog.style.setProperty('--modal-viewport-top',viewport.offsetTop+'px');
+}
+function beginModalSession(){
+  if(modalSession)return;
+  modalSession={trigger:document.activeElement,background:[]};
+  for(const el of [$('#appView'),$('#loginView')]){
+    modalSession.background.push([el,el.inert]);el.inert=true;
+  }
+  document.body.classList.add('modal-open');
+  syncModalViewport();
+}
+function requestCloseModal(){
+  if(!modalSession)return;
+  if(modalSession.busy){toast('Aguarde a confirmação da operação.');return}
+  const body=$('#modalBody');
+  if(!modalSession.dirty){closeModal();return}
+  if($('#modalDiscardPrompt'))return;
+  const previous=document.activeElement;
+  const prompt=document.createElement('section');
+  prompt.id='modalDiscardPrompt';prompt.className='discard-prompt';
+  prompt.setAttribute('role','alert');
+  prompt.innerHTML='<p>Há alterações não salvas. Descartar essas alterações?</p><div class="action-row"><button type="button" class="btn" data-keep-editing>Continuar editando</button><button type="button" class="btn danger" data-discard-edit>Descartar alterações</button></div>';
+  const siblings=[...body.children].map(el=>[el,el.inert]);
+  for(const [el] of siblings)el.inert=true;
+  body.prepend(prompt);
+  const keep=()=>{
+    prompt.remove();for(const [el,inert] of siblings)el.inert=inert;
+    modalSession.cancelDiscard=null;
+    if(previous?.isConnected)previous.focus();
+  };
+  modalSession.cancelDiscard=keep;
+  $('[data-keep-editing]',prompt).onclick=keep;
+  $('[data-discard-edit]',prompt).onclick=closeModal;
+  $('[data-keep-editing]',prompt).focus();
+}
+document.addEventListener?.('keydown',event=>{
+  if(!modalSession||event.isComposing)return;
+  if(event.key==='Escape'){
+    event.preventDefault();
+    if(modalSession.cancelDiscard)modalSession.cancelDiscard();else requestCloseModal();
+  }
+  if(event.key==='Tab'){
+    const targets=modalFocusables(),first=targets[0],last=targets.at(-1);
+    if(!first){event.preventDefault();$('#modal .modal-card').focus();return}
+    const active=document.activeElement;
+    if(event.shiftKey&&(active===first||!targets.includes(active))){event.preventDefault();last.focus()}
+    else if(!event.shiftKey&&(active===last||!targets.includes(active))){event.preventDefault();first.focus()}
+  }
+});
+document.addEventListener?.('focusin',event=>{
+  if(modalSession&&!$('#modal').contains(event.target))$('#modal .modal-card').focus();
+});
+window.visualViewport?.addEventListener('resize',syncModalViewport);
+window.visualViewport?.addEventListener('scroll',syncModalViewport);
+function showModal(title,html,onSubmit,{entityKey=null}={}){
   const dialog=$('#modal'),body=$('#modalBody'),heading=$('#modalTitle');
-  const same=heading.textContent===title&&!dialog.classList.contains('hidden');
+  const key=entityKey||title;
+  const same=state.modalKey===key&&!dialog.classList.contains('hidden');
+  const opening=dialog.classList.contains('hidden');
+  beginModalSession();
+  const successor=!same;
+  if(successor){modalSession.dirty=false;modalSession.busy=false;modalSession.cancelDiscard=null}
   heading.textContent=title;
-  if(same&&body.childNodes?.length){
-    const fresh=document.createElement('template');fresh.innerHTML=html;
-    reconcileChildren(body,fresh.content);
-  }else body.innerHTML=html;
+  if(same&&body.childNodes?.length)renderRegion(body,html);
+  else body.innerHTML=html;
   dialog.classList.remove('hidden');
   trackDirtyInputs(body);
   const token=Symbol('modal');
   state.modalToken=token;
+  state.modalKey=key;
+  if(opening||successor)$('#modal .modal-card').focus();
+  body.oninput=()=>{if(modalSession)modalSession.dirty=true};
+  body.onchange=body.oninput;
   const form=$('#modalBody form');
   if(form&&onSubmit)form.onsubmit=async e=>{
     e.preventDefault();
+    if(modalSession?.busy)return;
+    modalSession.busy=true;
+    form.setAttribute('aria-busy','true');
     const btn=$('button[type=submit]',form);if(btn)btn.disabled=true;
     try{
       await onSubmit(new FormData(form));
       // Um callback pode abrir outro modal; não fechar seu sucessor.
       if(state.modalToken===token)closeModal();
-    }catch(err){toast(err.message,true)}
-    finally{if(btn)btn.disabled=false}
+    }catch(err){
+      if(err?.pending&&state.modalToken===token)closeModal();
+      if(state.modalToken===token){
+        let error=$('[data-form-error]',form);
+        if(!error){error=document.createElement('p');error.dataset.formError='';error.className='error';error.setAttribute('role','alert');form.prepend(error)}
+        error.textContent=err.message;
+      }
+      toast(err.message,true);
+    }
+    finally{if(btn)btn.disabled=false;form.removeAttribute('aria-busy');if(state.modalToken===token&&modalSession)modalSession.busy=false}
   };
 }
-function closeModal(){state.modalToken=null;$('#modal').classList.add('hidden');$('#modalBody').innerHTML=''}
+function closeModal(){
+  const session=modalSession;modalSession=null;
+  state.modalToken=null;state.modalKey=null;
+  $('#modal').classList.add('hidden');$('#modalBody').innerHTML='';
+  document.body.classList.remove('modal-open');
+  if(session){
+    for(const [el,inert] of session.background)el.inert=inert;
+    const trigger=session.trigger;
+    if(trigger?.isConnected&&!trigger.closest('[inert]'))trigger.focus();
+    else $('#nav button.active')?.focus();
+  }
+}
 function formObj(fd){return Object.fromEntries([...fd.entries()].map(([k,v])=>[k,typeof v==='string'?v.trim():v]))}
 function badge(status){const cls=/PRONTA|ENTREGUE|APROVADA|PAGO/.test(status)?'green':/AGUARDANDO|ORCAMENTO|PARCIAL/.test(status)?'orange':/CANCELADA|REPROVADA/.test(status)?'red':'blue';return `<span class="pill ${cls}">${esc(status.replaceAll('_',' '))}</span>`}
-function pageTitle(title,eyebrow='OFICINA'){ $('#pageTitle').textContent=title;$('#pageEyebrow').textContent=eyebrow }
+function pageTitle(title,eyebrow='OFICINA'){ document.title=title+' · ArtiSys Oficina'; $('#pageTitle').textContent=title;$('#pageEyebrow').textContent=eyebrow }
+function renderRegion(host,html){
+  const template=document.createElement('template');
+  template.innerHTML=html;
+  reconcileChildren(host,template.content);
+  trackDirtyInputs(host);
+}
 function setContent(html){
   const host=$('#content');
-  if(!state.pageReady||!host.childNodes?.length){
-    host.innerHTML=html;
-  }else{
-    const fresh=document.createElement('template');
-    fresh.innerHTML=html;
-    reconcileChildren(host,fresh.content);
-  }
+  if(!state.pageReady||!host.childNodes?.length)host.innerHTML=html;
+  else renderRegion(host,html);
   trackDirtyInputs(host);
 }
 
@@ -120,7 +298,12 @@ async function boot(){
     if(setup.required){state.token='';localStorage.removeItem('oficina_token');return showSetup()}
   }catch{ /* The login view will display server errors if offline. */ }
   if(!state.token)return showLogin();
-  try{state.user=await api('/api/auth/me');showApp();await navigate('dashboard')}catch{showLogin()}
+  try{
+    state.user=await api('/api/auth/me');
+    showApp();await navigate('dashboard');
+    void updatePendingCommands();
+    void resumePendingCommands();
+  }catch{showLogin()}
 }
 function showSetup(){
   $('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');
@@ -131,34 +314,53 @@ function showLogin(){
   $('#setupForm').classList.add('hidden');$('#loginForm').classList.remove('hidden');
 }
 function showApp(){$('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');$('#userName').textContent=state.user.name;$('#userRole').textContent=state.user.role;$('#avatar').textContent=state.user.name[0]?.toUpperCase()||'A'}
-function logout(){state.pageController?.abort();state.pageEpoch++;state.pageReady=false;state.token='';state.user=null;localStorage.removeItem('oficina_token');showLogin()}
+function logout(){
+  if(modalSession)closeModal();
+  state.pageController?.abort();state.pageEpoch++;state.pageReady=false;
+  state.token='';state.user=null;localStorage.removeItem('oficina_token');
+  void updatePendingCommands();showLogin();
+}
 
 function pageRenderer(page){
+  const dashboard=typeof renderDashboard==='function'?renderDashboard:async()=>{};
   return ({
-    dashboard:renderDashboard,customers:renderCustomers,machines:renderMachines,
+    dashboard,customers:renderCustomers,machines:renderMachines,
     'work-orders':renderWorkOrders,inventory:renderInventory,schedule:renderSchedule,
     finance:renderFinance,reports:renderReports,technicians:renderTechnicians,
     settings:renderSettings,services:renderServices,sales:renderSales
-  })[page]||renderDashboard;
+  })[page]||dashboard;
 }
-// Chamado após comandos: reconsulta dados, mas preserva os nós DOM existentes.
+let refreshPromise=null,refreshQueued=false;
+// Consolida concorrência numa projeção por página, sem sobrescrever requests recentes.
 async function refreshCurrentPage(){
   if(!state.pageReady)return;
+  if(refreshPromise){refreshQueued=true;return refreshPromise}
   const epoch=state.pageEpoch,active=state.page;
-  try{
-    await pageRenderer(active)();
-  }catch(error){
-    if(epoch===state.pageEpoch&&error?.name!=='AbortError')toast(error.message,true);
-  }
+  refreshPromise=(async()=>{
+    do{
+      refreshQueued=false;
+      if(epoch!==state.pageEpoch||active!==state.page)return;
+      await pageRenderer(active)();
+    }while(refreshQueued&&epoch===state.pageEpoch);
+  })();
+  try{await refreshPromise}
+  catch(error){if(epoch===state.pageEpoch&&error?.name!=='AbortError')toast(error.message,true)}
+  finally{refreshPromise=null;refreshQueued=false}
 }
 async function navigate(page,{force=false}={}){
-  if(state.page===page&&state.pageReady&&!force)return;
+  if(state.page===page&&state.pageReady){
+    if(force)return refreshCurrentPage();
+    return;
+  }
   state.pageController?.abort();
   state.pageController=new AbortController();
   const epoch=++state.pageEpoch;
   state.pageReady=false;
   state.page=page;
-  $$('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===page));
+  $$('#nav button').forEach(b=>{
+    const active=b.dataset.page===page;b.classList.toggle('active',active);
+    if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');
+  });
   setContent('<div class="card"><div class="empty">Carregando…</div></div>');
   try{
     await pageRenderer(page)();
@@ -170,10 +372,5 @@ async function navigate(page,{force=false}={}){
   }
 }
 
-async function renderDashboard(){pageTitle('Visão Geral','OPERAÇÃO EM TEMPO REAL');const d=await api('/api/dashboard');const f=d.finance;setContent(`
- <div class="grid stats">
-  ${stat('OS abertas',d.counts.ABERTAS)}${stat('Em diagnóstico',d.counts.DIAGNOSTICO)}${stat('Aguard. aprovação',d.counts.AGUARDANDO_APROVACAO)}${stat('Em serviço',d.counts.EM_SERVICO)}${stat('Prontas',d.counts.PRONTA)}${stat('Faturamento',money(f.invoicedCents),'accent')}
- </div>
- <div class="grid two-col"><div class="card"><div class="card-head"><h2>Próximos compromissos</h2><button class="btn sm" data-go="schedule">Ver agenda</button></div>${d.upcoming.length?`<div class="list">${d.upcoming.map(e=>`<div class="list-item"><div><strong>${esc(e.title)}</strong><br><small>${esc(e.customer_name||'')} ${e.os_number?`• OS #${e.os_number}`:''}</small></div><small>${dt(e.starts_at)}</small></div>`).join('')}</div>`:'<div class="empty">Nenhum compromisso próximo.</div>'}</div>
- <div class="card"><div class="card-head"><h2>Estoque crítico</h2><button class="btn sm" data-go="inventory">Ver estoque</button></div>${d.lowStock.length?`<div class="list">${d.lowStock.map(p=>`<div class="list-item"><div><strong>${esc(p.description)}</strong><br><small>${esc(p.sku)}</small></div><span class="pill orange">${p.quantity} / mín. ${p.min_stock}</span></div>`).join('')}</div>`:'<div class="empty">Estoque dentro dos mínimos.</div>'}</div></div>`);$$('[data-go]').forEach(b=>b.onclick=()=>navigate(b.dataset.go))}
 function stat(label,value,cls=''){return `<div class="stat"><small>${label}</small><strong class="${cls}">${value}</strong></div>`}
+

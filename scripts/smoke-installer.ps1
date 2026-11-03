@@ -49,9 +49,37 @@ try {
   $login = Invoke-RestMethod -Uri "$hostUrl/api/auth/login" -Method Post -ContentType 'application/json' -Body '{"username":"gestorqa","password":"SenhaDeTesteQA2026!Local"}'
   if ($login.user.role -ne 'ADMIN') { throw 'Login do administrador configurado falhou' }
 
+  # Smoke real da fila do servidor desktop: criar cliente duas vezes com a
+  # mesma chave e verificar exatamente um evento de domínio projetado no JSONL.
+  $headers = @{ Authorization = "Bearer $($login.token)" }
+  $clientBody = '{"name":"Cliente QA EventBus Windows","requestId":"windows-event-outbox-once"}'
+  $customer = Invoke-RestMethod -Uri "$hostUrl/api/customers" -Method Post -Headers $headers -ContentType 'application/json' -Body $clientBody
+  $again = Invoke-RestMethod -Uri "$hostUrl/api/customers" -Method Post -Headers $headers -ContentType 'application/json' -Body $clientBody
+  if ($customer.id -ne $again.id) { throw 'Reenvio do comando criou outro cliente' }
+  $eventsFile = Join-Path $env:LOCALAPPDATA 'ArtiSys\Oficina\events\events.jsonl'
+  $matching = @()
+  for ($attempt = 0; $attempt -lt 50; $attempt++) {
+    Start-Sleep -Milliseconds 400
+    if (Test-Path $eventsFile) {
+      $matching = @(
+        Get-Content -Path $eventsFile | ForEach-Object {
+          try { $_ | ConvertFrom-Json } catch { $null }
+        } | Where-Object {
+          $_ -and $_.type -eq 'ENTITY_MUTATED' -and
+          $_.payload.path -eq '/api/customers' -and
+          $_.payload.resourceId -eq $customer.id
+        }
+      )
+      if ($matching.Count -ge 1) { break }
+    }
+  }
+  if ($matching.Count -ne 1) {
+    throw "EventBus do desktop precisa registrar exatamente um evento por cliente; eventos=$($matching.Count)"
+  }
+
   $dbFile = Join-Path $env:LOCALAPPDATA 'ArtiSys\Oficina\data\artisys-oficina.sqlite'
   if (-not (Test-Path $dbFile)) { throw 'Banco exclusivo do aplicativo não foi criado no perfil Windows' }
-  Write-Host 'PASS: NSIS instalou, app iniciou, primeiro acesso foi configurado e login funcionou'
+  Write-Host 'PASS: NSIS instalou, bootstrap/login funcionou, e o EventBus desktop projetou evento idempotente' 
 } finally {
   if ($appProcess -and -not $appProcess.HasExited) { Stop-Process -Id $appProcess.Id -Force -ErrorAction SilentlyContinue }
 }

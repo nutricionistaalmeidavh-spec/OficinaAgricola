@@ -10,6 +10,8 @@ let mainWindow = null;
 let server = null;
 let db = null;
 let serverUrl = null;
+let eventRuntime = null;
+let outboxTimer = null;
 
 function dataRoot() {
   const local = process.env.LOCALAPPDATA || app.getPath('userData');
@@ -21,11 +23,17 @@ async function startLocalServer() {
 
   if (!process.argv[1]) process.argv[1] = fileURLToPath(import.meta.url);
 
-  const [{ openDatabase, migrate }, { seed }, { migrateAssistencia }, { createAssistenciaServer }] = await Promise.all([
+  const [
+    {openDatabase,migrate},{seed},{migrateAssistencia},{createAssistenciaServer},
+    {createEventRuntime},{dispatchOutbox},{recoverOrphanAttachments}
+  ]=await Promise.all([
     import('../dist/src/db.js'),
     import('../dist/src/seed.js'),
     import('../dist/src/assistencia-schema.js'),
     import('../dist/src/server-assistencia.js'),
+    import('../dist/src/platform/event-runtime.js'),
+    import('../dist/src/platform/outbox.js'),
+    import('../dist/src/services/operations.js'),
   ]);
   // Identidade nova: nenhuma busca por pastas ou bancos de versões antigas.
   const dbPath = join(root, 'data', 'artisys-oficina.sqlite');
@@ -41,7 +49,10 @@ async function startLocalServer() {
   migrate(db);
   migrateAssistencia(db);
   seed(db);
-  server = createAssistenciaServer({ db, storageDir });
+  // Paridade com src/start.js: eventos são persistidos e recuperados no desktop.
+  recoverOrphanAttachments(db,storageDir);
+  eventRuntime=createEventRuntime({auditPath:join(root,'events','events.jsonl')});
+  server = createAssistenciaServer({ db, storageDir, eventRuntime });
 
   const port = Number(process.env.PORT || 3344);
   await new Promise((resolve, reject) => {
@@ -52,6 +63,12 @@ async function startLocalServer() {
       resolve();
     });
   });
+
+  const flushEvents=()=>void dispatchOutbox(db,eventRuntime)
+    .catch(error=>console.error('[desktop-outbox]',error?.message||String(error)));
+  flushEvents();
+  outboxTimer=setInterval(flushEvents,15000);
+  outboxTimer.unref?.();
 
   serverUrl = `http://127.0.0.1:${port}`;
   return serverUrl;
@@ -115,7 +132,9 @@ app.whenReady().then(async () => {
 });
 
 app.on('before-quit', () => {
+  if(outboxTimer)clearInterval(outboxTimer);
   try { server?.close(); } catch {}
+  try { eventRuntime?.close(); } catch {}
   try { db?.close(); } catch {}
 });
 

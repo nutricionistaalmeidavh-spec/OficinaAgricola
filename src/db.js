@@ -168,7 +168,8 @@ export function migrate(db) {
     CREATE TABLE IF NOT EXISTS checklist_template_items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       template_id INTEGER NOT NULL REFERENCES checklist_templates(id) ON DELETE CASCADE,
-      position INTEGER NOT NULL, label TEXT NOT NULL
+      position INTEGER NOT NULL, label TEXT NOT NULL,
+      required INTEGER NOT NULL DEFAULT 1 CHECK(required IN (0,1))
     );
     CREATE TABLE IF NOT EXISTS work_order_checklists (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -217,6 +218,27 @@ export function migrate(db) {
       created_at TEXT NOT NULL, updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS command_idempotency (
+      scope TEXT NOT NULL,
+      request_id TEXT NOT NULL,
+      payload_hash TEXT NOT NULL,
+      result_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY(scope,request_id)
+    );
+    CREATE TABLE IF NOT EXISTS domain_outbox (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_key TEXT NOT NULL UNIQUE,
+      event_id TEXT NOT NULL UNIQUE,
+      event_type TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      meta_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      delivered_at TEXT,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX IF NOT EXISTS idx_domain_outbox_pending ON domain_outbox(delivered_at,id);
     CREATE INDEX IF NOT EXISTS idx_work_orders_status ON work_orders(status);
     CREATE INDEX IF NOT EXISTS idx_work_orders_machine ON work_orders(machine_id);
     CREATE INDEX IF NOT EXISTS idx_work_order_changes_os ON work_order_change_history(work_order_id);
@@ -225,6 +247,9 @@ export function migrate(db) {
     CREATE INDEX IF NOT EXISTS idx_receipts_os ON receipts(work_order_id);
   `);
   // Migrate older local SQLite files additively; never truncate or rewrite balances.
+  const checklistCols=new Set(db.prepare("PRAGMA table_info('checklist_template_items')").all().map(c=>c.name));
+  if(!checklistCols.has('required'))
+    db.exec('ALTER TABLE checklist_template_items ADD COLUMN required INTEGER NOT NULL DEFAULT 1 CHECK(required IN (0,1))');
   const machineCols=new Set(db.prepare("PRAGMA table_info('machines')").all().map(c=>c.name));
   if(!machineCols.has('license_plate'))db.exec('ALTER TABLE machines ADD COLUMN license_plate TEXT');
   if(!machineCols.has('vin'))db.exec('ALTER TABLE machines ADD COLUMN vin TEXT');
@@ -248,14 +273,21 @@ export function migrate(db) {
   `);
 }
 
-export function transaction(db, fn) {
-  db.exec('BEGIN IMMEDIATE');
-  try {
-    const result = fn();
-    db.exec('COMMIT');
+let nextSavepoint=0;
+// SAVEPOINT é compatível com transações já abertas: um comando HTTP pode
+// envolver os serviços e o outbox numa única confirmação SQLite.
+export function transaction(db,fn){
+  const name='p0_tx_'+(++nextSavepoint);
+  db.exec('SAVEPOINT '+name);
+  try{
+    const result=fn();
+    if(result&&typeof result.then==='function')
+      throw new Error('Transação SQLite requer callback síncrono');
+    db.exec('RELEASE SAVEPOINT '+name);
     return result;
-  } catch (error) {
-    try { db.exec('ROLLBACK'); } catch {}
+  }catch(error){
+    try{db.exec('ROLLBACK TO SAVEPOINT '+name)}catch{}
+    try{db.exec('RELEASE SAVEPOINT '+name)}catch{}
     throw error;
   }
 }

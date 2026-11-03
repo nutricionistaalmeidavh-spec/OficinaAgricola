@@ -5,16 +5,19 @@
   --lime:#84a94f;
   --accent:#b45309;
   --ink:#20251c;
-  --muted:#6f7569;
+  --muted:#52604c;
   --line:#e4e8dd;
-  --bg:#f6f7f2;
+  --bg:#f6f8f5;
   --card:#fff;
+  --scroll-thumb:#87957e;
+  --scroll-track:#edf2ec;
+  --scroll-hover:#52604c;
   --shadow:0 8px 30px rgba(46,64,20,.08);
 }
 
 .login-screen{background:radial-gradient(circle at 80% 18%,#edf4dc 0,transparent 34%),linear-gradient(135deg,#fafbf7,#f1f4e9)}
 .brand-mark{background:linear-gradient(145deg,#4d6b1f,#365314);box-shadow:0 10px 24px rgba(54,83,20,.24)}
-.sidebar{background:linear-gradient(180deg,#344e16 0%,#263b11 100%)}
+@media(min-width:841px){.sidebar{background:var(--green)}}
 nav button:hover,nav button.active{background:rgba(255,255,255,.12)}
 nav button.active{box-shadow:inset 3px 0 #c28a38}
 .topbar small{color:#4d6b1f}
@@ -31,3 +34,4 @@ input:focus,select:focus,textarea:focus{border-color:#84a94f;box-shadow:0 0 0 3p
 .server-status.available i{background:#6f9639}
 @media(max-width:840px){.sidebar nav button.active{background:#f1f6e8;color:#365314}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+

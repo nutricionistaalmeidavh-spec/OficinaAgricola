@@ -93,7 +93,7 @@ test('PWA mantém API fora do cache e registra shell local completo', () => {
   assert.ok(manifest.start_url);
   assert.match(sw, /pathname\.startsWith\('\/api\/'\)/);
   assert.match(sw, /networkFirstNavigation/);
-  assert.match(sw, /cacheFirstStatic/);
+  assert.match(sw, /networkFirstStatic/);
   assert.match(sw, /\/local-runtime\.css/);
   assert.match(sw, /\/local-runtime\.js/);
   assert.match(sw, /\/ui-stage7\.css/);

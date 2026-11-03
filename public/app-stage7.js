@@ -12,7 +12,7 @@ function oaKpi(label,value,kind=''){
 
 function oaOrderCard(order){
   const machine=[order.machine_brand,order.machine_model].filter(Boolean).join(' ')||'Máquina não informada';
-  return `<article class="oa-order-mini" data-oa-os="${order.id}"><strong>OS #${order.os_number} · ${esc(order.customer_name)}</strong><p>${esc(machine)}<br>${esc(order.problem_reported||'Sem descrição')}</p>${badge(order.status)}</article>`;
+  return `<button type="button" class="oa-order-mini" data-oa-os="${order.id}"><strong>OS #${order.os_number} · ${esc(order.customer_name)}</strong><p>${esc(machine)}<br>${esc(order.problem_reported||'Sem descrição')}</p>${badge(order.status)}</button>`;
 }
 
 async function renderDashboard(){
@@ -95,10 +95,13 @@ async function renderReports(){
 function oaSearchText(value){return String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()}
 function oaMatch(query,...values){const q=oaSearchText(query);return values.some(value=>oaSearchText(value).includes(q))}
 
+let globalSearchEpoch=0;
 async function runGlobalSearch(query){
+  const epoch=++globalSearchEpoch;
   const q=query.trim();
   if(q.length<2){toast('Digite pelo menos 2 caracteres.',true);return}
   const [customers,machines,orders]=await Promise.all([api('/api/customers'),api('/api/machines'),api('/api/work-orders')]);
+  if(epoch!==globalSearchEpoch)return;
   const customerResults=customers.filter(item=>oaMatch(q,item.name,item.document,item.phone)).slice(0,6);
   const machineResults=machines.filter(item=>oaMatch(q,item.brand,item.model,item.type,item.serial_number,item.internal_id)).slice(0,6);
   const orderResults=orders.filter(item=>oaMatch(q,item.os_number,item.customer_name,item.machine_brand,item.machine_model,item.problem_reported)).slice(0,8);
@@ -118,14 +121,22 @@ async function runGlobalSearch(query){
 function bindGlobalSearch(){
   const input=$('#globalSearch');
   if(!input)return;
+  const clear=$('#clearGlobalSearch');
+  const submit=$('#submitGlobalSearch');
+  function clearSearch(){globalSearchEpoch++;input.value='';clear.classList.add('hidden');input.focus()}
+  clear.onclick=clearSearch;
+  input.addEventListener('input',()=>{globalSearchEpoch++;clear.classList.toggle('hidden',!input.value)});
+  submit.onclick=()=>runGlobalSearch(input.value).catch(error=>toast(error.message,true));
   input.addEventListener('keydown',event=>{
+    if(event.isComposing)return;
     if(event.key==='Enter'){event.preventDefault();runGlobalSearch(input.value).catch(error=>toast(error.message,true))}
-    if(event.key==='Escape'){input.value='';input.blur()}
+    if(event.key==='Escape'){clearSearch()}
   });
   document.addEventListener('keydown',event=>{
     const tag=document.activeElement?.tagName;
-    if(event.key==='/'&&!['INPUT','TEXTAREA','SELECT'].includes(tag)){event.preventDefault();input.focus()}
+    if(event.key==='/'&&!event.isComposing&&$('#modal').classList.contains('hidden')&&!['INPUT','TEXTAREA','SELECT'].includes(tag)){event.preventDefault();input.focus()}
   });
 }
 
 bindGlobalSearch();
+

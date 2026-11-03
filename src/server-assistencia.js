@@ -1,9 +1,10 @@
 import { createServer } from 'node:http';
-import { openDatabase, migrate } from './db.js';
+import { openDatabase, migrate, transaction } from './db.js';
 import { validateSession } from './auth.js';
 import { createAppServer } from './server.js';
 import { migrateAssistencia } from './assistencia-schema.js';
-import { attachHttpEventBridge } from './platform/http-event-bridge.js';
+import {enqueueHttpEvent,dispatchOutbox} from './platform/outbox.js';
+import {runIdempotent} from './platform/idempotency.js';
 import {
   addCashMovement,
   cancelSale,
@@ -70,6 +71,8 @@ function errorStatus(error) {
   return 400;
 }
 
+function respond(status,data){return {status,data};}
+
 function isAssistenciaApi(pathname) {
   return pathname === '/api/services' || pathname.startsWith('/api/services/') ||
     pathname === '/api/sales' || pathname.startsWith('/api/sales/') ||
@@ -77,70 +80,70 @@ function isAssistenciaApi(pathname) {
     pathname === '/api/cash/open' || pathname === '/api/cash/sessions';
 }
 
-async function handleAssistenciaApi({ req, res, url, db }) {
+function handleAssistenciaApi({ req, res, url, db, body }) {
   const method = req.method || 'GET';
   const path = url.pathname;
   let match;
 
   if (path === '/api/services' && method === 'GET') {
     requireUser(db, req);
-    return json(res, 200, listServices(db, {
+    return respond(200, listServices(db, {
       includeInactive: url.searchParams.get('includeInactive') === '1',
       search: url.searchParams.get('search') || '',
     }));
   }
   if (path === '/api/services' && method === 'POST') {
     requireUser(db, req, SERVICE_WRITE_ROLES);
-    return json(res, 200, createService(db, await readJson(req)));
+    return respond(200, createService(db, body));
   }
   if ((match = path.match(/^\/api\/services\/(\d+)$/)) && method === 'PATCH') {
     requireUser(db, req, SERVICE_WRITE_ROLES);
-    return json(res, 200, updateService(db, positiveId(match[1]), await readJson(req)));
+    return respond(200, updateService(db, positiveId(match[1]), body));
   }
 
   if (path === '/api/sales' && method === 'GET') {
     requireUser(db, req, SALES_ROLES);
-    return json(res, 200, listSales(db, { limit: url.searchParams.get('limit') || 100 }));
+    return respond(200, listSales(db, { limit: url.searchParams.get('limit') || 100 }));
   }
   if (path === '/api/sales' && method === 'POST') {
     const user = requireUser(db, req, SALES_ROLES);
-    return json(res, 200, createSale(db, await readJson(req), { userId: user.id }));
+    return respond(200, createSale(db, body, { userId: user.id }));
   }
   if ((match = path.match(/^\/api\/sales\/(\d+)$/)) && method === 'GET') {
     requireUser(db, req, SALES_ROLES);
-    return json(res, 200, getSale(db, positiveId(match[1])));
+    return respond(200, getSale(db, positiveId(match[1])));
   }
   if ((match = path.match(/^\/api\/sales\/(\d+)\/cancel$/)) && method === 'POST') {
     const user = requireUser(db, req, SALE_CANCEL_ROLES);
-    return json(res, 200, cancelSale(db, positiveId(match[1]), { ...(await readJson(req)), userId: user.id }));
+    return respond(200, cancelSale(db, positiveId(match[1]), { ...(body), userId: user.id }));
   }
 
   if (path === '/api/cash/current' && method === 'GET') {
     requireUser(db, req, SALES_ROLES);
-    return json(res, 200, getOpenCashSession(db));
+    return respond(200, getOpenCashSession(db));
   }
   if (path === '/api/cash/current/summary' && method === 'GET') {
     requireUser(db, req, SALES_ROLES);
-    return json(res, 200, cashSummary(db));
+    return respond(200, cashSummary(db));
   }
   if (path === '/api/cash/sessions' && method === 'GET') {
     requireUser(db, req, CASH_ROLES);
-    return json(res, 200, listCashSessions(db, { limit: url.searchParams.get('limit') || 30 }));
+    return respond(200, listCashSessions(db, { limit: url.searchParams.get('limit') || 30 }));
   }
   if (path === '/api/cash/open' && method === 'POST') {
     const user = requireUser(db, req, CASH_ROLES);
-    return json(res, 200, openCashSession(db, { ...(await readJson(req)), userId: user.id }));
+    return respond(200, openCashSession(db, { ...(body), userId: user.id }));
   }
   if (path === '/api/cash/current/movements' && method === 'POST') {
     const user = requireUser(db, req, CASH_ROLES);
-    return json(res, 200, addCashMovement(db, { ...(await readJson(req)), userId: user.id }));
+    return respond(200, addCashMovement(db, { ...(body), userId: user.id }));
   }
   if (path === '/api/cash/current/close' && method === 'POST') {
     requireUser(db, req, CASH_ROLES);
-    return json(res, 200, closeCashSession(db, await readJson(req)));
+    return respond(200, closeCashSession(db, body));
   }
 
-  return json(res, 404, { error: 'Rota não encontrada' });
+  return respond(404, { error: 'Rota não encontrada' });
 }
 
 export function createAssistenciaServer({
@@ -150,17 +153,28 @@ export function createAssistenciaServer({
 } = {}) {
   migrate(db);
   migrateAssistencia(db);
-  const baseServer = createAppServer({ db, storageDir });
+  const baseServer = createAppServer({ db, storageDir, eventRuntime });
 
   return createServer(async (req, res) => {
-    attachHttpEventBridge({ req, res, eventRuntime });
     const url = new URL(req.url || '/', 'http://localhost');
     if (!isAssistenciaApi(url.pathname)) {
       baseServer.emit('request', req, res);
       return;
     }
     try {
-      await handleAssistenciaApi({ req, res, url, db });
+      const mutation=['POST','PUT','PATCH','DELETE'].includes(req.method||'');
+      const body=mutation?await readJson(req):{};
+      const actor=mutation?validateSession(db,tokenFrom(req)):null;
+      const invoke=()=>handleAssistenciaApi({req,res,url,db,body});
+      const answer=mutation?transaction(db,()=>{
+        const output=runIdempotent(db,`http:${req.method}:${url.pathname}:user:${actor.id}`,
+          body.requestId??req.headers['idempotency-key'],{body},invoke);
+        if(output.status>=200&&output.status<300)enqueueHttpEvent(db,req.method,url.pathname,output.data,{requestId:body.requestId??req.headers['idempotency-key'],actorId:actor.id});
+        return output;
+      }):invoke();
+      json(res,answer.status,answer.data);
+      if(mutation&&answer.status>=200&&answer.status<300&&eventRuntime)
+        void dispatchOutbox(db,eventRuntime).catch(e=>console.error('[outbox]',e.message));
     } catch (error) {
       console.error('[assistencia]', req.method, url.pathname, error.message);
       json(res, errorStatus(error), { error: error.message || 'Erro interno' });
