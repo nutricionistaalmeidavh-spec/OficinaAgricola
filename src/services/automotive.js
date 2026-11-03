@@ -115,7 +115,7 @@ export function createDiagnosticScan(db,machineId,input){
       raw=text(input.rawResponse);
       if(!raw||raw.length>4000)throw new Error('Resposta OBD-II inválida ou muito extensa');
       protocol=text(input.protocol).slice(0,80);
-      codes=decodeDtcResponse(raw,{can:/ISO\\s*15765|\\bCAN\\b/i.test(protocol)});
+      codes=decodeDtcResponse(raw,{can:/ISO\s*15765|\bCAN\b/i.test(protocol)});
     }
     const result=db.prepare(`INSERT INTO obd_scans(machine_id,work_order_id,protocol,raw_response,
       codes_json,created_at,adapter_id,source,details_json,notes) VALUES(?,?,?,?,?,?,?,?,?,?)`)
