@@ -8,7 +8,7 @@ export function resolveServerConfig(env = process.env) {
   if(Boolean(env.TLS_CERT_PATH)!==Boolean(env.TLS_KEY_PATH))throw new Error('HTTPS exige certificado e chave TLS');
   const rawPort = env.PORT == null || env.PORT === '' ? 3344 : Number(env.PORT);
   if (!Number.isInteger(rawPort) || rawPort < 1 || rawPort > 65535) throw new Error('PORT inválida');
-  return { host, port: rawPort };
+  return {host,port:rawPort,...(secure?{secure:true,certPath:env.TLS_CERT_PATH,keyPath:env.TLS_KEY_PATH}:{})};
 }
 
 export function listLanUrls({ port = 3344, interfaces = networkInterfaces(), secure = false } = {}) {
