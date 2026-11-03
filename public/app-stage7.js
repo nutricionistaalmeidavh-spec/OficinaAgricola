@@ -21,7 +21,7 @@ async function renderDashboard(){
   const f=d.finance||null;
   const pipeline=OA_PIPELINE.map(column=>{
     const items=orders.filter(order=>column.statuses.includes(order.status)).slice(0,4);
-    return `<div class="oa-board-col"><div class="oa-board-title"><span>${column.label}</span><b>${orders.filter(order=>column.statuses.includes(order.status)).length}</b></div>${items.map(oaOrderCard).join('')||'<div class="empty" style="padding:24px 8px;font-size:11px">Sem OS</div>'}</div>`;
+    return `<div class="oa-board-col"><div class="oa-board-title"><span>${column.label}</span><b>${column.statuses.reduce((sum,status)=>sum+(d.counts[status]||0),0)}</b></div>${items.map(oaOrderCard).join('')||'<div class="empty" style="padding:24px 8px;font-size:11px">Sem OS</div>'}</div>`;
   }).join('');
 
   setContent(`
@@ -64,22 +64,21 @@ async function renderReports(){
   const to=new Date(now.getFullYear(),now.getMonth()+1,0,23,59,59,999);
   const qs=`from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`;
   const financeAllowed=['ADMIN','FINANCEIRO'].includes(state.user.role);
-  const [dashboard,orders,finance]=await Promise.all([
+  const [dashboard,finance]=await Promise.all([
     api('/api/dashboard'),
-    api('/api/work-orders'),
     financeAllowed?api(`/api/finance/summary?${qs}`):Promise.resolve(null),
   ]);
-  const status=oaStatusCounts(orders);
+  const status=OA_PIPELINE.map(column=>({label:column.label,count:column.statuses.reduce((sum,s)=>sum+(dashboard.counts[s]||0),0)}));
   const max=Math.max(1,...status.map(item=>item.count));
-  const completed=orders.filter(order=>order.status==='ENTREGUE').length;
-  const active=orders.filter(order=>!['ENTREGUE','CANCELADA','REPROVADA'].includes(order.status)).length;
+  const completed=dashboard.counts.ENTREGUES_MES;
+  const active=dashboard.counts.ABERTAS;
 
   setContent(`
     <div class="section-head"><div><h2>Resumo do mês</h2><span class="muted">Indicadores derivados dos dados atuais do sistema</span></div></div>
     <div class="oa-report-grid">
-      <div class="oa-report-card"><small>OS em fluxo</small><strong>${active}</strong></div>
-      <div class="oa-report-card"><small>OS entregues</small><strong>${completed}</strong></div>
-      <div class="oa-report-card"><small>Itens abaixo do mínimo</small><strong>${dashboard.lowStock.length}</strong></div>
+      <div class="oa-report-card"><small>OS em fluxo (atual)</small><strong>${active}</strong></div>
+      <div class="oa-report-card"><small>OS entregues (mês)</small><strong>${completed}</strong></div>
+      <div class="oa-report-card"><small>Itens abaixo do mínimo</small><strong>${dashboard.counts.ESTOQUE_CRITICO}</strong></div>
       <div class="oa-report-card"><small>${financeAllowed?'Resultado do mês':'Compromissos próximos'}</small><strong>${financeAllowed?money(finance.resultCents):dashboard.upcoming.length}</strong></div>
     </div>
     <div class="oa-report-layout">
