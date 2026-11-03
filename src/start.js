@@ -9,6 +9,8 @@ import { createEventRuntime } from './platform/event-runtime.js';
 import {dispatchOutbox} from './platform/outbox.js';
 import {recoverOrphanAttachments} from './services/operations.js';
 import {auditInvariants} from './services/reconciliation.js';
+import {backupAndVerify} from './platform/backup.js';
+import {dirname,join} from 'node:path';
 import { listLanUrls, resolveServerConfig } from './platform/network.js';
 
 process.env.DATABASE_PATH = resolveDatabasePath();
@@ -40,6 +42,17 @@ function reconcile(){
 }
 const reconciliationTimer=setInterval(reconcile,60000);
 reconciliationTimer.unref?.();
+function saveVerifiedBackup(){
+  try{
+    const path=process.env.DATABASE_PATH;
+    const backupRoot=process.env.BACKUP_ROOT||join(dirname(path),'backups');
+    const result=backupAndVerify({databasePath:path,uploadsPath:process.env.STORAGE_DIR,
+      backupRoot,keep:Math.max(2,Number(process.env.BACKUP_KEEP)||7)});
+    console.info('[backup] Cópia verificada:',result.backupDir);
+  }catch(error){console.error('[backup] Falha em cópia/restauração:',error.message)}
+}
+const backupTimer=setInterval(saveVerifiedBackup,24*60*60*1000);
+backupTimer.unref?.();
 const appServer = createAssistenciaServer({ db, storageDir: process.env.STORAGE_DIR, eventRuntime });
 const { port, host, secure, keyPath, certPath } = resolveServerConfig(process.env);
 // LAN segura é configurável apenas por TLS explícito. A instalação local continua HTTP loopback.
@@ -52,11 +65,13 @@ server.listen(port, host, () => {
   if(secure)for (const url of listLanUrls({ port, secure:true })) console.log(`Rede local: ${url}`);
   flushEvents();
   reconcile();
+  setImmediate(saveVerifiedBackup);
 });
 
 const shutdown = () => {
   clearInterval(outboxTimer);
   clearInterval(reconciliationTimer);
+  clearInterval(backupTimer);
   server.close(async () => {
     await dispatchOutbox(db,eventRuntime).catch(e=>console.error('[outbox]',e.message));
     eventRuntime.close();
