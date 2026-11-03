@@ -244,12 +244,13 @@ export function createAppServer({db=openDatabase(),storageDir=process.env.STORAG
         // Uma confirmação: comando de negócio + registro de evento imutável.
         const data=isMutation?transaction(db,()=>{
           // Nunca persistir tokens de login/segredos no cache de respostas idempotentes.
-          const securityRoute=['/api/auth/login','/api/auth/logout','/api/setup/initialize'].includes(url.pathname);
+          const sensitiveApprovalRoute=req.method==='POST'&&/^\/api\/work-orders\/\d+\/quote\/approval-link$/.test(url.pathname);
+           const securityRoute=sensitiveApprovalRoute||['/api/auth/login','/api/auth/logout','/api/setup/initialize'].includes(url.pathname);
           const publicApprovalRoute=url.pathname.startsWith('/api/public/approval/');
            const output=(securityRoute||publicApprovalRoute)?invoke():runIdempotent(db,
             `http:${req.method}:${url.pathname}:user:${user?.id??'public'}`,
             body.requestId??req.headers['idempotency-key'],{body},invoke);
-          if(!res.writableEnded&&!publicApprovalRoute)enqueueHttpEvent(db,req.method,url.pathname,output,{requestId:body.requestId??req.headers['idempotency-key'],actorId:user?.id??null});
+          if(!res.writableEnded&&!publicApprovalRoute&&!sensitiveApprovalRoute)enqueueHttpEvent(db,req.method,url.pathname,output,{requestId:body.requestId??req.headers['idempotency-key'],actorId:user?.id??null});
           return output;
         }):await invoke();
         if(res.writableEnded)return;
@@ -265,7 +266,7 @@ export function createAppServer({db=openDatabase(),storageDir=process.env.STORAG
       if((req.method==='GET'||req.method==='HEAD')&&serveStatic(req,res,url.pathname))return;
       if(req.method==='GET'&&!url.pathname.startsWith('/api/')){if(serveStatic(req,res,'/'))return}
       json(res,404,{error:'Rota não encontrada'});
-    }catch(error){console.error('[request]',req.method,url.pathname,error.message);json(res,statusFor(error),{error:error.message||'Erro interno'})}
+    }catch(error){console.error('[request]',req.method,url.pathname.startsWith('/api/public/approval/')?'/api/public/approval/[redacted]':url.pathname,error.message);json(res,statusFor(error),{error:error.message||'Erro interno'})}
   });
 }
 
