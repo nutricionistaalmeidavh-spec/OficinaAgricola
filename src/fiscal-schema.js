@@ -11,7 +11,7 @@ export function migrateFiscal(db){
     "amount_cents INTEGER NOT NULL CHECK(amount_cents>0),"+
     "snapshot_json TEXT NOT NULL,snapshot_hash TEXT NOT NULL,"+
     "request_id TEXT NOT NULL UNIQUE,provider_name TEXT NOT NULL DEFAULT '',"+
-    "attempt_id TEXT,access_key TEXT,protocol TEXT,authorized_xml TEXT,"+
+    "attempt_id TEXT,access_key TEXT,protocol TEXT,fiscal_number TEXT,fiscal_series TEXT,authorized_xml TEXT,"+
     "response_json TEXT,last_error TEXT NOT NULL DEFAULT '',"+
     "created_at TEXT NOT NULL,updated_at TEXT NOT NULL,authorized_at TEXT,"+
     "UNIQUE(kind,origin_type,origin_id))"
@@ -26,6 +26,8 @@ export function migrateFiscal(db){
   );
   const cols=new Set(db.prepare("PRAGMA table_info('fiscal_documents')").all().map(row=>row.name));
   if(!cols.has('environment'))db.exec("ALTER TABLE fiscal_documents ADD COLUMN environment TEXT NOT NULL DEFAULT 'HOMOLOGACAO'");
+  if(!cols.has('fiscal_number'))db.exec('ALTER TABLE fiscal_documents ADD COLUMN fiscal_number TEXT');
+  if(!cols.has('fiscal_series'))db.exec('ALTER TABLE fiscal_documents ADD COLUMN fiscal_series TEXT');
   db.exec(
     "CREATE TABLE IF NOT EXISTS fiscal_settings ("+
     "id INTEGER PRIMARY KEY CHECK(id=1),"+
