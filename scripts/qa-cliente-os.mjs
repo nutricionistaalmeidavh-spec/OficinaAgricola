@@ -269,7 +269,8 @@ try {
       await rolePage.locator('#loginForm button[type="submit"]').click();
       await rolePage.locator('#appView').waitFor({ state: 'visible' });
       const actualRole = (await rolePage.locator('#userRole').textContent()).trim();
-      if (actualRole !== user.role) throw new Error('Perfil incorreto: ' + actualRole);
+      const expectedRole = ({ADMIN:'Administrador',ATENDIMENTO:'Atendimento',TECNICO:'Técnico',FINANCEIRO:'Financeiro'})[user.role] || user.role;
+      if (actualRole !== expectedRole) throw new Error('Perfil incorreto: ' + actualRole);
       await navigate(rolePage, 'work-orders');
       const activeProblem = user.role === 'FINANCEIRO'
         ? 'Troca de SSD e reinstalação do sistema'

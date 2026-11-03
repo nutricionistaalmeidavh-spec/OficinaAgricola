@@ -1,5 +1,5 @@
-const CACHE_NAME = 'artisys-oficina-shell-v7';
-const SHELL = ['/', '/index.html', '/styles.css', '/ui-stage7.css', '/theme-lote-a.css', '/local-runtime.css', '/command-queue.js', '/app-core.js', '/obd-serial.js', '/obd-diagnostics.js', '/app-catalog.js', '/app-orders.js', '/app-os-tools.js', '/app-operations.js', '/app-stage7.js', '/app-assistencia.js', '/app-admin.js', '/local-runtime.js', '/pwa-register.js', '/manifest.webmanifest', '/icon.svg'];
+const CACHE_NAME = 'artisys-oficina-shell-v8';
+const SHELL = ['/', '/index.html', '/styles.css', '/ui-stage7.css', '/theme-lote-a.css', '/local-runtime.css', '/command-queue.js', '/app-core.js', '/app-market.js', '/app-market-crm.js', '/app-market-fleet.js', '/app-market-units.js', '/app-market-references.js', '/app-market-approval.js', '/app-market-actions.js', '/approval.js', '/approval.css', '/obd-serial.js', '/obd-diagnostics.js', '/app-catalog.js', '/app-orders.js', '/app-os-tools.js', '/app-operations.js', '/app-stage7.js', '/app-assistencia.js', '/app-admin.js', '/local-runtime.js', '/pwa-register.js', '/manifest.webmanifest', '/icon.svg'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -56,6 +56,7 @@ self.addEventListener('fetch', event => {
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
+  if(url.pathname==='/approval.html')return; // never retain private approval-link tokens in Cache API
   const executable=/\.(?:js|css|webmanifest)$/i.test(url.pathname);
   event.respondWith(request.mode==='navigate'
     ? networkFirstNavigation(request)

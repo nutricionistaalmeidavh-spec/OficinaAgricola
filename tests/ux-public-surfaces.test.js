@@ -67,3 +67,9 @@ test('perfis operacionais usam nomes legíveis no painel e na administração',(
   assert.match(admin,/badge\(userRoleLabel\(u\.role\)\)/);
   assert.match(admin,/<option value="TECNICO">Técnico<\/option>/);
 });
+
+test('QA visual compara rótulos de perfis, não códigos internos',()=>{
+  const qa=read('scripts/qa-cliente-os.mjs');
+  assert.match(qa,/actualRole !== expectedRole/);
+  assert.match(qa,/ATENDIMENTO:'Atendimento'/);
+});

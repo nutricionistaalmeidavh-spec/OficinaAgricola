@@ -392,11 +392,12 @@ function logout(){
 function pageRenderer(page){
   const dashboard=typeof renderDashboard==='function'?renderDashboard:async()=>{};
   const fiscal=typeof renderFiscal==='function'?renderFiscal:async()=>{};
+  const market=typeof renderMarketParity==='function'?renderMarketParity:async()=>{};
   return ({
     dashboard,customers:renderCustomers,machines:renderMachines,
     'work-orders':renderWorkOrders,inventory:renderInventory,schedule:renderSchedule,
     finance:renderFinance,reports:renderReports,fiscal,technicians:renderTechnicians,
-    settings:renderSettings,services:renderServices,sales:renderSales
+    settings:renderSettings,services:renderServices,sales:renderSales,market
   })[page]||dashboard;
 }
 let refreshPromise=null,refreshQueued=false;

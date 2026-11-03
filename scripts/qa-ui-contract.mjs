@@ -60,7 +60,15 @@ export async function verifyUiContract(page,viewportName,outputDir){
     findings.push({width,...geometry});
   }
   await page.setViewportSize(original);
-  await page.locator('[data-page="customers"]').click();
+  const customersNav=page.locator('[data-page="customers"]');
+  if(await customersNav.isVisible())await customersNav.click();
+  else{
+    const more=page.locator('#mobileMoreBtn');
+    await more.click();
+    const customersMobile=page.locator('#mobileMorePanel [data-mobile-page="customers"]');
+    await customersMobile.waitFor({state:'visible'});
+    await customersMobile.click();
+  }
   await page.locator('#newCustomer').click();
   const dialog=page.getByRole('dialog',{name:'Novo cliente',exact:true});
   await dialog.waitFor({state:'visible'});
