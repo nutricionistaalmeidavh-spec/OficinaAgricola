@@ -65,3 +65,8 @@ test('o pipeline GitHub Actions não publica instaladores automaticamente', asyn
   assert.doesNotMatch(ci+qa,/desktop_publish|publish-filebin|desktop_build/);
 });
 
+
+test('links privados de aprovação não entram no cache de navegação do PWA',async()=>{
+ const sw=await read('public/sw.js');
+ assert.match(sw,/url\.pathname\s*===\s*'\/approval\.html'\)\s*return/);
+});
