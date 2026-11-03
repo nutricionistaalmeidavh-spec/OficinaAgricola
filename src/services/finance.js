@@ -10,7 +10,10 @@ const cents=(v,label='Valor')=>{const n=Number(v);if(!Number.isInteger(n)||n<=0)
 
 export function getPaymentSummary(db,workOrderId){
   const os=getWorkOrder(db,workOrderId); const received=Number(db.prepare('SELECT COALESCE(SUM(amount_cents),0) total FROM receipts WHERE work_order_id=? AND reversed_at IS NULL').get(workOrderId).total);
-  const state=paymentState(Number(os.quote_total_cents||0),received); return {totalCents:Number(os.quote_total_cents||0),...state};
+  const totalCents=Number(os.quote_total_cents||0);
+  // Preserve o orçamento histórico, mas nunca exiba dívida em OS cancelada.
+  if(os.status==='CANCELADA')return {totalCents,receivedCents:received,pendingCents:0,status:'CANCELADO'};
+  const state=paymentState(totalCents,received); return {totalCents,...state};
 }
 function receiptFingerprint(workOrderId,input) {
  return createHash('sha256').update(JSON.stringify({
@@ -32,6 +35,7 @@ export function addReceipt(db,workOrderId,input){
      }
    }
    const summary=getPaymentSummary(db,workOrderId);
+   if(summary.status==='CANCELADO')throw new Error('OS não pode receber pagamento após cancelamento');
    if(summary.totalCents<=0)throw new Error('OS não possui valor aprovado');
    const amount=cents(input.amountCents,'Valor do recebimento');
    if(amount>summary.pendingCents)throw new Error('Valor excede o saldo pendente');
@@ -95,7 +99,7 @@ export function listExpenses(db,{from='1970-01-01T00:00:00.000Z',to='2999-12-31T
   return db.prepare(`SELECT e.*,wo.os_number FROM expenses e LEFT JOIN work_orders wo ON wo.id=e.work_order_id WHERE COALESCE(e.paid_at,e.due_date||'T00:00:00.000Z',e.created_at) BETWEEN ? AND ? ORDER BY COALESCE(e.paid_at,e.due_date,e.created_at) DESC`).all(from,to);
 }
 export function financeSummary(db,{from='1970-01-01T00:00:00.000Z',to='2999-12-31T23:59:59.999Z'}={}){
-  const invoiced=Number(db.prepare(`SELECT COALESCE(SUM(q.total_cents),0) total FROM quotes q WHERE q.approval_status='APROVADO' AND q.approved_at BETWEEN ? AND ?`).get(from,to).total);
+  const invoiced=Number(db.prepare(`SELECT COALESCE(SUM(q.total_cents),0) total FROM quotes q JOIN work_orders wo ON wo.id=q.work_order_id WHERE q.approval_status='APROVADO' AND wo.status<>'CANCELADA' AND q.approved_at BETWEEN ? AND ?`).get(from,to).total);
   // Balcão e OS são operações distintas; venda ligada à OS é rejeitada pela API.
   // Nunca inferir venda balcão a partir de um item já consumido em OS.
   const hasSales=db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='sales'").get();
@@ -105,7 +109,7 @@ export function financeSummary(db,{from='1970-01-01T00:00:00.000Z',to='2999-12-3
   `).get(from,to).total):0;
   const received=Number(db.prepare(`SELECT COALESCE(SUM(amount_cents),0) total FROM payment_events WHERE created_at BETWEEN ? AND ?`).get(from,to).total);
   const expenses=Number(db.prepare(`SELECT COALESCE(SUM(amount_cents),0) total FROM expenses WHERE paid_at IS NOT NULL AND paid_at BETWEEN ? AND ?`).get(from,to).total);
-  const approvedIds=db.prepare(`SELECT work_order_id FROM quotes WHERE approval_status='APROVADO' AND approved_at BETWEEN ? AND ?`).all(from,to).map(r=>r.work_order_id);
+  const approvedIds=db.prepare(`SELECT q.work_order_id FROM quotes q JOIN work_orders wo ON wo.id=q.work_order_id WHERE q.approval_status='APROVADO' AND wo.status<>'CANCELADA' AND q.approved_at BETWEEN ? AND ?`).all(from,to).map(r=>r.work_order_id);
   let pending=0; for(const id of approvedIds) pending+=getPaymentSummary(db,id).pendingCents;
   return {invoicedCents:invoiced+posInvoiced,receivedCents:received,pendingCents:pending,expensesCents:expenses,resultCents:received-expenses};
 }
