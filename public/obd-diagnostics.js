@@ -1,9 +1,9 @@
 // Transportes opcionais e UI de diagnóstico. Nenhuma função escreve na ECU.
-const diagnosticCommands=['03','07','0A','0104','0105','010C','010D','010F','0110','0111','012F','0142','020C','0902'];
+const diagnosticCommands=['03','07','0A','0101','0104','0105','010C','010D','010F','0110','0111','012F','0142','020C','0902'];
 function diagnosticDemo(){
  return {adapterId:'SIMULATOR',source:'SIMULATED',protocol:'SIMULAÇÃO OFFLINE',
    responses:{'03':'43 01 33 00 00','07':'47 00 00','0A':'4A 00 00',
-      '010C':'41 0C 1A F8','010D':'41 0D 28','0105':'41 05 72',
+      '0101':'41 01 82 07 65 65','010C':'41 0C 1A F8','010D':'41 0D 28','0105':'41 05 72',
       '0104':'41 04 80','020C':'42 0C 00 12 C0'},
    samples:[{timeMs:0,responses:{'010C':'41 0C 1A F8'}},
             {timeMs:1500,responses:{'010C':'41 0C 1F 40'}},
@@ -103,6 +103,7 @@ function diagnosticDetailModal(machineId,scan){
  '<p class="muted">'+esc(scan.adapter_id||'ELM327_SERIAL')+' · '+esc(scan.protocol||'')+'</p>'+
  rows(JSON.parse(scan.codes_json||'[]'),'DTCs armazenados')+
  rows(details.pendingCodes,'DTCs pendentes')+rows(details.permanentCodes,'DTCs permanentes')+
+ (details.readiness?'<p><strong>Prontidão:</strong> MIL '+(details.readiness.mil?'acesa':'apagada')+' · '+details.readiness.storedDtcCount+' DTC(s) reportados</p>':'')+
  (details.vin?'<p><strong>VIN ECU:</strong> '+esc(details.vin)+'</p>':'')+
  '<h3>Sensores</h3>'+(readings.length?readings.map(r=>'<div class="list-item"><strong>'+esc(r.name)+'</strong> '+esc(r.value)+' '+esc(r.unit)+'</div>').join(''):'<p class="muted">Sem sensores disponíveis.</p>')+
  diagnosticChart(details.samples,'010C','Rotação do motor','rpm')+
