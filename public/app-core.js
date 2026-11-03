@@ -212,10 +212,11 @@ async function api(path,{method='GET',body,raw=false}={}){
   return raw?text:(text?JSON.parse(text):null);
 }
 let toastTimer=null;
+function friendlyUiMessage(value){const text=String(value||'');return /SQLITE|TypeError|ReferenceError|SyntaxError|ENOENT|EACCES|node:internal|file:\/\/|\.sqlite\b|(?:token|password|secret)\s*[:=]/i.test(text)?'Não foi possível concluir a operação. Tente novamente ou consulte o suporte.':text}
 function toast(msg,error=false){
   const el=$('#toast');
   clearTimeout(toastTimer);
-  el.textContent=msg;el.className=`toast${error?' error':''}`;
+  el.textContent=friendlyUiMessage(msg);el.className=`toast${error?' error':''}`;
   toastTimer=setTimeout(()=>el.classList.add('hidden'),error?8000:4500);
 }
 let modalSession=null;
@@ -318,7 +319,7 @@ function showModal(title,html,onSubmit,{entityKey=null}={}){
       if(state.modalToken===token){
         let error=$('[data-form-error]',form);
         if(!error){error=document.createElement('p');error.dataset.formError='';error.className='error';error.setAttribute('role','alert');form.prepend(error)}
-        error.textContent=err.message;
+        error.textContent=friendlyUiMessage(err.message);
       }
       toast(err.message,true);
     }
@@ -375,7 +376,7 @@ function showLogin(){
   $('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');
   $('#setupForm').classList.add('hidden');$('#loginForm').classList.remove('hidden');
 }
-function showApp(){$('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');$('#userName').textContent=state.user.name;$('#userRole').textContent=state.user.role;$('#avatar').textContent=state.user.name[0]?.toUpperCase()||'A';const fiscalLink=$('#nav [data-page="fiscal"]');if(fiscalLink)fiscalLink.hidden=!['ADMIN','FINANCEIRO'].includes(state.user.role);const mobileFiscalLink=$('#mobileMorePanel [data-mobile-page="fiscal"]');if(mobileFiscalLink)mobileFiscalLink.hidden=!['ADMIN','FINANCEIRO'].includes(state.user.role)}
+function showApp(){$('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');$('#userName').textContent=state.user.name;$('#userRole').textContent=({ADMIN:'Administrador',ATENDIMENTO:'Atendimento',TECNICO:'Técnico',FINANCEIRO:'Financeiro'}[state.user.role]||'Equipe');$('#avatar').textContent=state.user.name[0]?.toUpperCase()||'A';const fiscalLink=$('#nav [data-page="fiscal"]');if(fiscalLink)fiscalLink.hidden=!['ADMIN','FINANCEIRO'].includes(state.user.role);const mobileFiscalLink=$('#mobileMorePanel [data-mobile-page="fiscal"]');if(mobileFiscalLink)mobileFiscalLink.hidden=!['ADMIN','FINANCEIRO'].includes(state.user.role)}
 function logout(){
   if(modalSession)closeModal();
   state.pageController?.abort();state.pageEpoch++;state.pageReady=false;
@@ -432,7 +433,7 @@ async function navigate(page,{force=false}={}){
     if(epoch===state.pageEpoch)state.pageReady=true;
   }catch(err){
     if(epoch!==state.pageEpoch||err.name==='AbortError')return;
-    setContent(`<div class="card"><div class="empty error">${esc(err.message)}</div></div>`);
+    setContent(`<div class="card"><div class="empty error">${esc(friendlyUiMessage(err.message))}</div></div>`);
     toast(err.message,true);
   }
 }
