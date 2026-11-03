@@ -9,7 +9,7 @@ export function migrateFiscal(db){
     "origin_id INTEGER NOT NULL CHECK(origin_id>0),"+
     "status TEXT NOT NULL DEFAULT 'RASCUNHO' CHECK(status IN ('RASCUNHO','INDETERMINADO','REJEITADA','AUTORIZADA','AUTORIZADA_HOMOLOGACAO','CANCELADA')),"+
     "amount_cents INTEGER NOT NULL CHECK(amount_cents>0),"+
-    "snapshot_json TEXT NOT NULL,snapshot_hash TEXT NOT NULL,"+
+    "snapshot_json TEXT NOT NULL,snapshot_hash TEXT NOT NULL,issuer_snapshot_json TEXT,"+
     "request_id TEXT NOT NULL UNIQUE,provider_name TEXT NOT NULL DEFAULT '',"+
     "attempt_id TEXT,access_key TEXT,protocol TEXT,fiscal_number TEXT,fiscal_series TEXT,authorized_xml TEXT,"+
     "response_json TEXT,last_error TEXT NOT NULL DEFAULT '',"+
@@ -28,6 +28,7 @@ export function migrateFiscal(db){
   if(!cols.has('environment'))db.exec("ALTER TABLE fiscal_documents ADD COLUMN environment TEXT NOT NULL DEFAULT 'HOMOLOGACAO'");
   if(!cols.has('fiscal_number'))db.exec('ALTER TABLE fiscal_documents ADD COLUMN fiscal_number TEXT');
   if(!cols.has('fiscal_series'))db.exec('ALTER TABLE fiscal_documents ADD COLUMN fiscal_series TEXT');
+  if(!cols.has('issuer_snapshot_json'))db.exec('ALTER TABLE fiscal_documents ADD COLUMN issuer_snapshot_json TEXT');
   db.exec(
     "CREATE TABLE IF NOT EXISTS fiscal_settings ("+
     "id INTEGER PRIMARY KEY CHECK(id=1),"+
