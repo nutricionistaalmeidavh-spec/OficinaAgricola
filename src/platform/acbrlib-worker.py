@@ -286,6 +286,9 @@ def nfse_consult(lib, req):
             "accessKey": key, "protocol": code, "number": issued, "series": series, "xml": xml}
 
 
+_dll_directories = []
+
+
 def native_library(library_path):
     # Python 3.8+ no Windows exige caminhos explicitamente autorizados para
     # resolver dependências transitivas de DLLs. Nada é copiado para System32.
@@ -293,8 +296,8 @@ def native_library(library_path):
     if os.name == "nt":
         for directory in (parent, parent / "deps"):
             if directory.is_dir():
-                os.add_dll_directory(str(directory))
-    return ct.CDLL(str(library_path))
+                _dll_directories.append(os.add_dll_directory(str(directory)))
+    return ct.CDLL(str(Path(library_path).resolve(strict=True)))
 
 
 def probe_library(path):
