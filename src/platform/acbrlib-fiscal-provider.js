@@ -63,9 +63,10 @@ function workerFile(){
   // electron-builder guarda scripts executáveis fora do ASAR.
   return file.includes('app.asar')?file.replace('app.asar','app.asar.unpacked'):file;
 }
-function executeWorker(data,{python,timeoutMs=90000}){
+function executeWorker(data,{python,workerExe,timeoutMs=90000}){
   return new Promise((resolveResult,reject)=>{
-    const proc=spawn(python,[workerFile()],{
+    // Em instalações Windows, o executor PyInstaller é autônomo: não depende de Python no PATH.
+    const proc=spawn(workerExe||python,workerExe?[]:[workerFile()],{
       windowsHide:true,stdio:['pipe','pipe','pipe'],env:{...process.env,PYTHONDONTWRITEBYTECODE:'1'}
     });
     let out='',err='',settled=false;
@@ -110,7 +111,9 @@ export function createAcbrLibFiscalProvider(opts={}){
     configPath:localFile(opts.nfseConfig??process.env.FISCAL_ACBR_NFSE_CONFIG,'configuração ACBrLibNFSe')
   };
   const python=opts.python??process.env.FISCAL_ACBR_PYTHON??(process.platform==='win32'?'python':'python3');
-  const runner=opts.runner??(args=>executeWorker(args,{python}));
+  const workerExe=opts.workerExe??process.env.FISCAL_ACBR_WORKER_EXE;
+  const validatedWorker=workerExe?localFile(workerExe,'executor ACBrLib integrado'):null;
+  const runner=opts.runner??(args=>executeWorker(args,{python,workerExe:validatedWorker}));
   const preflight=({document,issuer})=>{
     const kind=document?.kind;
     if(!libraries[kind])throw new Error('Biblioteca ACBrLib para '+kind+' não configurada');
