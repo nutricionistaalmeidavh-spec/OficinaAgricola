@@ -128,3 +128,6 @@ body.modal-open{overflow:hidden}
   .kanban-col,.oa-board-col{scroll-snap-align:start}
   .main{padding-bottom:calc(83px + env(safe-area-inset-bottom))}
 }
+
+/* P0 fiscal: papel sem acesso nunca vê o atalho, inclusive na navegação mobile. */
+.sidebar #nav button[hidden],.mobile-more-panel button[hidden]{display:none!important}
