@@ -1,4 +1,9 @@
+import {transaction,nowIso} from './db.js';
 export function migrateAssistencia(db) {
+  db.exec("CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY, applied_at TEXT NOT NULL)");
+  const version='2026-11-03-assistencia-p0-p3';
+  if(db.prepare('SELECT 1 FROM schema_migrations WHERE version=?').get(version))return;
+  return transaction(db,()=>{
   db.exec(`
     CREATE TABLE IF NOT EXISTS service_catalog (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -121,4 +126,12 @@ export function migrateAssistencia(db) {
   `);
 
 
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_sales_status_id ON sales(status,id DESC);
+    CREATE INDEX IF NOT EXISTS idx_sale_items_sale ON sale_items(sale_id,id);
+    CREATE INDEX IF NOT EXISTS idx_cash_sessions_status_id ON cash_sessions(status,id DESC);
+    CREATE INDEX IF NOT EXISTS idx_cash_movements_created ON cash_movements(created_at);
+  `);
+  db.prepare('INSERT INTO schema_migrations(version,applied_at) VALUES(?,?)').run(version,nowIso());
+  });
 }
