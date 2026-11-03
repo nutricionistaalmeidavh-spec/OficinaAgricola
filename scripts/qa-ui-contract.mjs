@@ -17,10 +17,26 @@ export async function verifyUiContract(page,viewportName,outputDir){
         const b=rect(button),label=rect(button.querySelector('b'));
         return {text:button.textContent.trim(),fits:label.left>=b.left-1&&label.right<=b.right+1&&label.top>=b.top-1&&label.bottom<=b.bottom+1};
       });
-      return {overflow:document.documentElement.scrollWidth>innerWidth,statusOverlaps:status.bottom>content.top,labels,
+      // Resolve translucent backgrounds through ancestors before comparing contrast.
+      const rgba=value=>(value.match(/[\d.]+/g)||[]).map(Number);
+      const background=el=>{
+        if(!el)return [255,255,255];
+        const c=rgba(getComputedStyle(el).backgroundColor),alpha=c[3]??1;
+        const below=alpha<1?background(el.parentElement):[0,0,0];
+        return c.slice(0,3).map((v,i)=>v*alpha+below[i]*(1-alpha));
+      };
+      const luminance=c=>c.map(v=>v/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4)
+        .reduce((sum,v,i)=>sum+v*[.2126,.7152,.0722][i],0);
+      const contrast=el=>{
+        const a=luminance(rgba(getComputedStyle(el).color).slice(0,3)),b=luminance(background(el));
+        return (Math.max(a,b)+.05)/(Math.min(a,b)+.05);
+      };
+      const contrasts=buttons.map(el=>({text:el.textContent.trim(),ratio:contrast(el)}));
+      return {overflow:document.documentElement.scrollWidth>innerWidth,statusOverlaps:status.bottom>content.top,labels,contrasts,
         statusPosition:getComputedStyle(document.querySelector('#serverStatus')).position,
         searchVisible:!!document.querySelector('#globalSearch').getClientRects().length};
     });
+    assert.ok(geometry.contrasts.every(item=>item.ratio>=4.5),`Nav contrast below AA: ${JSON.stringify(geometry.contrasts)}`);
     assert.equal(geometry.overflow,false,`Page overflows at ${width}px`);
     assert.equal(geometry.statusOverlaps,false,'Server status obscures content');
     assert.equal(geometry.statusPosition,'static');
@@ -88,8 +104,11 @@ export async function verifyUiContract(page,viewportName,outputDir){
   await page.getByRole('dialog').waitFor({state:'visible'});
   await page.keyboard.press('Escape');
   assert.equal(await page.locator('.oa-order-mini').first().evaluate(el=>el===document.activeElement),true);
+  // Hide the intentionally generated error toast before recording the normal UI.
+  await page.evaluate(()=>document.querySelector('#toast').classList.add('hidden'));
   await page.emulateMedia({reducedMotion:'reduce'});
   await page.screenshot({path:path.join(outputDir,'09-ui-accessible.png'),fullPage:true});
   await page.emulateMedia({reducedMotion:'no-preference'});
+  await page.locator('#pageTitle').click();
   return findings;
 }

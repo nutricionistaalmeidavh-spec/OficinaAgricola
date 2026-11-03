@@ -25,4 +25,4 @@ Escape, X e backdrop passam por `requestCloseModal`. Formulários alterados exig
 
 ## Limites e verificação
 
-Esta entrega cobre shell, busca e modal compartilhado. Validação de campos legados permanece existente; não significa homologação completa de WCAG. Paginação e estados de todos os módulos, validação de todos os campos, dispositivos físicos e leitores de tela exigem cobertura própria. O QA verifica geometrias em 320/390/840/1024/1440px, foco, navegação por teclado, busca vazia, falha com rascunho e descarte, além dos fluxos canônicos anteriores.
+Esta entrega cobre shell, busca e modal compartilhado. Validação de campos legados permanece existente; não significa homologação completa de WCAG. Paginação e estados de todos os módulos, validação de todos os campos, dispositivos físicos e leitores de tela exigem cobertura própria. O QA verifica geometrias em 320/390/840/1024/1440px, contraste textual do menu (mínimo 4,5:1), foco, navegação por teclado, busca vazia, falha com rascunho e descarte, além dos fluxos canônicos anteriores.
