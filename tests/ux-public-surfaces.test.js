@@ -46,6 +46,8 @@ test('kanban operacional pagina por status e trata coluna vazia',()=>{
   assert.match(orders,/data-os-more/);
   assert.match(orders,/status='\+encodeURIComponent\(status\)/);
   assert.match(orders,/Nenhuma OS nesta etapa/);
+  assert.match(orders,/Carregando OS/);
+  assert.match(orders,/Tentar novamente/);
   const dashboard=read('public/app-stage7.js');
   assert.match(dashboard,/outras OS/);
 });
