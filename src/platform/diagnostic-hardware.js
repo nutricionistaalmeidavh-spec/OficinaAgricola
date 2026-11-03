@@ -19,7 +19,7 @@ export function parseHardwareOptions(input={}){
  const channel=String(input.channel||'can0').trim();
  const bitrate=Number(input.bitrate??250000);
  const durationSeconds=Number(input.durationSeconds??7);
- if(!CAN_INTERFACES.has(canInterface))throw new Error('Interface CAN não permitida');
+ if(!CAN_INTERFACES.has(canInterface))throw new Error('Interface CAN inválida');
  if(!/^[A-Za-z0-9_.:\/\-]{1,80}$/.test(channel))throw new Error('Canal CAN inválido');
  if(![250000,500000].includes(bitrate))throw new Error('Bitrate J1939 inválido');
  if(!Number.isInteger(durationSeconds)||durationSeconds<2||durationSeconds>15)
