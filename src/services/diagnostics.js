@@ -93,7 +93,7 @@ export function parseDiagnosticCapture(input){
  const adapter=ADAPTERS.find(x=>x.id===adapterId);
  if(!adapter||!adapter.available)throw new Error('Adaptador indisponível no núcleo local');
  const source=String(input.source||adapter.source).toUpperCase();
- if(source!==adapter.source)throw new Error('Fonte simulada não pode ser registrada como leitura real');
+ if(source!==adapter.source)throw new Error('Origem simulada inválida para leitura real');
  if(!record(input.responses)||!Object.keys(input.responses).length||Object.keys(input.responses).length>35)
    throw new Error('Respostas da captura inválidas');
  const size=JSON.stringify({responses:input.responses,samples:input.samples||[]}).length;
