@@ -1,4 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
+import { migrateFiscal } from './fiscal-schema.js';
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
@@ -328,6 +329,7 @@ export function migrate(db) {
     INSERT OR IGNORE INTO payment_events(source_type,source_id,event_type,amount_cents,method,cash_session_id,created_at)
     SELECT 'OS_RECEIPT',id,'REFUNDED',-amount_cents,method,NULL,reversed_at FROM receipts WHERE reversed_at IS NOT NULL;
   `);
+  migrateFiscal(db);
 }
 
 let nextSavepoint=0;
