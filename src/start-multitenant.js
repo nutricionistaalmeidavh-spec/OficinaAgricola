@@ -4,7 +4,7 @@ import { resolveDatabasePath, resolveStoragePath } from './platform/data-locatio
 import { openDatabase } from './db.js';
 import { createMultiTenantServer } from './platform/multi-tenant-server.js';
 import { resolveServerConfig, listLanUrls } from './platform/network.js';
-import { startBackupSchedule } from './platform/backup-scheduler.js';
+import { startMultiTenantBackupSchedule } from './platform/tenant-backup.js';
 
 const legacyDatabasePath=resolveDatabasePath();
 const legacyStorageDir=resolveStoragePath({databasePath:legacyDatabasePath});
@@ -19,12 +19,9 @@ const tls=process.env.HTTPS_CERT_FILE&&process.env.HTTPS_KEY_FILE?{
 }:null;
 const server=createMultiTenantServer({registryDb,legacyDb,legacyDatabasePath,legacyStorageDir,tenantsRoot,tls});
 const {host,port}=resolveServerConfig(process.env);
-// The existing data and uploads retain their old backup path. New units must
-// be included in the platform-wide verified backup plan before production.
-const stopLegacyBackup=startBackupSchedule({
-  databasePath:legacyDatabasePath,
-  uploadsPath:legacyStorageDir,
-  backupRoot:resolve(process.env.BACKUP_ROOT||join(dirname(legacyDatabasePath),'backups')),
+const stopMultiBackup=startMultiTenantBackupSchedule({
+  registryDb,registryPath,legacyDatabasePath,legacyStorageDir,tenantsRoot,
+  backupRoot:resolve(process.env.BACKUP_ROOT||join(dirname(legacyDatabasePath),'backups-multiempresa')),
   retention:Number(process.env.BACKUP_RETENTION||7)
 });
 server.listen(port,host,()=>{
@@ -34,7 +31,7 @@ server.listen(port,host,()=>{
 let stopping=false;
 const stop=()=>{
   if(stopping)return;stopping=true;
-  stopLegacyBackup();
+  stopMultiBackup();
   server.close(()=>{registryDb.close();legacyDb.close();});
 };
 process.once('SIGINT',stop);
