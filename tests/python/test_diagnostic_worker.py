@@ -26,10 +26,10 @@ class DiagnosticWorkerTests(unittest.TestCase):
         self.assertEqual(worker.OBD_REQUESTS[0], '03')
         self.assertNotIn('04', worker.OBD_REQUESTS)
         self.assertIn('010C', worker.OBD_REQUESTS)
-        message=worker.pt_message(b'\\x00\\x00\\x07\\xdf\\x01\\x0c',worker.ISO15765_FRAME_PAD)
+        message=worker.pt_message(bytes.fromhex('00 00 07 DF 01 0C'),worker.ISO15765_FRAME_PAD)
         self.assertEqual(message.ProtocolID,worker.ISO15765)
         self.assertEqual(message.DataSize,6)
-        self.assertEqual(bytes(message.Data[:6]),b'\\x00\\x00\\x07\\xdf\\x01\\x0c')
+        self.assertEqual(bytes(message.Data[:6]),bytes.fromhex('00 00 07 DF 01 0C'))
 
     def test_j1939_python_can_is_strictly_passive(self):
         class Frame:
