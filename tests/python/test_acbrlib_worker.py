@@ -30,6 +30,12 @@ class AcbrWorkerSecurityTests(unittest.TestCase):
         self.assertFalse(worker.authorized_nfe_xml(xml.replace("<Signature/>", ""), "13512345"))
         self.assertEqual(worker.nfe_identity(xml)[0], KEY)
 
+    def test_xml_nfe_must_match_the_canonical_amount(self):
+        xml = '<NFe><infNFe Id="NFe' + KEY + '"></infNFe><total><ICMSTot><vNF>123.45</vNF></ICMSTot></total></NFe>'
+        self.assertEqual(worker.nfe_total_cents(xml), 12345)
+        self.assertNotEqual(worker.nfe_total_cents(xml), 12346)
+        with self.assertRaises(worker.ACBrError):
+            worker.nfe_total_cents('<NFe><total></total></NFe>')
     def test_receipt_only_is_not_nfse_authorization(self):
         self.assertIsNone(worker.nfse_details('<Envio><Sucesso>1</Sucesso><Protocolo>123</Protocolo></Envio>'))
         self.assertIsNone(worker.nfse_details('<CompNfse><Nfse><InfNfse><Numero>1</Numero>'
