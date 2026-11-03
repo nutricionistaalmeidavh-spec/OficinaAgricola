@@ -1,5 +1,33 @@
 const OS_COLUMNS=[['ENTRADA','Entrada'],['DIAGNOSTICO','Diagnóstico'],['AGUARDANDO_APROVACAO','Aguard. aprovação'],['EM_SERVICO','Em serviço'],['PRONTA','Pronta']];
-async function renderWorkOrders(){pageTitle('Ordens de Serviço','OFICINA');const [orders,customers,machines,techs]=await Promise.all([api('/api/work-orders'),api('/api/customers'),api('/api/machines'),api('/api/technicians')]);setContent(`<div class="section-head"><div><h2>Fluxo da oficina</h2><span class="muted">Da entrada à entrega</span></div><button id="newOS" class="btn primary">+ Abrir OS</button></div><div class="kanban">${OS_COLUMNS.map(([status,label])=>{const items=orders.filter(o=>o.status===status||(status==='ENTRADA'&&['ORCAMENTO','APROVADA'].includes(o.status)));return `<div class="kanban-col"><div class="kanban-title"><span>${label}</span><b>${items.length}</b></div>${items.map(o=>`<button type="button" class="os-card" data-os="${o.id}"><strong>OS #${o.os_number} · ${esc(o.customer_name)}</strong><p>${esc(o.machine_brand)} ${esc(o.machine_model)}<br>${esc(o.problem_reported)}</p>${badge(o.status)}</button>`).join('')}</div>`}).join('')}</div>`);$('#newOS').onclick=()=>workOrderModal(customers,machines,techs);$$('[data-os]').forEach(c=>c.onclick=()=>openWorkOrder(c.dataset.os))}
+let osPagedRows=[],osPageCursor=null,osTotal=0;
+async function renderWorkOrders({append=false}={}){
+  pageTitle('Ordens de Serviço','OFICINA');
+  const path='/api/work-orders/page?limit=100'+(append&&osPageCursor?'&cursor='+encodeURIComponent(osPageCursor):'');
+  const [page,customers,machines,techs]=await Promise.all([
+    api(path),api('/api/customers'),api('/api/machines'),api('/api/technicians')
+  ]);
+  osPagedRows=append?osPagedRows.concat(page.items):page.items;
+  osPageCursor=page.nextCursor;osTotal=page.total;
+  const orders=osPagedRows;
+  const columns=OS_COLUMNS.map(([status,label])=>{
+    const items=orders.filter(o=>o.status===status||(status==='ENTRADA'&&['ORCAMENTO','APROVADA'].includes(o.status)));
+    return '<div class="kanban-col"><div class="kanban-title"><span>'+label+'</span><b>'+items.length+'</b></div>'+
+      items.map(o=>'<button type="button" class="os-card" data-os="'+o.id+'"><strong>OS #'+o.os_number+' · '+esc(o.customer_name)+
+      '</strong><p>'+esc(o.machine_brand)+' '+esc(o.machine_model)+'<br>'+esc(o.problem_reported)+'</p>'+badge(o.status)+'</button>').join('')+'</div>';
+  }).join('');
+  const closed=orders.filter(o=>['ENTREGUE','CANCELADA','REPROVADA'].includes(o.status));
+  const history=closed.map(o=>'<button type="button" class="os-card" data-os="'+o.id+'"><strong>OS #'+o.os_number+' · '+esc(o.customer_name)+
+    '</strong> · '+badge(o.status)+'</button>').join('');
+  setContent('<div class="section-head"><div><h2>Fluxo da oficina</h2><span class="muted">'+orders.length+' de '+osTotal+' ordens carregadas</span></div>'+
+    '<button id="newOS" class="btn primary">+ Abrir OS</button></div>'+
+    '<div class="kanban">'+columns+'</div>'+
+    '<div class="card"><div class="card-head"><h2>Histórico de OS encerradas</h2><small>Entregues, canceladas e reprovadas</small></div>'+
+    '<div class="list">'+(history||'<div class="empty">Nenhuma OS encerrada nesta página.</div>')+'</div></div>'+
+    (osPageCursor?'<button id="loadMoreOS" class="btn">Carregar mais ordens</button>':''));
+  $('#newOS').onclick=()=>workOrderModal(customers,machines,techs);
+  $$('[data-os]').forEach(card=>card.onclick=()=>openWorkOrder(card.dataset.os));
+  if($('#loadMoreOS'))$('#loadMoreOS').onclick=()=>renderWorkOrders({append:true}).catch(e=>toast(e.message,true));
+}
 function workOrderModal(customers,machines,techs){const requestId=newCommandId();showModal('Abrir ordem de serviço',`<form class="form-stack"><div class="field-row"><label>Cliente<select name="customerId" id="osCustomer" required><option value="">Selecione</option>${customers.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></label><label>Equipamento<select name="machineId" id="osMachine" required><option value="">Selecione o cliente</option></select></label></div><label>Problema relatado<textarea name="problemReported" required></textarea></label><div class="field-row"><label>Técnico<select name="technicianId"><option value="">Não definido</option>${techs.filter(t=>t.active).map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select></label><label>Prioridade<select name="priority"><option>NORMAL</option><option>ALTA</option><option>URGENTE</option><option>BAIXA</option></select></label></div><label>Previsão de entrega<input type="datetime-local" name="estimatedDelivery"></label><button class="btn primary" type="submit">Abrir OS</button></form>`,async fd=>{const o=formObj(fd);o.customerId=Number(o.customerId);o.machineId=Number(o.machineId);if(o.technicianId)o.technicianId=Number(o.technicianId);else delete o.technicianId;if(o.estimatedDelivery)o.estimatedDelivery=new Date(o.estimatedDelivery).toISOString();await api('/api/work-orders',{method:'POST',body:{...o,requestId}});toast('OS aberta');await refreshCurrentPage()});$('#osCustomer').onchange=e=>{const opts=machines.filter(m=>String(m.customer_id)===e.target.value);renderRegion($('#osMachine'),'<option value="">Selecione</option>'+opts.map(m=>`<option value="${m.id}">${esc([m.brand,m.model,m.type].filter(Boolean).join(' '))}</option>`).join(''))} }
 
 async function openWorkOrder(id){const safe=async p=>{try{return await api(p)}catch{return null}};const [os,quote,parts,checklists,attachments,payment,templates,stock]=await Promise.all([api(`/api/work-orders/${id}`),safe(`/api/work-orders/${id}/quote`),api(`/api/work-orders/${id}/parts`),api(`/api/work-orders/${id}/checklists`),api(`/api/work-orders/${id}/attachments`),api(`/api/work-orders/${id}/payment`),api('/api/checklist-templates'),api('/api/parts')]);const next={ENTRADA:['DIAGNOSTICO'],DIAGNOSTICO:[],ORCAMENTO:['AGUARDANDO_APROVACAO'],AGUARDANDO_APROVACAO:[],APROVADA:['EM_SERVICO'],EM_SERVICO:['PRONTA'],PRONTA:['ENTREGUE']}[os.status]||[];showModal(`OS #${os.os_number} — ${os.customer_name}`,`
