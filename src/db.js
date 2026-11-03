@@ -305,6 +305,14 @@ export function migrate(db) {
       created_at TEXT NOT NULL
     );
   `);
+  // Evolução aditiva: registros históricos OBD-II continuam legíveis.
+  const scanCols=new Set(db.prepare("PRAGMA table_info('obd_scans')").all().map(c=>c.name));
+  for(const [name,definition] of [
+    ['adapter_id',"adapter_id TEXT NOT NULL DEFAULT 'ELM327_SERIAL'"],
+    ['source',"source TEXT NOT NULL DEFAULT 'REAL' CHECK(source IN ('REAL','SIMULATED'))"],
+    ['details_json',"details_json TEXT NOT NULL DEFAULT '{}'"],
+    ['notes',"notes TEXT NOT NULL DEFAULT ''"]
+  ])if(!scanCols.has(name))db.exec('ALTER TABLE obd_scans ADD COLUMN '+definition);
   const inventoryCols=new Set(db.prepare("PRAGMA table_info('inventory_movements')").all().map(c=>c.name));
   if(!inventoryCols.has('source_type'))db.exec('ALTER TABLE inventory_movements ADD COLUMN source_type TEXT');
   if(!inventoryCols.has('source_item_id'))db.exec('ALTER TABLE inventory_movements ADD COLUMN source_item_id INTEGER');
