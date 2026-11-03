@@ -1,5 +1,5 @@
 const $=(s,root=document)=>root.querySelector(s); const $$=(s,root=document)=>[...root.querySelectorAll(s)];
-const state={token:localStorage.getItem('oficina_token')||'',user:null,page:'dashboard',pageReady:false,pageEpoch:0,pageController:null,modalToken:null,modalKey:null};
+const state={token:'',user:null,page:'dashboard',pageReady:false,pageEpoch:0,pageController:null,modalToken:null,modalKey:null};
 const dirtyInputs=new WeakSet();
 // ID + usuário evita reenviar comandos para outra conta quando um banco for recriado.
 const currentCommandOwner=()=>state.user?
@@ -196,6 +196,7 @@ const dt=v=>v?new Date(v).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'s
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 async function api(path,{method='GET',body,raw=false}={}){
   const headers={};if(state.token)headers.Authorization=`Bearer ${state.token}`;
+  if(path==='/api/auth/login')headers['X-Oficina-Client']='browser';
   if(body!==undefined)headers['Content-Type']='application/json';
   const requester=window.localRuntime?.request||fetch;
   const isRead=method==='GET',epoch=state.pageEpoch;
@@ -358,7 +359,8 @@ async function boot(){
     const setup=await api('/api/setup/status');
     if(setup.required){state.token='';localStorage.removeItem('oficina_token');return showSetup()}
   }catch{ /* The login view will display server errors if offline. */ }
-  if(!state.token)return showLogin();
+  // Sessão do navegador fica em cookie HttpOnly; tokens legados não são reutilizados.
+  localStorage.removeItem('oficina_token');
   try{
     state.user=await api('/api/auth/me');
     showApp();await navigate('dashboard');
