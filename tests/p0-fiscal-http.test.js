@@ -8,6 +8,7 @@ import {createCustomer,createMachine} from '../src/services/catalog.js';
 import {createWorkOrder,transitionWorkOrder} from '../src/services/work-orders.js';
 import {saveQuote,approveQuote} from '../src/services/quotes.js';
 import {createLocalFiscalProvider} from '../src/platform/local-fiscal-provider.js';
+import {setFiscalSettings,getFiscalSettings} from '../src/services/fiscal-settings.js';
 
 async function request(base,path,{method='GET',token,body}={}){
   const headers={};if(token)headers.Authorization='Bearer '+token;
@@ -95,14 +96,15 @@ test('HTTP P0: fiscal só para financeiro/admin, rascunho não pode simular emis
 });
 
 test('HTTP P0: resposta simulada só vale pelo contrato de provider explícito',async t=>{
-  const provider={name:'fixture-teste',transmit:async()=>({status:'AUTORIZADA',protocol:'SIMULATED',accessKey:'TESTE',xml:'<NFe>test-only</NFe>'})};
+  const provider={name:'fixture-teste',transmit:async()=>({status:'AUTORIZADA',environment:'HOMOLOGACAO',protocol:'SIMULATED',accessKey:'TESTE',xml:'<NFe>test-only</NFe>'})};
   const {db,base,admin}=await setup(t,{fiscalProvider:provider});
+  setFiscalSettings(db,{issuerCnpj:'11222333000181',issuerUf:'MG',municipalityIbge:'3170107',taxRegime:'SIMPLES',enabled:true});
   const {os}=createQuotedOS(db);
   const created=await request(base,'/api/fiscal/drafts',{method:'POST',token:admin,body:{originType:'OS',originId:os.id,kind:'NFSE',requestId:'fiscal-test'}});
   assert.equal(created.status,200);
   const sent=await request(base,'/api/fiscal/'+created.data.id+'/submit',{method:'POST',token:admin,body:{}});
   assert.equal(sent.status,200);
-  assert.equal(sent.data.status,'AUTORIZADA');
+  assert.equal(sent.data.status,'AUTORIZADA_HOMOLOGACAO');
   const repeat=await request(base,'/api/fiscal/'+created.data.id+'/submit',{method:'POST',token:admin,body:{}});
   assert.notEqual(repeat.status,200);
   assert.equal(db.prepare('SELECT COUNT(*) n FROM payment_events').get().n,0);
