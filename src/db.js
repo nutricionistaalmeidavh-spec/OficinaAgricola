@@ -1,5 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { migrateFiscal } from './fiscal-schema.js';
+import { migrateMarketParity } from './services/market-parity.js';
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
@@ -330,6 +331,7 @@ export function migrate(db) {
     SELECT 'OS_RECEIPT',id,'REFUNDED',-amount_cents,method,NULL,reversed_at FROM receipts WHERE reversed_at IS NOT NULL;
   `);
   migrateFiscal(db);
+  migrateMarketParity(db);
 }
 
 let nextSavepoint=0;
