@@ -6,6 +6,11 @@ asarUnpack:
   - dist/src/platform/acbrlib-worker.py
 directories:
   output: dist-electron
+extraResources:
+  - from: build/fiscal
+    to: fiscal
+    filter:
+      - '**/*'
 files:
   - dist/**/*
   - electron/**/*
