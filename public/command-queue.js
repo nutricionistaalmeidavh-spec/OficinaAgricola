@@ -14,7 +14,7 @@
  // Nunca armazenar operações irreversíveis, sessões ou consultas não cadastradas.
  const safeCreate=/^\/api\/(?:customers|machines|work-orders|parts|services|schedule|expenses|inventory\/movements|sales|cash\/open|cash\/current\/movements|cash\/current\/close)$/;
  const safeLinked=/^\/api\/work-orders\/\d+\/(?:parts|receipts|checklists)$/;
- const safeUpdate=/^\/api\/(?:customers|machines|parts|services|schedule|expenses|company|work-orders)\/(?:\d+)?$/;
+ const safeUpdate=/^\/api\/(?:customers|machines|parts|services|schedule|expenses|company|work-orders)(?:\/\d+)?$/;
  function operationPolicy(path,method='POST'){
    const verb=String(method||'POST').toUpperCase();
    if(verb==='POST'&&safeCreate.test(path)){
