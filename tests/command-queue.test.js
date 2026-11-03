@@ -30,7 +30,7 @@ test('RED: write-ahead persists before network, restores same ID after reload an
  assert.equal(pending[0].body.requestId,'sale-durable-001');
  assert.equal(JSON.stringify(pending).includes('Bearer '),false);
  const recovered=mod.createQueue({store,send:async cmd=>{sent.push(cmd);return ok()}});
- assert.equal(await recovered.replay(7),1);
+ assert.equal(await recovered.replay(7,{manual:true}),1);
  assert.equal((await store.list('7')).length,0);
  assert.equal(sent[0].body.requestId,sent[1].body.requestId);
 });
