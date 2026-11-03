@@ -111,11 +111,13 @@ function applyProviderResult(db,id,result,providerName){
     if(environment!==doc.environment)throw new Error('Ambiente fiscal da resposta não corresponde ao rascunho');
     const authorizedStatus=environment==='HOMOLOGACAO'?'AUTORIZADA_HOMOLOGACAO':'AUTORIZADA';
     const key=text(result.accessKey),protocol=text(result.protocol),xml=text(result.xml);
-    if(!key||!protocol||!xml.startsWith('<'))throw new Error('Retorno autorizado incompleto; consultar o fisco antes de repetir');
+    const number=text(result.number),series=text(result.series);
+    if(!key||!protocol||!xml.startsWith('<')||!/^[1-9][0-9]*$/.test(number)||!series)
+      throw new Error('Retorno fiscal sem XML, número, série, chave ou protocolo; consultar o fisco antes de repetir');
     const now=nowIso();
-    db.prepare("UPDATE fiscal_documents SET status=?,access_key=?,protocol=?,authorized_xml=?,response_json=?,last_error='',authorized_at=?,updated_at=? WHERE id=?")
-      .run(authorizedStatus,key,protocol,xml,JSON.stringify({status:authorizedStatus,provider:providerName,environment}),now,now,id);
-    addEvent(db,id,authorizedStatus,{protocol,accessKey:key,provider:providerName,environment});
+    db.prepare("UPDATE fiscal_documents SET status=?,access_key=?,protocol=?,fiscal_number=?,fiscal_series=?,authorized_xml=?,response_json=?,last_error='',authorized_at=?,updated_at=? WHERE id=?")
+      .run(authorizedStatus,key,protocol,number,series,xml,JSON.stringify({status:authorizedStatus,provider:providerName,environment}),now,now,id);
+    addEvent(db,id,authorizedStatus,{protocol,accessKey:key,number,series,provider:providerName,environment});
   }else if(status==='REJEITADA'){
     const message=text(result.message).slice(0,500);
     db.prepare("UPDATE fiscal_documents SET status='REJEITADA',response_json=?,last_error=?,updated_at=? WHERE id=?")
