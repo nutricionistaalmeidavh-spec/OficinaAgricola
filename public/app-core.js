@@ -411,7 +411,7 @@ async function refreshCurrentPage(){
 }
 async function navigate(page,{force=false}={}){
   $('#mobileMorePanel')?.classList.add('hidden');
-  $('#mobileMoreBtn')?.setAttribute('aria-expanded','false');
+  $('#mobileMoreBtn')?.setAttribute?.('aria-expanded','false');
   if(state.page===page&&state.pageReady){
     if(force)return refreshCurrentPage();
     return;
