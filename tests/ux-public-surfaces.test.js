@@ -59,3 +59,10 @@ test('simulador fica fora da seleção comum, e mensagens técnicas ficam recolh
   assert.match(diagnostic,/registry\.filter\(adapter=>adapter\.id!=='SIMULATOR'\)/);
   assert.match(diagnostic,/<details/);
 });
+
+test('perfis operacionais usam nomes legíveis no painel e na administração',()=>{
+  const core=read('public/app-core.js'),admin=read('public/app-admin.js');
+  assert.match(core,/userRoleLabel/);
+  assert.match(admin,/badge\(userRoleLabel\(u\.role\)\)/);
+  assert.match(admin,/<option value="TECNICO">Técnico<\/option>/);
+});
