@@ -37,7 +37,7 @@ test('development server retains optional Python, without affecting installed pa
  const source='/workspace/src/platform/diagnostic-hardware.js';
  const runner=resolveDiagnosticRunner({modulePath:source,platform:'linux',python:'python3'});
  assert.equal(runner.command,'python3');
- assert.deepEqual(runner.args,['/workspace/src/platform/diagnostic-worker.py']);
+ assert.deepEqual(runner.args.map(path=>path.replaceAll(String.fromCharCode(92),'/')),['/workspace/src/platform/diagnostic-worker.py']);
  assert.equal(runner.embedded,false);
 });
 
