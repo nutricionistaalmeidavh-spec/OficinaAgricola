@@ -86,7 +86,7 @@ function createRouter({db,storageDir}){
     duplicateWorkOrderWithQuote(db,int(params.id),body,{createdBy:user.id}));
   add('GET','/api/work-orders/:id',ROLE_ALL,({params})=>getWorkOrder(db,int(params.id)));
   add('PATCH','/api/work-orders/:id',ROLE_TECH,({params,body,user})=>updateWorkOrder(db,int(params.id),body,{changedBy:user.id}));
-  add('POST','/api/work-orders/:id/status',ROLE_TECH,({params,body,user})=>transitionWorkOrder(db,int(params.id),body.status,{reason:body.reason,changedBy:user.id}));
+  add('POST','/api/work-orders/:id/status',ROLE_TECH,({params,body,user})=>transitionWorkOrder(db,int(params.id),body.status,{reason:body.reason,changedBy:user.id,expectedVersion:body.expectedVersion??null}));
   add('GET','/api/work-orders/:id/history',ROLE_ALL,({params})=>getWorkOrderHistory(db,int(params.id)));
 
   add('GET','/api/work-orders/:id/quote',ROLE_ALL,({params})=>getQuote(db,int(params.id)));
@@ -104,7 +104,7 @@ function createRouter({db,storageDir}){
   add('GET','/api/inventory/low-stock',ROLE_ALL,()=>lowStockParts(db));
   add('GET','/api/work-orders/:id/parts',ROLE_ALL,({params})=>listWorkOrderParts(db,int(params.id)));
   add('POST','/api/work-orders/:id/parts',ROLE_TECH,({params,body,user})=>consumePart(db,int(params.id),int(body.partId),{...body,createdBy:user.id,userRole:user.role}));
-  add('POST','/api/work-orders/:id/parts/:itemId/reverse',ROLE_TECH,({params,body,user})=>reverseWorkOrderPart(db,int(params.itemId),{note:body.note,createdBy:user.id}));
+  add('POST','/api/work-orders/:id/parts/:itemId/reverse',ROLE_TECH,({params,body,user})=>reverseWorkOrderPart(db,int(params.itemId),{note:body.note,createdBy:user.id,workOrderId:int(params.id)}));
 
   add('GET','/api/schedule',ROLE_ALL,({url})=>listSchedule(db,{from:url.searchParams.get('from')||undefined,to:url.searchParams.get('to')||undefined}));
   add('POST','/api/schedule',ROLE_TECH,({body})=>createScheduleEvent(db,body));
@@ -127,7 +127,14 @@ function createRouter({db,storageDir}){
   add('PATCH','/api/expenses/:id',ROLE_FIN,({params,body})=>updateExpense(db,int(params.id),body));
   add('GET','/api/finance/summary',ROLE_FIN,({url})=>financeSummary(db,{from:url.searchParams.get('from')||undefined,to:url.searchParams.get('to')||undefined}));
   add('GET','/api/admin/reconciliation',['ADMIN'],()=>auditInvariants(db));
-  add('GET','/api/dashboard',ROLE_ALL,()=>dashboardData(db));
+  add('GET','/api/commands/status',ROLE_ALL,({user,url})=>{
+    const method=url.searchParams.get('method'),path=url.searchParams.get('path'),requestId=url.searchParams.get('requestId');
+    if(!['POST','PATCH','PUT','DELETE'].includes(method)||!path?.startsWith('/api/')||!/^[\\w:.-]{3,128}$/.test(requestId||''))throw new Error('Consulta de operação inválida');
+    const scope=`http:${method}:${path}:user:${user.id}`;
+    const found=db.prepare('SELECT 1 FROM command_idempotency WHERE scope=? AND request_id=?').get(scope,requestId);
+    return {status:found?'CONFIRMED':'UNKNOWN',requestId};
+  });
+  add('GET','/api/dashboard',ROLE_ALL,({user})=>dashboardData(db,{role:user.role}));
   return r;
 }
 
