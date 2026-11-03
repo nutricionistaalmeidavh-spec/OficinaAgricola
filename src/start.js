@@ -9,6 +9,7 @@ import { createEventRuntime } from './platform/event-runtime.js';
 import {dispatchOutbox} from './platform/outbox.js';
 import {recoverOrphanAttachments} from './services/operations.js';
 import {auditInvariants} from './services/reconciliation.js';
+import {createMaintenanceCrmTasks} from './services/market-parity.js';
 import {startBackupSchedule} from './platform/backup-scheduler.js';
 import { listLanUrls, resolveServerConfig } from './platform/network.js';
 
@@ -41,6 +42,12 @@ function reconcile(){
 }
 const reconciliationTimer=setInterval(reconcile,60000);
 reconciliationTimer.unref?.();
+function syncPreventiveReminders(){
+ try{const result=createMaintenanceCrmTasks(db,{daysAhead:7});if(result.created)console.info('[crm] Lembretes preventivos gerados:',result.created)}
+ catch(error){console.error('[crm] Falha ao gerar lembretes locais:',error.message)}
+}
+const preventiveTimer=setInterval(syncPreventiveReminders,6*60*60*1000);
+preventiveTimer.unref?.();
 const { port, host } = resolveServerConfig(process.env);
 const tls=process.env.HTTPS_CERT_FILE&&process.env.HTTPS_KEY_FILE?{
   cert:readFileSync(process.env.HTTPS_CERT_FILE),
@@ -59,11 +66,13 @@ server.listen(port, host, () => {
   if(tls)for(const url of listLanUrls({ port }))console.log(`Rede local HTTPS: ${url}`);
   flushEvents();
   reconcile();
+  syncPreventiveReminders();
 });
 
 const shutdown = () => {
   clearInterval(outboxTimer);
   clearInterval(reconciliationTimer);
+  clearInterval(preventiveTimer);
   stopBackupSchedule();
   server.close(async () => {
     await dispatchOutbox(db,eventRuntime).catch(e=>console.error('[outbox]',e.message));
