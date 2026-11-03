@@ -46,7 +46,7 @@ async function readJson(req,max=8*1024*1024){
   if(!chunks.length)return {}; const raw=Buffer.concat(chunks).toString('utf8');try{return JSON.parse(raw)}catch{throw new Error('JSON inválido')}
 }
 function tokenFrom(req){const auth=req.headers.authorization||'';if(auth.startsWith('Bearer '))return auth.slice(7).trim();return null}
-function statusFor(error){const m=String(error?.message||'');if(/Credenciais|Sessão/.test(m))return 401;if(/Permissão/.test(m))return 403;if(/não encontrad|não encontrado|não encontrada/i.test(m))return 404;if(/Transição inválida|não pode|já |insuficiente|saldo pendente|não aguarda|UNIQUE constraint|pertence/i.test(m))return 409;return 400}
+function statusFor(error){const m=String(error?.message||'');if(/Credenciais|Sessão/.test(m))return 401;if(/Permissão/.test(m))return 403;if(/não encontrad|não encontrado|não encontrada/i.test(m))return 404;if(/Transição inválida|não pode|já |insuficiente|saldo pendente|não aguarda|UNIQUE constraint|pertence|Conflito|alterada por outro/i.test(m))return 409;return 400}
 function roleGuard(user,roles){if(!roles||roles.length===0)return;if(!user||!roles.includes(user.role))throw new Error('Permissão insuficiente')}
 const int=(v)=>{const n=Number(v);if(!Number.isInteger(n)||n<=0)throw new Error('Identificador inválido');return n};
 
@@ -104,7 +104,7 @@ function createRouter({db,storageDir}){
   add('GET','/api/inventory/low-stock',ROLE_ALL,()=>lowStockParts(db));
   add('GET','/api/work-orders/:id/parts',ROLE_ALL,({params})=>listWorkOrderParts(db,int(params.id)));
   add('POST','/api/work-orders/:id/parts',ROLE_TECH,({params,body,user})=>consumePart(db,int(params.id),int(body.partId),{...body,createdBy:user.id,userRole:user.role}));
-  add('POST','/api/work-orders/:id/parts/:itemId/reverse',ROLE_TECH,({params,body,user})=>reverseWorkOrderPart(db,int(params.itemId),{note:body.note,createdBy:user.id}));
+  add('POST','/api/work-orders/:id/parts/:itemId/reverse',ROLE_TECH,({params,body,user})=>reverseWorkOrderPart(db,int(params.itemId),{workOrderId:int(params.id),note:body.note,createdBy:user.id}));
 
   add('GET','/api/schedule',ROLE_ALL,({url})=>listSchedule(db,{from:url.searchParams.get('from')||undefined,to:url.searchParams.get('to')||undefined}));
   add('POST','/api/schedule',ROLE_TECH,({body})=>createScheduleEvent(db,body));
@@ -127,7 +127,7 @@ function createRouter({db,storageDir}){
   add('PATCH','/api/expenses/:id',ROLE_FIN,({params,body})=>updateExpense(db,int(params.id),body));
   add('GET','/api/finance/summary',ROLE_FIN,({url})=>financeSummary(db,{from:url.searchParams.get('from')||undefined,to:url.searchParams.get('to')||undefined}));
   add('GET','/api/admin/reconciliation',['ADMIN'],()=>auditInvariants(db));
-  add('GET','/api/dashboard',ROLE_ALL,()=>dashboardData(db));
+  add('GET','/api/dashboard',ROLE_ALL,({user})=>dashboardData(db,{includeFinance:['ADMIN','FINANCEIRO'].includes(user.role)}));
   return r;
 }
 
