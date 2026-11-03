@@ -31,7 +31,7 @@ async function renderDashboard(){
       ${oaKpi('Aguard. aprovação',d.counts.AGUARDANDO_APROVACAO,'warn')}
       ${oaKpi('Em serviço',d.counts.EM_SERVICO,'active')}
       ${oaKpi('Prontas',d.counts.PRONTA,'ready')}
-      ${oaKpi('Faturamento do período',money(f.invoicedCents),'accent')}
+      ${f?oaKpi('Faturamento do período',money(f.invoicedCents),'accent'):''}
     </div>
     <section class="oa-board-card">
       <div class="oa-board-head"><div><h2>Ordens por status</h2><small>Acompanhamento rápido do fluxo da oficina</small></div><button class="btn sm" data-go="work-orders">Ver todas</button></div>
