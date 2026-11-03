@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { spawn } from 'node:child_process';
+import { createServer as netServer } from 'node:net';
 import { openDatabase, migrate } from '../src/db.js';
 import { migrateAssistencia } from '../src/assistencia-schema.js';
 import { createUser } from '../src/auth.js';
@@ -258,4 +260,62 @@ test('P0/P3: reinicio e backup/restore preservam OS, anexo, recebimento e chave 
   assert.equal(binary.status, 200);
   assert.equal(binary.data.toString('utf8'), 'conteudo-anexo-qa');
   assert.equal((await s.ok('/api/admin/reconciliation')).errors.length, 0);
+});
+
+
+test('P0: queda abrupta SIGKILL apos confirmar escrita preserva pagamento e impede replay duplicado', { skip: process.platform === 'win32' }, async t => {
+  const s = await setup(t);
+  const { os, path } = await s.approvedOrder('Crash durabilidade', 15000);
+  await s.stop();
+  const probe = netServer();
+  await new Promise(resolve => probe.listen(0, '127.0.0.1', resolve));
+  const port = probe.address().port;
+  await new Promise(resolve => probe.close(resolve));
+  const child = spawn(process.execPath, ['src/start.js'], {
+    env: {
+      ...process.env, HOST: '127.0.0.1', PORT: String(port),
+      DATABASE_PATH: s.databasePath, STORAGE_DIR: s.storageDir,
+      EVENT_LOG_PATH: join(s.root, 'events.jsonl'), BACKUP_ROOT: join(s.root, 'backups'),
+      NODE_ENV: 'test'
+    },
+    stdio: 'ignore'
+  });
+  try {
+    const url = 'http://127.0.0.1:' + port;
+    let ready = false;
+    for (let i = 0; i < 100; i++) {
+      if (child.exitCode !== null) throw new Error('Servidor de crash saiu antes do teste');
+      try {
+        if ((await fetch(url + '/api/health')).status === 200) { ready = true; break; }
+      } catch {}
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    assert.equal(ready, true, 'Servidor de processo separado iniciou');
+    const login = await fetch(url + '/api/auth/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'admin', password: 'Admin@1234' })
+    });
+    assert.equal(login.status, 200);
+    const token = (await login.json()).token;
+    const body = { amountCents: 15000, method: 'PIX', requestId: 'qa-process-killed-after-commit' };
+    const result = await fetch(url + path + '/receipts', {
+      method: 'POST', headers: {
+        'Content-Type': 'application/json', Authorization: 'Bearer ' + token
+      },
+      body: JSON.stringify(body)
+    });
+    assert.equal(result.status, 200, 'Pagamento realmente confirmado antes de interromper o processo');
+    const first = await result.json();
+    child.kill('SIGKILL'); // Sem shutdown, flush, close ou backup coordenado.
+    await new Promise(resolve => child.once('exit', resolve));
+    await s.restart();
+    const replay = await s.ok(path + '/receipts', { method: 'POST', body });
+    assert.equal(replay.id, first.id);
+    assert.equal(s.db.prepare('SELECT COUNT(*) n FROM receipts WHERE work_order_id=?').get(os.id).n, 1);
+    assert.equal(s.db.prepare('SELECT COUNT(*) n FROM payment_events').get().n, 1);
+    assert.equal((await s.ok(path + '/payment')).pendingCents, 0);
+    assert.equal((await s.ok('/api/admin/reconciliation')).ok, true);
+  } finally {
+    if (child.exitCode === null) child.kill('SIGKILL');
+  }
 });
