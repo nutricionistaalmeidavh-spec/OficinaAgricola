@@ -5,13 +5,17 @@ asar: true
 asarUnpack:
   - dist/src/platform/acbrlib-worker.py
   - dist/src/platform/diagnostic-worker.py
+directories:
+  output: dist-electron
 extraResources:
+  - from: build/fiscal
+    to: fiscal
+    filter:
+      - '**/*'
   - from: build/diagnostics/ArtiSys-Diagnostic-Bridge
     to: diagnostics/ArtiSys-Diagnostic-Bridge
     filter:
       - '**/*'
-directories:
-  output: dist-electron
 files:
   - dist/**/*
   - electron/**/*
