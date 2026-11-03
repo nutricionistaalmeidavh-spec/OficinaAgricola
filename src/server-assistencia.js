@@ -194,7 +194,7 @@ export function createAssistenciaServer({
       }):invoke();
       json(res,answer.status,answer.data);
       if(mutation&&answer.status>=200&&answer.status<300&&eventRuntime)
-        void dispatchOutbox(db,eventRuntime).catch(e=>console.error('[outbox]',e.message));
+        void dispatchOutbox(db,eventRuntime,100,{respectBackoff:true}).catch(e=>console.error('[outbox]',e.message));
     } catch (error) {
       console.error('[assistencia]', req.method, url.pathname, error.message);
       json(res, errorStatus(error), { error: error.message || 'Erro interno' });
