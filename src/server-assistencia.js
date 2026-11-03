@@ -3,6 +3,7 @@ import { openDatabase, migrate, transaction } from './db.js';
 import { validateSession } from './auth.js';
 import { createAppServer } from './server.js';
 import { createLocalFiscalProvider } from './platform/local-fiscal-provider.js';
+import { createAcbrLibFiscalProvider } from './platform/acbrlib-fiscal-provider.js';
 import { migrateAssistencia } from './assistencia-schema.js';
 import {enqueueHttpEvent,dispatchOutbox} from './platform/outbox.js';
 import {runIdempotent} from './platform/idempotency.js';
@@ -154,7 +155,11 @@ export function createAssistenciaServer({
 } = {}) {
   migrate(db);
   migrateAssistencia(db);
-  const fiscalProvider = createLocalFiscalProvider();
+  const acbrFiscalProvider=createAcbrLibFiscalProvider();
+  const localFiscalProvider=createLocalFiscalProvider();
+  if(acbrFiscalProvider&&localFiscalProvider)
+    throw new Error('Configure apenas um motor fiscal local: ACBrLib ou sidecar');
+  const fiscalProvider=acbrFiscalProvider||localFiscalProvider;
   const baseServer = createAppServer({ db, storageDir, eventRuntime, fiscalProvider });
 
   return createServer(async (req, res) => {
