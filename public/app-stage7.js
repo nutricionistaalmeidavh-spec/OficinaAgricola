@@ -22,7 +22,7 @@ async function renderDashboard(){
   const pipeline=OA_PIPELINE.map(column=>{
     const group=d.board?.[column.key]||{count:0,items:[]};
     const items=group.items;
-    return `<div class="oa-board-col"><div class="oa-board-title"><span>${column.label}</span><b>${group.count}</b></div>${items.map(oaOrderCard).join('')||'<div class="empty" style="padding:24px 8px;font-size:11px">Sem OS</div>'}</div>`;
+    return `<div class="oa-board-col"><div class="oa-board-title"><span>${column.label}</span><b>${group.count}</b></div>${items.map(oaOrderCard).join('')||'<div class="empty" style="padding:24px 8px;font-size:11px">Nenhuma OS nesta etapa.</div>'}${group.count>items.length?`<small class="muted">${group.count-items.length} outras OS · Ver todas</small>`:''}</div>`;
   }).join('');
 
   setContent(`
@@ -73,7 +73,7 @@ async function renderReports(){
   const active=report.openCount;
 
   setContent(`
-    <div class="section-head"><div><h2>Resumo do mês</h2><span class="muted">Indicadores completos do SQLite, sem limite de listagem</span></div></div>
+    <div class="section-head"><div><h2>Resumo do mês</h2><span class="muted">Dados consolidados das operações da oficina</span></div></div>
     <div class="oa-report-grid">
       <div class="oa-report-card"><small>OS em fluxo</small><strong>${active}</strong></div>
       <div class="oa-report-card"><small>OS entregues no mês</small><strong>${completed}</strong></div>

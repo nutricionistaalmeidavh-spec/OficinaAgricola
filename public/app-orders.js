@@ -8,26 +8,29 @@ function osCard(order){
 function bindOrderCards(host=document){
   host.querySelectorAll('[data-os]').forEach(card=>card.onclick=()=>openWorkOrder(card.dataset.os));
 }
+function osColumnContent(status,label,total,items){
+ const cards=items.length?items.map(osCard).join(''):total>0?'<div class="empty">Há OS nesta etapa. Carregue as ordens para visualizar.</div>':'<div class="empty">Nenhuma OS nesta etapa.</div>';
+ const more=total>items.length?'<button type="button" class="btn sm soft" data-os-more="'+status+'">Carregar mais ('+(total-items.length)+')</button>':'';
+ return '<div class="kanban-title"><span>'+label+'</span><b>'+total+'</b></div>'+cards+more;
+}
 async function renderWorkOrders({append=false}={}){
   pageTitle('Ordens de Serviço','OFICINA');
   const path='/api/work-orders/page?scope=active&limit=100'+(append&&osPageCursor?'&cursor='+encodeURIComponent(osPageCursor):'');
   const [page,customers,machines,techs,summary]=await Promise.all([
     api(path),api('/api/customers'),api('/api/machines'),api('/api/technicians'),api('/api/dashboard')
   ]);
-  osPagedRows=append?osPagedRows.concat(page.items):page.items;
+  osPagedRows=append?osPagedRows.concat(page.items.filter(item=>!osPagedRows.some(row=>row.id===item.id))):page.items;
   osPageCursor=page.nextCursor;osTotal=page.total;
   const orders=osPagedRows;
   const canCreate=['ADMIN','ATENDIMENTO'].includes(state.user.role);
   const columns=OS_COLUMNS.map(([status,label])=>{
     const items=orders.filter(order=>order.status===status);
     const total=summary.counts[status]||0;
-    return '<div class="kanban-col"><div class="kanban-title"><span>'+label+'</span><b>'+total+'</b></div>'+
-      items.map(osCard).join('')+(total>items.length?'<small class="muted">'+(total-items.length)+' OS adicionais não exibidas nesta visão.</small>':'')+'</div>';
+    return '<div class="kanban-col" data-os-status="'+status+'">'+osColumnContent(status,label,total,items)+'</div>';
   }).join('');
-  setContent('<div class="section-head"><div><h2>Fluxo da oficina</h2><span class="muted">'+orders.length+' de '+osTotal+' OS em fluxo carregadas</span></div>'+
+  setContent('<div class="section-head"><div><h2>Fluxo da oficina</h2><span class="muted" id="osLoadedCount">'+orders.length+' de '+osTotal+' OS em fluxo carregadas</span></div>'+
     (canCreate?'<button id="newOS" class="btn primary">+ Abrir OS</button>':'')+'</div>'+
     '<div class="kanban">'+columns+'</div>'+
-    (osPageCursor?'<button id="loadMoreOS" class="btn" type="button">Carregar mais OS ativas</button>':'')+
     '<section class="card" style="margin-top:18px"><div class="section-head"><div><h2>Histórico de OS encerradas</h2><span class="muted">Entregues, canceladas e reprovadas · consulta paginada ao banco</span></div></div>'+
     '<div class="action-row" style="margin-bottom:14px;flex-wrap:wrap">'+
     '<label>Status <select id="osArchiveStatus"><option value="">Todos os encerramentos</option>'+
@@ -39,7 +42,37 @@ async function renderWorkOrders({append=false}={}){
     '<button id="osArchiveMore" class="btn sm soft" type="button" hidden>Carregar mais</button></section>');
   const newOS=$('#newOS');if(newOS)newOS.onclick=()=>workOrderModal(customers,machines,techs);
   bindOrderCards($('#content'));
-  const loadMore=$('#loadMoreOS');if(loadMore)loadMore.onclick=()=>renderWorkOrders({append:true}).catch(error=>toast(error.message,true));
+  const bindColumnMore=()=>{
+    $$('[data-os-more]').forEach(button=>button.onclick=async()=>{
+      const status=button.dataset.osMore;
+      const column=button.closest('[data-os-status]');
+      const loaded=osPagedRows.filter(order=>order.status===status).sort((a,b)=>b.id-a.id);
+      const cursor=loaded.length?'&cursor='+encodeURIComponent(loaded[loaded.length-1].id):'';
+      button.disabled=true;
+      button.textContent='Carregando OS…';
+      column?.setAttribute('aria-busy','true');
+      try{
+        const page=await api('/api/work-orders/page?scope=active&status='+encodeURIComponent(status)+'&limit=50'+cursor);
+        if(!column?.isConnected)return;
+        const known=new Set(osPagedRows.map(item=>item.id));
+        osPagedRows.push(...page.items.filter(item=>!known.has(item.id)));
+        const all=osPagedRows.filter(item=>item.status===status).sort((a,b)=>b.id-a.id);
+        const label=OS_COLUMNS.find(item=>item[0]===status)[1];
+        renderRegion(column,osColumnContent(status,label,page.total,all));
+        bindOrderCards(column);
+        const loadedCount=$('#osLoadedCount');
+        if(loadedCount)loadedCount.textContent=osPagedRows.length+' de '+osTotal+' OS em fluxo carregadas';
+        bindColumnMore();
+      }catch(error){
+        if(column?.isConnected&&error?.name!=='AbortError'){
+          button.textContent='Tentar novamente';
+          toast('Não foi possível carregar as OS desta etapa. Tente novamente.',true);
+        }
+      }
+      finally{button.disabled=false;column?.removeAttribute('aria-busy')}
+    });
+  };
+  bindColumnMore();
   let archive=[],archiveCursor=null,sequence=0;
   const loadArchive=async({more=false}={})=>{
     const request=++sequence,status=$('#osArchiveStatus')?.value||'';

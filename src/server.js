@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import {publicErrorMessage} from './platform/public-errors.js';
 import { readFileSync, existsSync, statSync } from 'node:fs';
 import { join, resolve, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -266,7 +267,7 @@ export function createAppServer({db=openDatabase(),storageDir=process.env.STORAG
       if((req.method==='GET'||req.method==='HEAD')&&serveStatic(req,res,url.pathname))return;
       if(req.method==='GET'&&!url.pathname.startsWith('/api/')){if(serveStatic(req,res,'/'))return}
       json(res,404,{error:'Rota não encontrada'});
-    }catch(error){console.error('[request]',req.method,url.pathname.startsWith('/api/public/approval/')?'/api/public/approval/[redacted]':url.pathname,error.message);json(res,statusFor(error),{error:error.message||'Erro interno'})}
+    }catch(error){console.error('[request]',req.method,url.pathname.startsWith('/api/public/approval/')?'/api/public/approval/[redacted]':url.pathname,error.message);json(res,statusFor(error),{error:publicErrorMessage(error)})}
   });
 }
 
