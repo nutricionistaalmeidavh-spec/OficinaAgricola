@@ -29,7 +29,7 @@ try{
   for(let i=1;i<=size;i++){
    const customer=(i%count)+1;
    os.run(i,customer,customer,stamp,'Problema '+i,i%3===0?'ENTREGUE':'ENTRADA','{}','{}',stamp,stamp);
-   if(i%2===0){sale.run(i,stamp);expense.run(stamp,stamp);schedule.run(stamp,stamp);}
+   if(i%2===0){sale.run(i,stamp);expense.run(stamp,stamp);schedule.run(stamp,stamp,stamp);}
   }
  });
  const queries={
