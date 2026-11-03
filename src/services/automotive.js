@@ -1,5 +1,6 @@
 import {nowIso,transaction} from '../db.js';
 import {decodeDtcResponse} from './obd.js';
+import {parseDiagnosticCapture} from './diagnostics.js';
 import {createServiceRecord} from './vehicle-maintenance.js';
 
 const norm=v=>String(v??'').trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
@@ -99,12 +100,27 @@ export function createDiagnosticScan(db,machineId,input){
   return transaction(db,()=>{
     machine(db,machineId);
     const workOrderId=checkOS(db,machineId,input.workOrderId);
-    const raw=text(input.rawResponse);
-    if(!raw||raw.length>4000)throw new Error('Resposta OBD-II inválida ou muito extensa');
-    const protocol=text(input.protocol).slice(0,80);
-    const codes=decodeDtcResponse(raw,{can:/ISO\s*15765|\bCAN\b/i.test(protocol)});
-    const result=db.prepare('INSERT INTO obd_scans(machine_id,work_order_id,protocol,raw_response,codes_json,created_at) VALUES(?,?,?,?,?,?)')
-      .run(machineId,workOrderId,protocol,raw,JSON.stringify(codes),nowIso());
+    const notes=text(input.notes);
+    if(notes.length>1500)throw new Error('Observação excede 1500 caracteres');
+    let raw,protocol,codes,adapterId='ELM327_SERIAL',source='REAL',details={};
+    if(input.responses){
+      const captured=parseDiagnosticCapture(input);
+      raw=String(input.responses['03']||Object.values(input.responses)[0]||'');
+      protocol=captured.protocol;
+      codes=captured.storedCodes;
+      adapterId=captured.adapterId;source=captured.source;
+      details={...captured,responses:input.responses};
+      if(raw.length>4000)throw new Error('Resposta principal excede limite');
+    }else{
+      raw=text(input.rawResponse);
+      if(!raw||raw.length>4000)throw new Error('Resposta OBD-II inválida ou muito extensa');
+      protocol=text(input.protocol).slice(0,80);
+      codes=decodeDtcResponse(raw,{can:/ISO\\s*15765|\\bCAN\\b/i.test(protocol)});
+    }
+    const result=db.prepare(`INSERT INTO obd_scans(machine_id,work_order_id,protocol,raw_response,
+      codes_json,created_at,adapter_id,source,details_json,notes) VALUES(?,?,?,?,?,?,?,?,?,?)`)
+      .run(machineId,workOrderId,protocol,raw,JSON.stringify(codes),nowIso(),
+        adapterId,source,JSON.stringify(details),notes);
     return db.prepare('SELECT * FROM obd_scans WHERE id=?').get(Number(result.lastInsertRowid));
   });
 }
