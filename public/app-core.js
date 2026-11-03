@@ -429,7 +429,7 @@ async function navigate(page,{force=false}={}){
   const epoch=++state.pageEpoch;
   state.pageReady=false;
   state.page=page;
-  $('#nav button[data-page]').forEach(b=>{
+  $$('#nav button').forEach(b=>{
     const active=b.dataset.page===page;b.classList.toggle('active',active);
     if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');
   });
