@@ -12,6 +12,10 @@ extraResources:
     to: fiscal
     filter:
       - '**/*'
+  - from: build/diagnostics/ArtiSys-Diagnostic-Bridge
+    to: diagnostics/ArtiSys-Diagnostic-Bridge
+    filter:
+      - '**/*'
 files:
   - dist/**/*
   - electron/**/*

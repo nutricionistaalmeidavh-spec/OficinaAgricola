@@ -18,8 +18,7 @@ apenas conexões originadas no próprio computador principal. O sistema não apa
 não programa ECU e não executa atuadores.
 
 ## Windows — J2534 Pass-Thru
-- Instale **Python 3** com `python` acessível no PATH ou configure seu interpretador
-  com `DIAGNOSTIC_PYTHON`; ele é opcional para o núcleo do ArtiSys Oficina.
+- Na versão **Windows instalada pelo NSIS**, Python e a ponte de diagnóstico já acompanham o aplicativo; não é preciso instalar Python, configurar PATH nem executar comandos no terminal.
 - Instale o **driver J2534 04.04 fornecido pelo fabricante do seu equipamento**.
   O driver precisa aparecer em `HKLM\SOFTWARE\PassThruSupport.04.04` no registro
   Windows (incluindo a visualização 32-bit, quando aplicável).
@@ -36,8 +35,7 @@ não programa ECU e não executa atuadores.
   PCAN, Kvaser, Vector, IXXAT, SLCAN e outros backends do `python-can`.
 - No Linux, SocketCAN é suportado com biblioteca padrão do Python. O canal precisa
   estar configurado na própria máquina, por exemplo `can0` em 250 kbit/s.
-- Para PCAN e outros backends (inclusive no Windows), instale a biblioteca **livre**
-  `python -m pip install python-can` e os drivers locais do equipamento.
+- Na versão **Windows instalada**, `python-can` já vem empacotado. Para PCAN e outros backends, somente o driver local do fabricante do equipamento pode ser necessário. Em instalações manuais/Linux, `python-can` pode ser instalado separadamente.
 - Selecione backend, canal (ex.: `PCAN_USBBUS1`), bitrate 250/500 kbit/s
   e tempo de escuta de 5–15 segundos.
 - A captura é **totalmente passiva**: não chama `bus.send` e não transmite
@@ -51,8 +49,8 @@ não programa ECU e não executa atuadores.
 ## Tratamento de problemas
 - **Driver J2534 não encontrado:** verifique registro do Windows, instalação e
   arquitetura da DLL do equipamento; reinicie o aplicativo após instalar o driver.
-- **Python não encontrado:** instale Python 3 e ajuste o PATH ou `DIAGNOSTIC_PYTHON`.
-- **python-can não encontrado:** instale apenas se quiser usar backend CAN que dependa dele.
+- **Ponte de diagnóstico ausente no Windows:** reparar/reinstalar o ArtiSys Oficina. Não instalar Python manualmente.
+- **Backend CAN indisponível:** conferir driver do equipamento, canal escolhido e suporte desse modelo; `python-can` faz parte do instalador Windows.
 - **Sem quadros J1939:** confira alimentação/ignição, conexão física, bitrate,
   backend, canal e se a ECU realmente transmite PGNs no barramento.
 - **Sem resposta J2534:** confira driver, ignição, velocidade ISO15765 e se o veículo
@@ -63,3 +61,26 @@ Os testes automatizados verificam a interpretação das mensagens, as permissõe
 da API e que o leitor J1939 nunca transmite quadros. **Não homologam automaticamente
 um equipamento físico nem um veículo real.** Antes de vender como serviço de scanner
 multimarcas, a combinação modelo/driver/veículo deve ser testada presencialmente.
+
+
+## Empacotamento autônomo do instalador Windows
+
+O build Windows inclui uma ponte executável independente em
+`resources/diagnostics/ArtiSys-Diagnostic-Bridge/ArtiSys-Diagnostic-Bridge.exe`,
+criada com PyInstaller a partir de `diagnostic-worker.py`. Inclui o interpretador
+Python e a biblioteca open source `python-can`. É um componente interno do
+aplicativo, sem janelas ou passos de instalação para o usuário.
+
+- O processo Electron **não** usa Python do PATH na instalação NSIS; se a ponte
+  estiver ausente, apresenta uma mensagem de reparo em vez de executar software
+  inesperado ou inventar leituras.
+- A compilação utiliza `scripts/build-diagnostic-bridge.ps1` com dependências de
+  build pinadas em `scripts/requirements-diagnostic-bridge.txt`.
+- O smoke do Windows verifica o executável instalado com PATH sem Python e valida
+  que a rota autenticada de diagnóstico usa a ponte embutida.
+- Desenvolvimento e instalação manual (fora do NSIS) podem continuar usando o
+  Python instalado pelo desenvolvedor; essa exigência não é repassada ao cliente.
+- Os drivers/dll de fornecedores de interface física continuam externos, podendo
+  exigir instalador do fabricante e compatibilidade da arquitetura x64.
+- Bibliotecas open source: PyInstaller (GPL com exceção de empacotamento) e
+  python-can (LGPL-3.0-only), com fontes e licenças disponibilizadas pelos projetos.

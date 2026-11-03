@@ -11,6 +11,8 @@ on:
       - 'scripts/build.mjs'
       - 'scripts/smoke-installer.ps1'
       - 'scripts/build-acbr-native.ps1'
+      - 'scripts/build-diagnostic-bridge.ps1'
+      - 'scripts/requirements-diagnostic-bridge.txt'
       - 'scripts/stage-fiscal-bundle.mjs'
       - 'src/platform/fiscal-bundle.js'
       - 'public/**'
@@ -46,7 +48,7 @@ jobs:
       - name: Validar parser PowerShell antes da compilação nativa
         shell: pwsh
         run: |
-          foreach ($script in @('scripts/smoke-installer.ps1','scripts/build-acbr-native.ps1','scripts/build-electron.ps1')) {
+          foreach ($script in @('scripts/smoke-installer.ps1','scripts/build-acbr-native.ps1','scripts/build-electron.ps1','scripts/build-diagnostic-bridge.ps1')) {
             $tokens = $null
             $errors = $null
             [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script).Path,[ref]$tokens,[ref]$errors) | Out-Null
@@ -93,6 +95,9 @@ jobs:
           node scripts/stage-fiscal-bundle.mjs
       - name: Install temporary Electron builder
         run: npm install --no-save --package-lock=false electron-builder@26.15.3
+      - name: Build bundled diagnostic bridge
+        shell: pwsh
+        run: ./scripts/build-diagnostic-bridge.ps1
       - name: Build Windows NSIS without publishing
         run: npx electron-builder --win nsis --x64 --publish never
       - name: Run fresh install and first-login smoke

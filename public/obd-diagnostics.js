@@ -141,8 +141,8 @@ async function diagnosticCaptureModal(machineId){
  '<label>Amostras de RPM<select id="diagSamples"><option value="3">3</option><option value="5">5</option><option value="10">10</option></select></label>'+
  '<label>OS vinculada (opcional)<input id="diagOs" type="number" min="1"></label>'+
  '<label>Observações técnicas<textarea id="diagNotes" maxlength="1500" placeholder="Descreva sintomas, testes e observações"></textarea></label>'+
- '<p class="muted">ELM327/OBDLink: USB serial. J2534: driver 04.04 no Windows. J1939: interface CAN compatível, leitura passiva. Biblioteca python-can gratuita pode ser necessária. A seleção é liberada, mas só há leitura real com equipamento/driver operacional.</p>'+
- '<p class="muted">'+esc(probeError||(!detection?.j2534?.ready?'J2534: driver não encontrado neste computador. ':'')+(!detection?.j1939?.ready?'J1939: configure Python ou SocketCAN.':''))+'</p>'+
+ '<p class="muted">ELM327/OBDLink: USB serial. J2534: driver 04.04 no Windows. J1939: interface CAN compatível, leitura passiva. A ponte e o python-can já acompanham o aplicativo instalado no Windows; o driver específico do fabricante do adaptador ainda pode ser necessário. A leitura real depende do equipamento e veículo.</p>'+
+ '<p class="muted">'+esc(probeError||(!detection?.j2534?.ready?'J2534: driver não encontrado neste computador. ':'')+(!detection?.j1939?.ready?'J1939: configure o adaptador CAN e seu driver, se necessário.':''))+'</p>'+
  '<div role="status" aria-live="polite" id="diagStatus"></div>'+
  '<button class="btn primary" id="diagStart" type="button">Conectar e registrar diagnóstico</button></div>');
  const selectAdapter=$('#diagAdapter'),serialControls=$('#diagBaud').closest('label');

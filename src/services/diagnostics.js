@@ -4,7 +4,7 @@ const ADAPTERS=Object.freeze([
  {id:'OBDLINK_STN_SERIAL',label:'OBDLink/STN USB serial (modo ELM)',available:true,source:'REAL',transport:'WEB_SERIAL'},
  {id:'SIMULATOR',label:'Simulador offline - somente testes',available:true,source:'SIMULATED',transport:'NONE'},
  {id:'J2534',label:'J2534 Pass-Thru (driver Windows)',available:true,source:'REAL',transport:'LOCAL_NATIVE',requires:'Driver J2534 04.04 e interface conectada'},
- {id:'J1939',label:'J1939 CAN (leitura passiva)',available:true,source:'REAL',transport:'LOCAL_CAN',requires:'Interface CAN e python-can instalado'}
+ {id:'J1939',label:'J1939 CAN (leitura passiva)',available:true,source:'REAL',transport:'LOCAL_CAN',requires:'Interface CAN e driver do fabricante; Python embutido no instalador Windows'}
 ]);
 export const listDiagnosticAdapters=()=>ADAPTERS.map(x=>({...x}));
 const specs={

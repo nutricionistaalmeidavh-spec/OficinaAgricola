@@ -11,3 +11,6 @@ storage/backups/*
 qa-artifacts/
 qa-report/
 qa-results/
+
+# Runtime de diagnóstico gerado durante o build Windows
+build/

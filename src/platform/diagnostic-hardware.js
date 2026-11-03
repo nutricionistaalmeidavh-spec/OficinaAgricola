@@ -2,6 +2,8 @@
 // Os comandos são definidos pelo aplicativo e enviados ao worker Python por stdin;
 // nenhum caminho de DLL ou comando de shell é aceito do navegador.
 import {spawn} from 'node:child_process';
+import {existsSync} from 'node:fs';
+import {join,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 const CAN_INTERFACES=new Set(['socketcan','pcan','kvaser','vector','usb2can','ixxat','slcan','gs_usb','cantact']);
@@ -26,20 +28,38 @@ export function parseHardwareOptions(input={}){
   throw new Error('Duração de captura fora do intervalo permitido');
  return {adapterId,interface:canInterface,channel,bitrate,durationSeconds,mode:'passive'};
 }
-function workerFile(){
- const path=fileURLToPath(new URL('./diagnostic-worker.py',import.meta.url));
- return path.includes('app.asar')?path.replace('app.asar','app.asar.unpacked'):path;
+// O Electron instalado resolve exclusivamente a ponte empacotada. Em desenvolvimento,
+ // Python do ambiente permanece uma ferramenta opcional para colaboradores.
+export function resolveDiagnosticRunner({
+ modulePath=fileURLToPath(import.meta.url),
+ resourcesPath=process.resourcesPath,
+ platform=process.platform,
+ python=process.env.DIAGNOSTIC_PYTHON||(process.platform==='win32'?'python':'python3'),
+ exists=existsSync
+}={}){
+ const packed=modulePath.replaceAll(String.fromCharCode(92),'/').split('/').includes('app.asar');
+ if(packed){
+   if(platform!=='win32')throw new Error('Ponte de diagnóstico embutida ainda não disponível para este sistema');
+   const binary=resourcesPath&&join(resourcesPath,'diagnostics','ArtiSys-Diagnostic-Bridge','ArtiSys-Diagnostic-Bridge.exe');
+   if(!binary||!exists(binary))
+     throw new Error('Ponte de diagnóstico ausente na instalação. Repare o ArtiSys Oficina.');
+   return {command:binary,args:[],embedded:true};
+ }
+ return {command:python,args:[join(dirname(modulePath),'diagnostic-worker.py')],embedded:false};
 }
-export function executeDiagnosticWorker(action,options={}, {python=process.env.DIAGNOSTIC_PYTHON||(process.platform==='win32'?'python':'python3'),timeoutMs=26000}={}){
+export function executeDiagnosticWorker(action,options={}, {python,timeoutMs=26000,runner}={}){
  if(!['probe','capture'].includes(action))throw new Error('Operação de diagnóstico inválida');
  if(action==='capture')options=parseHardwareOptions(options);
+ let executable;
+ try{executable=runner||resolveDiagnosticRunner({python:python||undefined})}
+ catch(error){return Promise.reject(error)}
  return new Promise((resolve,reject)=>{
-  const child=spawn(python,[workerFile()],{windowsHide:true,stdio:['pipe','pipe','pipe'],
+  const child=spawn(executable.command,executable.args,{windowsHide:true,stdio:['pipe','pipe','pipe'],
     env:{...process.env,PYTHONDONTWRITEBYTECODE:'1'}});
   let stdout='',stderr='',done=false;
   const fail=(message)=>{if(done)return;done=true;child.kill();reject(new Error(message))};
   const timeout=setTimeout(()=>fail('Leitura do equipamento excedeu o tempo limite'),timeoutMs);
-  child.on('error',()=>fail('Python 3 não encontrado para ponte local de diagnóstico'));
+  child.on('error',()=>fail(executable.embedded?'Falha ao executar a ponte integrada ao ArtiSys Oficina':'Python 3 não encontrado no ambiente de desenvolvimento'));
   child.stdout.setEncoding('utf8');
   child.stdout.on('data',chunk=>{stdout+=chunk;if(stdout.length>128*1024)fail('Captura do equipamento excede o limite de dados')});
   child.stderr.setEncoding('utf8');

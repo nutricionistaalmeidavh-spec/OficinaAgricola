@@ -84,7 +84,7 @@ def probe():
             "j1939": {"ready": can_ok or native_socketcan,
                       "backends": sorted(CAN_BACKENDS),
                       "nativeSocketcan": native_socketcan, "pythonCan": can_ok,
-                      "hint": "Conecte interface CAN e, quando necessário, instale python-can"}}
+                      "hint": "Conecte a interface CAN e instale apenas o driver do fabricante, se necessário"}}
 
 
 def validate_options(options):
