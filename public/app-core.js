@@ -389,6 +389,7 @@ function pageRenderer(page){
   const market=typeof renderMarketParity==='function'?renderMarketParity:async()=>{};
   return ({
     dashboard,customers:renderCustomers,machines:renderMachines,
+    'model-library':()=>window.OficinaModelLibrary.render(),
     'work-orders':renderWorkOrders,inventory:renderInventory,schedule:renderSchedule,
     finance:renderFinance,reports:renderReports,fiscal,technicians:renderTechnicians,
     settings:renderSettings,services:renderServices,sales:renderSales,market

@@ -62,6 +62,23 @@ try{
   await writeFile(path.join(outputDir,'ui-geometry.json'),JSON.stringify(uiGeometry,null,2));
   await sleep(700);
   await page.screenshot({path:path.join(outputDir,'01-dashboard.png'),fullPage:true});
+  
+  // P0 biblioteca 3D: cards locais, busca, categorias e acesso por menu mobile.
+  await navigateQa(page,'model-library');
+  await page.locator('#ml-grid .ml-card').first().waitFor({state:'visible'});
+  if(await page.locator('#ml-grid .ml-card').count()!==24)
+    throw new Error('Biblioteca 3D: paginação inicial não exibe 24 veículos');
+  if(!(await page.locator('#ml-count').textContent()).includes('532'))
+    throw new Error('Biblioteca 3D: catálogo local não contém 532 veículos');
+  await page.screenshot({path:path.join(outputDir,'01b-biblioteca-3d.png'),fullPage:true});
+  await page.locator('#ml-brand').selectOption('Fiat');
+  await page.locator('#ml-search').fill('Uno');
+  await page.locator('#ml-grid .ml-card').first().waitFor({state:'visible'});
+  const unoText=(await page.locator('#ml-grid').textContent())||'';
+  if(!unoText.includes('Uno')||unoText.includes('Palio'))
+    throw new Error('Biblioteca 3D: busca e filtro por marca incorretos');
+  await page.screenshot({path:path.join(outputDir,'01c-biblioteca-3d-filtrada.png'),fullPage:true});
+
 
   await navigateQa(page,'work-orders');
   await page.locator('.os-card').first().waitFor({state:'visible'});
@@ -294,7 +311,7 @@ try{
     }finally{await first.close()}
   }finally{setupProcess.kill('SIGTERM')}
 
-  await writeFile(path.join(outputDir,'qa-summary.json'),`${JSON.stringify({status:'passed',viewport:viewportName,checks:['navigation-contrast-aa','mobile-nav-no-overlap','mobile-global-search','server-status-in-flow','modal-focus-trap-restore','modal-background-inert','form-error-draft-recovery','unsaved-discard-confirmation','keyboard-os-card','reduced-motion','login','dashboard','demo-data','work-orders','os-detail','edit-action','pdf-action','history-action','client-save-without-rerender','settings-draft-focus-preserved','vehicle-identity','review-and-warranty','fiscal-read-only-and-config','reports-sql','first-run-admin-browser','durable-command-lost-response','offline-manual-command-retry']},null,2)}\n`);
+  await writeFile(path.join(outputDir,'qa-summary.json'),`${JSON.stringify({status:'passed',viewport:viewportName,checks:['navigation-contrast-aa','mobile-nav-no-overlap','mobile-global-search','server-status-in-flow','modal-focus-trap-restore','modal-background-inert','form-error-draft-recovery','unsaved-discard-confirmation','keyboard-os-card','reduced-motion','login','dashboard','model-library-local-catalog','model-library-brand-search','demo-data','work-orders','os-detail','edit-action','pdf-action','history-action','client-save-without-rerender','settings-draft-focus-preserved','vehicle-identity','review-and-warranty','fiscal-read-only-and-config','reports-sql','first-run-admin-browser','durable-command-lost-response','offline-manual-command-retry']},null,2)}\n`);
 } catch(error){
   if(page)await page.screenshot({path:path.join(outputDir,'failure.png'),fullPage:true}).catch(()=>{});
   await writeFile(path.join(outputDir,'qa-summary.json'),`${JSON.stringify({status:'failed',viewport:viewportName,error:error.message},null,2)}\n`).catch(()=>{});
