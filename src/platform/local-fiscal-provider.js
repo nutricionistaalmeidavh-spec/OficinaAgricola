@@ -32,7 +32,7 @@ export function createLocalFiscalProvider({url=process.env.FISCAL_LOCAL_PROVIDER
     name:'sidecar-local',
     transmit:({document,attemptId})=>call('/v1/fiscal/transmit',{
       documentId:document.id,kind:document.kind,requestId:document.request_id,
-      attemptId,snapshot:JSON.parse(document.snapshot_json),
+      attemptId,issuer:JSON.parse(document.issuer_snapshot_json||'{}'),snapshot:JSON.parse(document.snapshot_json),
       snapshotHash:document.snapshot_hash
     }),
     consult:({document,attemptId})=>call('/v1/fiscal/consult',{
