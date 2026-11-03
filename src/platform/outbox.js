@@ -37,8 +37,9 @@ export function enqueueHttpEvent(db,method,path,data,{requestId=null,actorId=nul
    JSON.stringify(descriptor.payload),JSON.stringify({...descriptor.meta,actorId:actorId??null}),nowIso());
  return db.prepare('SELECT * FROM domain_outbox WHERE event_key=?').get(eventKey);
 }
-export function unpublishedOutbox(db,limit=100){
- return db.prepare('SELECT * FROM domain_outbox WHERE delivered_at IS NULL ORDER BY id LIMIT ?').all(limit);
+export function unpublishedOutbox(db,limit=100,{now=new Date().toISOString()}={}){
+ const size=Math.max(1,Math.min(500,Number(limit)||100));
+ return db.prepare('SELECT * FROM domain_outbox WHERE delivered_at IS NULL AND (next_attempt_at IS NULL OR next_attempt_at<=?) ORDER BY id LIMIT ?').all(now,size);
 }
 async function dispatch(db,runtime,limit){
  let delivered=0;
@@ -50,16 +51,19 @@ async function dispatch(db,runtime,limit){
    try{
      if(typeof runtime.deliver!=='function')throw new Error('Runtime sem entrega confirmada');
      await runtime.deliver(event);
-     db.prepare('UPDATE domain_outbox SET delivered_at=?,last_error=? WHERE id=? AND delivered_at IS NULL')
+     db.prepare('UPDATE domain_outbox SET delivered_at=?,next_attempt_at=NULL,last_error=? WHERE id=? AND delivered_at IS NULL')
        .run(nowIso(),'',row.id);
      delivered++;
    }catch(error){
-     db.prepare('UPDATE domain_outbox SET attempts=attempts+1,last_error=? WHERE id=?')
-       .run(String(error?.message||error).slice(0,500),row.id);
+     const retries=row.attempts+1;
+     const delayMs=Math.min(3600000,5000*Math.pow(2,Math.min(retries-1,10)));
+     const nextAttempt=new Date(Date.now()+delayMs).toISOString();
+     db.prepare('UPDATE domain_outbox SET attempts=attempts+1,last_error=?,next_attempt_at=? WHERE id=?')
+       .run(String(error?.message||error).slice(0,500),nextAttempt,row.id);
      // Reconhecer outros eventos mesmo se uma integração específica falhar.
    }
  }
- return delivered;
+ return {delivered,attempted:rows.length};
 }
 export function dispatchOutbox(db,runtime,limit=100){
  if(!runtime)return Promise.resolve(0);
@@ -70,9 +74,9 @@ export function dispatchOutbox(db,runtime,limit=100){
  const job=(async()=>{
    let count=0;
    while(true){
-     const n=await dispatch(db,runtime,limit);
-     count+=n;
-     if(n<limit)break;
+     const {delivered,attempted}=await dispatch(db,runtime,limit);
+     count+=delivered;
+     if(attempted<Math.max(1,Math.min(500,Number(limit)||100)))break;
    }
    return count;
  })().finally(()=>{
