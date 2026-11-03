@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {openDatabase,migrate} from '../src/db.js';
 import {createCustomer,createMachine} from '../src/services/catalog.js';
 import {createDiagnosticScan} from '../src/services/automotive.js';
-import {decodePid,decodeDtcMode,parseDiagnosticCapture,listDiagnosticAdapters} from '../src/services/diagnostics.js';
+import {decodePid,decodeDtcMode,decodeReadiness,parseDiagnosticCapture,listDiagnosticAdapters} from '../src/services/diagnostics.js';
 import {renderDiagnosticPdf} from '../src/documents.js';
 
 test('registry lists hardware drivers and visibly unsupported J2534, no paid core',()=>{
@@ -62,4 +62,12 @@ test('laudo PDF e registros históricos preservam origem e vínculo do veículo'
   assert.match(pdf.toString('latin1'),/SIMULAD|P0133/);
   assert.throws(()=>renderDiagnosticPdf(db,car.id+1,scan.id),/não encontrad/i);
  }finally{db.close()}
+});
+
+test('modo 01 PID 01 identifica MIL e quantidade de falhas com indicação de disponibilidade',()=>{
+ const ready=decodeReadiness('41 01 82 07 65 65');
+ assert.equal(ready.mil,true);
+ assert.equal(ready.storedDtcCount,2);
+ assert.deepEqual(ready.monitorBytes,[7,101,101]);
+ assert.throws(()=>decodeReadiness('41 01 80 00'),/truncada/);
 });
