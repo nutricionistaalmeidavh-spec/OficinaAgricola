@@ -45,10 +45,11 @@ test('packaging contract bundles all Python-CAN dependencies and tests clean ins
  const yaml=readFileSync('electron-builder.yml','utf8');
  const workflow=readFileSync('.github/workflows/windows-installer-smoke.yml','utf8');
  const smoke=readFileSync('scripts/smoke-installer.ps1','utf8');
+ const build=readFileSync('scripts/build-diagnostic-bridge.ps1','utf8');
  assert.match(yaml,/extraResources:/);
  assert.match(yaml,/diagnostics\/ArtiSys-Diagnostic-Bridge/);
  assert.match(workflow,/Build bundled diagnostic bridge/);
- assert.match(workflow,/pyinstaller/i);
+ assert.match(build,/PyInstaller/);
  assert.match(smoke,/ArtiSys-Diagnostic-Bridge.exe/);
  assert.match(smoke,/pythonCan/);
 });
