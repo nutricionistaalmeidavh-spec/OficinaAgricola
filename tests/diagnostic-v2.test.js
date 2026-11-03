@@ -10,7 +10,7 @@ test('registry lists hardware drivers and visibly unsupported J2534, no paid cor
  const list=listDiagnosticAdapters();
  assert.equal(list.find(x=>x.id==='ELM327_SERIAL').available,true);
  assert.equal(list.find(x=>x.id==='OBDLINK_STN_SERIAL').available,true);
- assert.equal(list.find(x=>x.id==='J2534').available,false);
+ assert.equal(list.find(x=>x.id==='J2534').available,true);
  assert.equal(list.find(x=>x.id==='SIMULATOR').source,'SIMULATED');
 });
 
@@ -41,7 +41,7 @@ test('captura separa leituras reais e série temporal derivada de respostas crua
  assert.equal(capture.readings['010C'].value,1726);
  assert.equal(capture.samples[1].values['010C'],2048);
  assert.equal(capture.adapterId,'ELM327_SERIAL');
- assert.throws(()=>parseDiagnosticCapture({adapterId:'J2534',responses:{'03':'43 00 00'}}),/indisponível/);
+ assert.equal(parseDiagnosticCapture({adapterId:'J2534',source:'REAL',responses:{'03':'43 00 00'}}).adapterId,'J2534');
  assert.throws(()=>parseDiagnosticCapture({adapterId:'SIMULATOR',source:'REAL',responses:{'03':'43 00 00'}}),/simulad/i);
 });
 
