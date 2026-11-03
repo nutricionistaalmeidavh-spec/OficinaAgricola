@@ -52,18 +52,12 @@ foreach ($dep in $deps) {
 }
 $pcp = Join-Path $source '_lazarus-profile'
 New-Item -ItemType Directory -Path $pcp -Force | Out-Null
-$allPackages = @(Get-ChildItem -Path (Join-Path $source 'Pacotes/Lazarus') -Filter '*.lpk' -File -Recurse)
-# Registro explícito dos pacotes requeridos por NFe, NFSe e suas dependências.
-$needed = @(
- 'ACBrComum','ACBrLibXML2','ACBrOpenSSL','ACBrDFeComum',
- 'ACBr_NFe','ACBr_NFSeX','ACBrTCP','ACBrSerial','ACBr_Integrador',
- 'ACBr_NFe_DanfeFPDF','ACBr_NFe_DanfeRL','ACBr_NFe_DanfeESCPOS',
- 'ACBr_NFSeXDanfseFPDF','ACBr_NFSeXDanfseRL','ACBrDiversos',
- 'ACBrTXT','ACBr_MTER','ACBrBaaS','laz_synapse'
-)
-foreach ($name in $needed) {
-  $pkg = $allPackages | Where-Object { $_.BaseName -ieq $name } | Select-Object -First 1
-  if (-not $pkg) { throw "Pacote ACBr necessário não localizado: $name" }
+$allPackages = @(Get-ChildItem -Path (Join-Path $source 'Pacotes/Lazarus') -Filter '*.lpk' -File -Recurse | Sort-Object FullName)
+if ($allPackages.Count -lt 20) { throw 'Checkout oficial ACBr incompleto: menos de 20 pacotes Lazarus.' }
+# Vincular todos os .lpk disponíveis evita supor nomes de pacotes agregadores
+# (por exemplo ACBrTXT é um diretório, não um arquivo .lpk).
+# --add-package-link apenas registra; nenhum pacote não requerido será compilado.
+foreach ($pkg in $allPackages) {
   Run $lazbuild @("--pcp=$pcp",'--add-package-link',$pkg.FullName)
 }
 $extraPackages = @(
