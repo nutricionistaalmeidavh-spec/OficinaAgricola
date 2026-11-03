@@ -48,9 +48,15 @@ async function readJson(req,max=8*1024*1024){
   if(!chunks.length)return {}; const raw=Buffer.concat(chunks).toString('utf8');try{return JSON.parse(raw)}catch{throw new Error('JSON inválido')}
 }
 const tokenFrom=authTokenFrom;
-function statusFor(error){const m=String(error?.message||'');if(/Muitas tentativas/.test(m))return 429;if(/Credenciais|Sessão/.test(m))return 401;if(/Origem|HTTPS obrigatório/.test(m))return 403;if(/Permissão/.test(m))return 403;if(/não encontrad|não encontrado|não encontrada/i.test(m))return 404;if(/Transição inválida|não pode|já |insuficiente|saldo pendente|não aguarda|UNIQUE constraint|pertence|Conflito de versão/i.test(m))return 409;return 400}
+function statusFor(error){const m=String(error?.message||'');if(/Versão obrigatória/.test(m))return 428;if(/Muitas tentativas/.test(m))return 429;if(/Credenciais|Sessão/.test(m))return 401;if(/Origem|HTTPS obrigatório/.test(m))return 403;if(/Permissão/.test(m))return 403;if(/não encontrad|não encontrado|não encontrada/i.test(m))return 404;if(/Transição inválida|não pode|já |insuficiente|saldo pendente|não aguarda|UNIQUE constraint|pertence|Conflito de versão/i.test(m))return 409;return 400}
 function roleGuard(user,roles){if(!roles||roles.length===0)return;if(!user||!roles.includes(user.role))throw new Error('Permissão insuficiente')}
 const int=(v)=>{const n=Number(v);if(!Number.isInteger(n)||n<=0)throw new Error('Identificador inválido');return n};
+function requireVersion(body){
+ const version=Number(body?.expectedVersion);
+ if(!Number.isSafeInteger(version)||version<1)
+   throw new Error('Versão obrigatória: recarregue a OS antes de salvar');
+ return version;
+}
 
 function createRouter({db,storageDir}){
   const r=new Router(); const add=(m,p,roles,h,o)=>r.add(m,p,roles,h,o);
@@ -87,8 +93,8 @@ function createRouter({db,storageDir}){
   add('POST','/api/work-orders/:id/duplicate',ROLE_OFFICE,({params,body,user})=>
     duplicateWorkOrderWithQuote(db,int(params.id),body,{createdBy:user.id}));
   add('GET','/api/work-orders/:id',ROLE_ALL,({params})=>getWorkOrder(db,int(params.id)));
-  add('PATCH','/api/work-orders/:id',ROLE_TECH,({params,body,user})=>updateWorkOrder(db,int(params.id),body,{changedBy:user.id}));
-  add('POST','/api/work-orders/:id/status',ROLE_TECH,({params,body,user})=>transitionWorkOrder(db,int(params.id),body.status,{reason:body.reason,changedBy:user.id,expectedVersion:body.expectedVersion??null}));
+  add('PATCH','/api/work-orders/:id',ROLE_TECH,({params,body,user})=>updateWorkOrder(db,int(params.id),{...body,expectedVersion:requireVersion(body)},{changedBy:user.id}));
+  add('POST','/api/work-orders/:id/status',ROLE_TECH,({params,body,user})=>transitionWorkOrder(db,int(params.id),body.status,{reason:body.reason,changedBy:user.id,expectedVersion:requireVersion(body)}));
   add('GET','/api/work-orders/:id/history',ROLE_ALL,({params})=>getWorkOrderHistory(db,int(params.id)));
 
   add('GET','/api/work-orders/:id/quote',ROLE_ALL,({params})=>getQuote(db,int(params.id)));
