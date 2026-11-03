@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { openDatabase, migrate } from '../src/db.js';
 import { createCustomer, createMachine } from '../src/services/catalog.js';
-import { createWorkOrder, listWorkOrders } from '../src/services/work-orders.js';
+import { createWorkOrder, listWorkOrders, listWorkOrdersPage } from '../src/services/work-orders.js';
 import { dashboardData } from '../src/services/dashboard.js';
 import { createPart } from '../src/services/inventory.js';
 
@@ -41,6 +41,15 @@ test('P0: histórico de OS encerradas permite filtro e paginação, sem limite f
     assert.equal(first[0].id,ids.at(-1));
     assert.equal(third.at(-1).id,ids[0]);
     assert.equal(listWorkOrders(db,{scope:'active'}).length,0);
+    const firstPage=listWorkOrdersPage(db,{scope:'closed',status:'ENTREGUE',limit:100});
+    const secondPage=listWorkOrdersPage(db,{scope:'closed',status:'ENTREGUE',limit:100,cursor:firstPage.nextCursor});
+    const lastPage=listWorkOrdersPage(db,{scope:'closed',status:'ENTREGUE',limit:100,cursor:secondPage.nextCursor});
+    assert.equal(firstPage.total,205);
+    assert.equal(firstPage.items.length,100);
+    assert.equal(secondPage.items.length,100);
+    assert.equal(lastPage.items.length,5);
+    assert.equal(lastPage.nextCursor,null);
+    assert.equal(listWorkOrdersPage(db,{scope:'active'}).total,0);
   }finally{db.close()}
 });
 
