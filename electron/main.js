@@ -51,6 +51,16 @@ async function startLocalServer() {
   migrate(db);
   migrateAssistencia(db);
   seed(db);
+  // Fiscal Windows integrado: DLLs + worker no diretório somente-leitura do instalador;
+  // arquivos de configuração, certificado e INI sempre fora do pacote, no perfil local.
+  // Na primeira instalação o módulo permanece desabilitado em fiscal_settings.
+  if(app.isPackaged){
+    const {configureBundledFiscal}=await import('../dist/src/platform/fiscal-bundle.js');
+    const fiscal=configureBundledFiscal({
+      resourcesPath:process.resourcesPath,dataRoot:root,platform:process.platform,arch:process.arch
+    });
+    console.info('[fiscal-bundle]',fiscal.active?'Pacote local verificado':'Pacote não ativo: '+fiscal.reason);
+  }
   // Paridade com src/start.js: eventos são persistidos e recuperados no desktop.
   recoverOrphanAttachments(db,storageDir);
   eventRuntime=createEventRuntime({auditPath:join(root,'events','events.jsonl')});
