@@ -8,7 +8,9 @@ import {runIdempotent} from './platform/idempotency.js';
 import {auditInvariants} from './services/reconciliation.js';
 import {duplicateWorkOrderWithQuote} from './services/work-order-duplication.js';
 import {getCompanySettings,updateCompanySettings,listStaffUsers,createStaffUser,updateStaffUser} from './services/admin.js';
-import { login, logout, validateSession } from './auth.js';
+import { loginHttp, logout, validateSession } from './auth.js';
+import {authTokenFrom,assertSameOrigin,prefersCookie,issueBrowserCookie,clearBrowserCookie,hardenHttpResponse} from './platform/session-http.js';
+import {assertSecureNetwork} from './platform/network.js';
 import { createCustomer, listCustomers, updateCustomer, getCustomer, createMachine, listMachines, updateMachine, getMachine, createTechnician, listTechnicians, updateTechnician } from './services/catalog.js';
 import { createWorkOrder, listWorkOrders, getWorkOrder, updateWorkOrder, transitionWorkOrder, getWorkOrderHistory, machineHistory } from './services/work-orders.js';
 import { saveQuote, getQuote, submitQuote, approveQuote, rejectQuote } from './services/quotes.js';
@@ -45,8 +47,8 @@ async function readJson(req,max=8*1024*1024){
   let total=0;const chunks=[];for await(const chunk of req){total+=chunk.length;if(total>max)throw new Error('Corpo da requisição excede o limite');chunks.push(chunk)}
   if(!chunks.length)return {}; const raw=Buffer.concat(chunks).toString('utf8');try{return JSON.parse(raw)}catch{throw new Error('JSON inválido')}
 }
-function tokenFrom(req){const auth=req.headers.authorization||'';if(auth.startsWith('Bearer '))return auth.slice(7).trim();return null}
-function statusFor(error){const m=String(error?.message||'');if(/Credenciais|Sessão/.test(m))return 401;if(/Permissão/.test(m))return 403;if(/não encontrad|não encontrado|não encontrada/i.test(m))return 404;if(/Transição inválida|não pode|já |insuficiente|saldo pendente|não aguarda|UNIQUE constraint|pertence/i.test(m))return 409;return 400}
+const tokenFrom=authTokenFrom;
+function statusFor(error){const m=String(error?.message||'');if(/Muitas tentativas/.test(m))return 429;if(/Credenciais|Sessão/.test(m))return 401;if(/Origem|HTTPS obrigatório/.test(m))return 403;if(/Permissão/.test(m))return 403;if(/não encontrad|não encontrado|não encontrada/i.test(m))return 404;if(/Transição inválida|não pode|já |insuficiente|saldo pendente|não aguarda|UNIQUE constraint|pertence|Conflito de versão/i.test(m))return 409;return 400}
 function roleGuard(user,roles){if(!roles||roles.length===0)return;if(!user||!roles.includes(user.role))throw new Error('Permissão insuficiente')}
 const int=(v)=>{const n=Number(v);if(!Number.isInteger(n)||n<=0)throw new Error('Identificador inválido');return n};
 
@@ -55,7 +57,7 @@ function createRouter({db,storageDir}){
   add('GET','/api/health',null,()=>({ok:true}),{publicRoute:true});
   add('GET','/api/setup/status',null,()=>({required:isSetupRequired(db)}),{publicRoute:true});
   add('POST','/api/setup/initialize',null,({req,body})=>initializeAdmin(db,req,body),{publicRoute:true});
-  add('POST','/api/auth/login',null,({body})=>login(db,body.username,body.password),{publicRoute:true});
+  add('POST','/api/auth/login',null,({req,body})=>loginHttp(db,body.username,body.password,{remoteAddress:req.socket.remoteAddress}),{publicRoute:true});
   add('POST','/api/auth/logout',ROLE_ALL,({token})=>{logout(db,token);return {ok:true}});
   add('GET','/api/auth/me',ROLE_ALL,({user})=>user);
 
@@ -147,10 +149,22 @@ export function createAppServer({db=openDatabase(),storageDir=process.env.STORAG
   migrate(db); const router=createRouter({db,storageDir});
   return createServer(async(req,res)=>{
     const url=new URL(req.url||'/','http://localhost'); const route=router.match(req.method||'GET',url.pathname);
+    hardenHttpResponse(res,req);
     try{
+      assertSecureNetwork(req);
+      assertSameOrigin(req);
       if(route){let user=null,token=tokenFrom(req);if(!route.publicRoute){user=validateSession(db,token);roleGuard(user,route.roles)}const body=['POST','PUT','PATCH'].includes(req.method||'')?await readJson(req):{};
         const isMutation=['POST','PUT','PATCH','DELETE'].includes(req.method||'');
         const invoke=()=>route.handler({req,res,url,params:route.params,body,user,token,db});
+        // Login nunca entra na transação síncrona nem no cache de respostas.
+        if(req.method==='POST'&&url.pathname==='/api/auth/login'){
+          const identity=await invoke();
+          if(prefersCookie(req)){
+            issueBrowserCookie(res,req,identity.token);
+            return json(res,200,{user:identity.user,expiresAt:identity.expiresAt});
+          }
+          return json(res,200,identity);
+        }
         // Uma confirmação: comando de negócio + registro de evento imutável.
         const data=isMutation?transaction(db,()=>{
           // Nunca persistir tokens de login/segredos no cache de respostas idempotentes.
@@ -162,6 +176,7 @@ export function createAppServer({db=openDatabase(),storageDir=process.env.STORAG
           return output;
         }):invoke();
         if(res.writableEnded)return;
+        if(req.method==='POST'&&url.pathname==='/api/auth/logout')clearBrowserCookie(res,req);
         if(isMutation&&eventRuntime)void dispatchOutbox(db,eventRuntime).catch(e=>console.error('[outbox]',e.message));
         if(data&&Object.hasOwn(data,'__html'))return html(res,200,data.__html);
         if(data&&Object.hasOwn(data,'__binary')){
