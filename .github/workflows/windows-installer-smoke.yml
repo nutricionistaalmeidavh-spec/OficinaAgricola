@@ -60,7 +60,17 @@ jobs:
         shell: pwsh
         run: |
           choco install lazarus --version=4.0.0 -y --no-progress
-          if (-not (Get-Command svn -ErrorAction SilentlyContinue)) { choco install subversion -y --no-progress }
+          if (-not (Get-Command svn -ErrorAction SilentlyContinue)) {
+            choco install sliksvn --version=1.14.5 -y --no-progress
+            if ($LASTEXITCODE -ne 0) { throw 'Falha ao instalar cliente SVN OSS' }
+          }
+          $svnDir = 'C:\\Program Files\\SlikSvn\\bin'
+          if (Test-Path (Join-Path $svnDir 'svn.exe')) {
+            $env:PATH = "$svnDir;$env:PATH"
+            Add-Content -Path $env:GITHUB_PATH -Value $svnDir
+          }
+          svn --version --quiet
+          if ($LASTEXITCODE -ne 0) { throw 'svn CLI indisponível no builder Windows' }
       - name: Compilar ACBrLib NF-e e NFS-e de fontes oficiais LGPL
         shell: pwsh
         run: ./scripts/build-acbr-native.ps1 -Revision 48608
