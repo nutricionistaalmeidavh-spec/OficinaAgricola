@@ -92,7 +92,8 @@ test('P2: falha de entrega não prende o restante da outbox',async()=>{
     const sent=[];
     await dispatchOutbox(db,{deliver:async e=>{if(e.payload.resourceId===1)throw Error('Falha temporária');sent.push(e.payload.resourceId);}},2);
     assert.deepEqual(sent,[2,3]);
-    assert.equal(unpublishedOutbox(db).length,0);
+    assert.equal(unpublishedOutbox(db).length,1);
+    assert.equal(unpublishedOutbox(db,100,{dueOnly:true}).length,0);
     assert.equal(db.prepare("SELECT attempts FROM domain_outbox WHERE event_key='k1'").get().attempts,1);
   }finally{db.close();}
 });
