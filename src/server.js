@@ -10,6 +10,7 @@ import {duplicateWorkOrderWithQuote} from './services/work-order-duplication.js'
 import {getCompanySettings,updateCompanySettings,listStaffUsers,createStaffUser,updateStaffUser} from './services/admin.js';
 import { loginAsync, logout, validateSession } from './auth.js';
 import { createLoginLimiter } from './platform/login-throttle.js';
+import {sessionTokenFrom,sessionCookie,assertTrustedOrigin,setSecurityHeaders} from './platform/http-security.js';
 import { createCustomer, listCustomers, updateCustomer, getCustomer, createMachine, listMachines, updateMachine, getMachine, createTechnician, listTechnicians, updateTechnician } from './services/catalog.js';
 import { createWorkOrder, listWorkOrders, getWorkOrder, updateWorkOrder, transitionWorkOrder, getWorkOrderHistory, machineHistory } from './services/work-orders.js';
 import { saveQuote, getQuote, submitQuote, approveQuote, rejectQuote } from './services/quotes.js';
@@ -46,7 +47,7 @@ async function readJson(req,max=8*1024*1024){
   let total=0;const chunks=[];for await(const chunk of req){total+=chunk.length;if(total>max)throw new Error('Corpo da requisição excede o limite');chunks.push(chunk)}
   if(!chunks.length)return {}; const raw=Buffer.concat(chunks).toString('utf8');try{return JSON.parse(raw)}catch{throw new Error('JSON inválido')}
 }
-function tokenFrom(req){const auth=req.headers.authorization||'';if(auth.startsWith('Bearer '))return auth.slice(7).trim();return null}
+const tokenFrom=sessionTokenFrom;
 function statusFor(error){if(error?.statusCode)return error.statusCode;const m=String(error?.message||'');if(/Credenciais|Sessão/.test(m))return 401;if(/Permissão/.test(m))return 403;if(/não encontrad|não encontrado|não encontrada/i.test(m))return 404;if(/Transição inválida|não pode|já |insuficiente|saldo pendente|não aguarda|UNIQUE constraint|pertence|Conflito|alterada por outro/i.test(m))return 409;return 400}
 function roleGuard(user,roles){if(!roles||roles.length===0)return;if(!user||!roles.includes(user.role))throw new Error('Permissão insuficiente')}
 const int=(v)=>{const n=Number(v);if(!Number.isInteger(n)||n<=0)throw new Error('Identificador inválido');return n};
@@ -168,8 +169,10 @@ function serveStatic(req,res,path){
 export function createAppServer({db=openDatabase(),storageDir=process.env.STORAGE_DIR||'./storage/uploads',eventRuntime=null}={}){
   migrate(db); const loginLimiter=createLoginLimiter();const router=createRouter({db,storageDir,loginLimiter});
   return createServer(async(req,res)=>{
+    setSecurityHeaders(res);
     const url=new URL(req.url||'/','http://localhost'); const route=router.match(req.method||'GET',url.pathname);
     try{
+      assertTrustedOrigin(req);
       if(route){let user=null,token=tokenFrom(req);if(!route.publicRoute){user=validateSession(db,token);roleGuard(user,route.roles)}const body=['POST','PUT','PATCH'].includes(req.method||'')?await readJson(req):{};
         const isMutation=['POST','PUT','PATCH','DELETE'].includes(req.method||'');
         const invoke=()=>route.handler({req,res,url,params:route.params,body,user,token,db});
@@ -184,6 +187,12 @@ export function createAppServer({db=openDatabase(),storageDir=process.env.STORAG
           return output;
         }):invoke();
         if(res.writableEnded)return;
+        if(url.pathname==='/api/auth/login'&&req.headers['x-oficina-client']==='browser'){
+          res.setHeader('Set-Cookie',sessionCookie(req,data.token));
+          return json(res,200,{user:data.user,expiresAt:data.expiresAt});
+        }
+        if(url.pathname==='/api/auth/logout'&&req.headers.cookie?.includes('oficina_session='))
+          res.setHeader('Set-Cookie',sessionCookie(req,'',{clear:true}));
         if(isMutation&&eventRuntime)void dispatchOutbox(db,eventRuntime).catch(e=>console.error('[outbox]',e.message));
         if(data&&Object.hasOwn(data,'__html'))return html(res,200,data.__html);
         if(data&&Object.hasOwn(data,'__binary')){
