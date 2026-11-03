@@ -15,6 +15,8 @@ export function migrateTenantRegistry(db, legacyDb = null) {
     "CREATE TABLE IF NOT EXISTS tenant_units (id INTEGER PRIMARY KEY AUTOINCREMENT,company_id INTEGER NOT NULL REFERENCES tenant_companies(id),code TEXT NOT NULL COLLATE NOCASE,name TEXT NOT NULL,active INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL,UNIQUE(company_id,code));" +
     "CREATE TABLE IF NOT EXISTS tenant_memberships (user_id INTEGER NOT NULL REFERENCES users(id),unit_id INTEGER NOT NULL REFERENCES tenant_units(id),role TEXT NOT NULL CHECK(role IN ('ADMIN','ATENDIMENTO','TECNICO','FINANCEIRO')),active INTEGER NOT NULL DEFAULT 1,PRIMARY KEY(user_id,unit_id));" +
     "CREATE TABLE IF NOT EXISTS tenant_platform_admins (user_id INTEGER PRIMARY KEY REFERENCES users(id));" +
+    "CREATE TABLE IF NOT EXISTS tenant_audit (id INTEGER PRIMARY KEY AUTOINCREMENT,actor_user_id INTEGER NOT NULL REFERENCES users(id),action TEXT NOT NULL,company_id INTEGER NOT NULL REFERENCES tenant_companies(id),unit_id INTEGER REFERENCES tenant_units(id),target_user_id INTEGER REFERENCES users(id),detail_json TEXT NOT NULL,created_at TEXT NOT NULL);" +
+    "CREATE INDEX IF NOT EXISTS idx_tenant_audit_company ON tenant_audit(company_id,id DESC);" +
     "CREATE INDEX IF NOT EXISTS idx_tenant_memberships_unit ON tenant_memberships(unit_id,active,user_id);" +
     "CREATE INDEX IF NOT EXISTS idx_tenant_units_company ON tenant_units(company_id,active);"
   );
@@ -79,6 +81,16 @@ export function requireCompanyAdmin(db,userId,companyId) {
   const result=db.prepare("SELECT 1 FROM tenant_memberships m JOIN tenant_units u ON u.id=m.unit_id JOIN tenant_companies c ON c.id=u.company_id WHERE m.user_id=? AND u.company_id=? AND m.active=1 AND m.role='ADMIN' AND u.active=1 AND c.active=1 LIMIT 1").get(userId,companyId);
   if (!result) fail('Permissão: administração da empresa necessária');
 }
+function audit(db,actorId,action,companyId,unitId,targetId,detail={}){
+  db.prepare('INSERT INTO tenant_audit(actor_user_id,action,company_id,unit_id,target_user_id,detail_json,created_at) VALUES(?,?,?,?,?,?,?)')
+    .run(actorId,action,companyId,unitId??null,targetId??null,JSON.stringify(detail),nowIso());
+}
+export function listTenantAudit(db,actorId,companyId,{limit=100}={}){
+  requireCompanyAdmin(db,actorId,companyId);
+  const capped=Math.min(200,Math.max(1,Number(limit)||100));
+  return db.prepare('SELECT id,actor_user_id,action,company_id,unit_id,target_user_id,detail_json,created_at FROM tenant_audit WHERE company_id=? ORDER BY id DESC LIMIT ?')
+    .all(companyId,capped);
+}
 export function createTenantCompany(db,userId,{slug,name}={}) {
   if (!isPlatformAdmin(db,userId)) fail('Permissão: administração da plataforma necessária');
   const cleanSlug=String(slug||'').trim().toLowerCase(),cleanName=String(name||'').trim();
@@ -87,6 +99,7 @@ export function createTenantCompany(db,userId,{slug,name}={}) {
     const companyId=Number(db.prepare('INSERT INTO tenant_companies(slug,name,created_at) VALUES(?,?,?)').run(cleanSlug,cleanName,nowIso()).lastInsertRowid);
     const unitId=Number(db.prepare("INSERT INTO tenant_units(company_id,code,name,created_at) VALUES(?,'MATRIZ','Matriz',?)").run(companyId,nowIso()).lastInsertRowid);
     db.prepare("INSERT INTO tenant_memberships(user_id,unit_id,role) VALUES(?,?,'ADMIN')").run(userId,unitId);
+    audit(db,userId,'COMPANY_CREATED',companyId,unitId,userId,{slug:cleanSlug});
     return {id:companyId,slug:cleanSlug,name:cleanName,unitId};
   });
 }
@@ -97,6 +110,7 @@ export function createTenantUnit(db,userId,{companyId,code,name}={}) {
   return transaction(db,()=>{
     const id=Number(db.prepare('INSERT INTO tenant_units(company_id,code,name,created_at) VALUES(?,?,?,?)').run(cid,unitCode,unitName,nowIso()).lastInsertRowid);
     db.prepare("INSERT INTO tenant_memberships(user_id,unit_id,role) VALUES(?,?,'ADMIN')").run(userId,id);
+    audit(db,userId,'UNIT_CREATED',cid,id,userId,{code:unitCode});
     return {id,companyId:cid,code:unitCode,name:unitName};
   });
 }
@@ -121,6 +135,7 @@ export function grantUnitMembership(db,adminId,{unitId,username,name,password,ro
     }
     db.prepare('INSERT INTO tenant_memberships(user_id,unit_id,role,active) VALUES(?,?,?,1) ON CONFLICT(user_id,unit_id) DO UPDATE SET role=excluded.role,active=1')
       .run(user.id,unit.id,role);
+    audit(db,adminId,'MEMBERSHIP_GRANTED',unit.companyId,unit.id,user.id,{role});
     return {id:user.id,unitId:unit.id,role};
   });
 }
@@ -138,6 +153,7 @@ export function changeUnitMembership(db,adminId,{unitId,userId,role,active}={}) 
     }
     db.prepare('UPDATE tenant_memberships SET role=?,active=? WHERE user_id=? AND unit_id=?')
       .run(role,active===false?0:1,id,unit.id);
+    audit(db,adminId,'MEMBERSHIP_CHANGED',unit.companyId,unit.id,id,{role,active:active!==false});
     return {id,unitId:unit.id,role,active:active!==false};
   });
 }
