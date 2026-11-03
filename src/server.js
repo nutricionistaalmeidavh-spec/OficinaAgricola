@@ -29,6 +29,7 @@ import {listServiceRecords,createServiceRecord} from './services/vehicle-mainten
 import {savePartFitment,listPartFitments,deletePartFitment,listCompatibleParts,createDiagnosticScan,listDiagnosticScans,
   createMaintenancePlan,listMaintenancePlans,listMaintenanceAlerts,completeMaintenancePlan} from './services/automotive.js';
 import {isSetupRequired,initializeAdmin} from './setup.js';
+import {lookupVehicleByPlate,createCrmTask,listCrmTasks,completeCrmTask,createMaintenanceCrmTasks,createShopUnit,listShopUnits,assignWorkOrderUnit,unitReport,createFleet,addFleetVehicle,listFleets,createTechnicalReference,listTechnicalReferences,createApprovalLink,getApprovalProposal,resolveApproval} from './services/market-parity.js';
 
 const __dirname=fileURLToPath(new URL('.',import.meta.url));
 const publicDir=resolve(__dirname,'../public');
@@ -180,6 +181,25 @@ function createRouter({db,storageDir,diagnosticRunner=executeDiagnosticWorker}){
     const found=db.prepare('SELECT result_json FROM command_idempotency WHERE scope=? AND request_id=?').get(scope,requestId);
     return {status:found?'CONFIRMED':'UNKNOWN',requestId,...(found?{result:JSON.parse(found.result_json)}:{})};
   });
+  // Paridade competitiva: todas as mutações internas mantêm autenticação e RBAC.
+  add('GET','/api/vehicles/plate/:plate',ROLE_ALL,({params})=>lookupVehicleByPlate(db,params.plate));
+  add('GET','/api/crm/tasks',ROLE_ALL,({url})=>listCrmTasks(db,{status:url.searchParams.get('status')||'PENDENTE'}));
+  add('POST','/api/crm/tasks',ROLE_OFFICE,({body})=>createCrmTask(db,body));
+  add('POST','/api/crm/tasks/:id/complete',ROLE_OFFICE,({params,body})=>completeCrmTask(db,int(params.id),body));
+  add('POST','/api/crm/maintenance/sync',ROLE_OFFICE,({body})=>createMaintenanceCrmTasks(db,body));
+  add('GET','/api/units',ROLE_ALL,()=>listShopUnits(db));
+  add('POST','/api/units',['ADMIN'],({body})=>createShopUnit(db,body));
+  add('POST','/api/units/assign',['ADMIN'],({body})=>assignWorkOrderUnit(db,int(body.workOrderId),int(body.unitId)));
+  add('GET','/api/units/report',ROLE_FIN,()=>unitReport(db));
+  add('GET','/api/fleets',ROLE_ALL,()=>listFleets(db));
+  add('POST','/api/fleets',ROLE_OFFICE,({body})=>createFleet(db,body));
+  add('POST','/api/fleets/:id/vehicles',ROLE_OFFICE,({params,body})=>addFleetVehicle(db,int(params.id),int(body.machineId)));
+  add('GET','/api/technical-references',ROLE_ALL,({url})=>listTechnicalReferences(db,{partId:url.searchParams.get('partId')?int(url.searchParams.get('partId')):undefined}));
+  add('POST','/api/technical-references',ROLE_OFFICE,({body})=>createTechnicalReference(db,body));
+  add('POST','/api/work-orders/:id/quote/approval-link',ROLE_OFFICE,({params,body})=>createApprovalLink(db,int(params.id),body));
+  // O token de aprovação é o único segredo necessário para a interação pública.
+  add('GET','/api/public/approval/:token',null,({params})=>getApprovalProposal(db,params.token),{publicRoute:true});
+  add('POST','/api/public/approval/:token',null,({params,body})=>resolveApproval(db,params.token,body),{publicRoute:true});
   add('GET','/api/dashboard',ROLE_ALL,({user})=>dashboardData(db,{role:user.role}));
   return r;
 }
@@ -225,10 +245,11 @@ export function createAppServer({db=openDatabase(),storageDir=process.env.STORAG
         const data=isMutation?transaction(db,()=>{
           // Nunca persistir tokens de login/segredos no cache de respostas idempotentes.
           const securityRoute=['/api/auth/login','/api/auth/logout','/api/setup/initialize'].includes(url.pathname);
-          const output=securityRoute?invoke():runIdempotent(db,
+          const publicApprovalRoute=url.pathname.startsWith('/api/public/approval/');
+           const output=(securityRoute||publicApprovalRoute)?invoke():runIdempotent(db,
             `http:${req.method}:${url.pathname}:user:${user?.id??'public'}`,
             body.requestId??req.headers['idempotency-key'],{body},invoke);
-          if(!res.writableEnded)enqueueHttpEvent(db,req.method,url.pathname,output,{requestId:body.requestId??req.headers['idempotency-key'],actorId:user?.id??null});
+          if(!res.writableEnded&&!publicApprovalRoute)enqueueHttpEvent(db,req.method,url.pathname,output,{requestId:body.requestId??req.headers['idempotency-key'],actorId:user?.id??null});
           return output;
         }):await invoke();
         if(res.writableEnded)return;
