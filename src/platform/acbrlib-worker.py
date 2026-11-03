@@ -8,6 +8,7 @@ NENHUM retorno é marcado AUTORIZADA sem resposta e XML de autorização.
 """
 import configparser
 import ctypes as ct
+from decimal import Decimal, InvalidOperation
 import json
 import os
 from pathlib import Path
@@ -102,6 +103,29 @@ def nfe_identity(xml):
     return key, find_text(root, "nNF"), find_text(root, "serie"), find_text(root, "tpAmb"), find_text(root, "CNPJ")
 
 
+def amount_cents(text):
+    try:
+        value = Decimal(str(text).strip().replace(",", "."))
+        if not value.is_finite() or value < 0 or value * 100 != (value * 100).to_integral_value():
+            raise InvalidOperation
+        return int(value * 100)
+    except (InvalidOperation, ValueError):
+        raise ACBrError("Valor tributário monetário inválido")
+
+
+def nfe_total_cents(xml):
+    root = root_or_none(xml)
+    if root is None:
+        raise ACBrError("XML NFe indisponível para validar total")
+    totals = [el for el in root.iter() if local_tag(el) == "ICMSTot"]
+    if len(totals) != 1:
+        raise ACBrError("Total NFe inconsistente")
+    value = find_text(totals[0], "vNF")
+    if not value:
+        raise ACBrError("XML NFe sem valor final")
+    return amount_cents(value)
+
+
 def authorized_nfe_xml(xml, protocol):
     root = root_or_none(xml)
     if root is None:
@@ -156,6 +180,8 @@ def nfe_transmit(lib, req):
     signed = response(lib, "NFE_ObterXml", (0,), [ct.c_int])
     key = stash_signed_xml(req["iniPath"], signed)
     _, number, series, ambiente, cnpj = nfe_identity(signed)
+    if nfe_total_cents(signed) != int(req["amountCents"]):
+        raise ACBrError("Valor total da NF-e difere do registro comercial canônico")
     expect_amb = "2" if req["environment"] == "HOMOLOGACAO" else "1"
     if ambiente != expect_amb or re.sub(r"\D", "", cnpj) != req["issuerCnpj"]:
         raise ACBrError("XML fiscal diverge do ambiente/CNPJ do snapshot")
