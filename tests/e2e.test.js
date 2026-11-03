@@ -34,7 +34,11 @@ test('critical workshop flow works end-to-end through HTTP API', async (t)=>{
   await request(base,`/api/work-orders/${os.id}/checklists`,{method:'POST',token,body:{templateId:entry.id,responses:[{position:1,response:'OK'}]}});
   await request(base,`/api/work-orders/${os.id}/attachments`,{method:'POST',token,body:{category:'DIAGNOSTICO',caption:'Bomba',originalName:'bomba.jpg',mimeType:'image/jpeg',base64:Buffer.from([0xff,0xd8,0xff,0xd9]).toString('base64')}});
   const attachments=await request(base,`/api/work-orders/${os.id}/attachments`,{token}); assert.equal(attachments.length,1);
-  const file=await request(base,`/api/attachments/${attachments[0].id}/file`,{token,raw:true}); assert.equal(file,'foto');
+  const fileResponse=await fetch(`${base}/api/attachments/${attachments[0].id}/file`,{
+    headers:{Authorization:`Bearer ${token}`}
+  });
+  assert.equal(fileResponse.status,200);
+  assert.deepEqual(Buffer.from(await fileResponse.arrayBuffer()),Buffer.from([0xff,0xd8,0xff,0xd9]));
   await request(base,`/api/work-orders/${os.id}/status`,{method:'POST',token,body:{status:'EM_SERVICO'}});
   await request(base,`/api/work-orders/${os.id}/status`,{method:'POST',token,body:{status:'PRONTA'}});
   const pay=await request(base,`/api/work-orders/${os.id}/receipts`,{method:'POST',token,body:{amountCents:20000,method:'PIX'}}); assert.equal(pay.amount_cents,20000);
