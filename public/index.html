@@ -14,7 +14,6 @@
   <link rel="stylesheet" href="/local-runtime.css">
 </head>
 <body>
-  <div id="serverStatus" class="server-status checking" aria-live="polite"><i aria-hidden="true"></i><span>Verificando servidor local…</span></div>
 
   <section id="loginView" class="login-screen">
     <form id="loginForm" class="login-card">
@@ -76,6 +75,8 @@
         <div class="global-search-wrap">
           <span class="search-icon" aria-hidden="true">⌕</span>
           <input id="globalSearch" type="search" autocomplete="off" placeholder="Buscar cliente, equipamento, OS..." aria-label="Buscar cliente, equipamento ou ordem de serviço">
+          <button id="clearGlobalSearch" class="search-clear hidden" type="button" aria-label="Limpar busca">×</button>
+          <button id="submitGlobalSearch" class="search-submit" type="button" aria-label="Buscar">Buscar</button>
           <kbd>/</kbd>
         </div>
         <div class="top-actions">
@@ -85,17 +86,18 @@
           <button class="icon-btn" id="refreshBtn" title="Atualizar" aria-label="Atualizar">↻</button>
         </div>
       </header>
+  <div id="serverStatus" class="server-status checking" aria-live="polite"><i aria-hidden="true"></i><span>Verificando servidor local…</span></div>
       <section id="content" class="content"></section>
     </main>
   </div>
 
   <div id="modal" class="modal-backdrop hidden">
-    <div class="modal-card">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle" tabindex="-1">
       <div class="modal-head"><h2 id="modalTitle">—</h2><button id="modalClose" class="icon-btn" aria-label="Fechar">×</button></div>
       <div id="modalBody"></div>
     </div>
   </div>
-  <div id="toast" class="toast hidden"></div>
+  <div id="toast" class="toast hidden" role="status" aria-live="polite" aria-atomic="true"></div>
 
   <script defer src="/pwa-register.js"></script>
   <script defer src="/local-runtime.js"></script>

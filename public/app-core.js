@@ -149,11 +149,86 @@ async function api(path,{method='GET',body,raw=false}={}){
   if(!res.ok){let msg=text;try{msg=JSON.parse(text).error}catch{}throw new Error(msg||'Erro na operação')}
   return raw?text:(text?JSON.parse(text):null);
 }
-function toast(msg,error=false){const el=$('#toast');el.textContent=msg;el.className=`toast${error?' error':''}`;setTimeout(()=>el.classList.add('hidden'),2800)}
+let toastTimer=null;
+function toast(msg,error=false){
+  const el=$('#toast');
+  clearTimeout(toastTimer);
+  el.textContent=msg;el.className=`toast${error?' error':''}`;
+  toastTimer=setTimeout(()=>el.classList.add('hidden'),error?8000:4500);
+}
+let modalSession=null;
+function modalFocusables(){
+  const root=$('#modalDiscardPrompt')||$('#modal .modal-card');
+  return $$('button:not(:disabled),a[href],input:not(:disabled),select:not(:disabled),textarea:not(:disabled),[tabindex="0"]',root)
+    .filter(el=>el.getClientRects().length&&!el.closest('[inert]'));
+}
+function syncModalViewport(){
+  const dialog=$('#modal');
+  const viewport=window.visualViewport;
+  if(!viewport||!dialog?.style)return;
+  dialog.style.setProperty('--modal-viewport-height',viewport.height+'px');
+  dialog.style.setProperty('--modal-viewport-top',viewport.offsetTop+'px');
+}
+function beginModalSession(){
+  if(modalSession)return;
+  modalSession={trigger:document.activeElement,background:[]};
+  for(const el of [$('#appView'),$('#loginView')]){
+    modalSession.background.push([el,el.inert]);el.inert=true;
+  }
+  document.body.classList.add('modal-open');
+  syncModalViewport();
+}
+function requestCloseModal(){
+  if(!modalSession)return;
+  if(modalSession.busy){toast('Aguarde a confirmação da operação.');return}
+  const body=$('#modalBody');
+  if(!modalSession.dirty){closeModal();return}
+  if($('#modalDiscardPrompt'))return;
+  const previous=document.activeElement;
+  const prompt=document.createElement('section');
+  prompt.id='modalDiscardPrompt';prompt.className='discard-prompt';
+  prompt.setAttribute('role','alert');
+  prompt.innerHTML='<p>Há alterações não salvas. Descartar essas alterações?</p><div class="action-row"><button type="button" class="btn" data-keep-editing>Continuar editando</button><button type="button" class="btn danger" data-discard-edit>Descartar alterações</button></div>';
+  const siblings=[...body.children].map(el=>[el,el.inert]);
+  for(const [el] of siblings)el.inert=true;
+  body.prepend(prompt);
+  const keep=()=>{
+    prompt.remove();for(const [el,inert] of siblings)el.inert=inert;
+    modalSession.cancelDiscard=null;
+    if(previous?.isConnected)previous.focus();
+  };
+  modalSession.cancelDiscard=keep;
+  $('[data-keep-editing]',prompt).onclick=keep;
+  $('[data-discard-edit]',prompt).onclick=closeModal;
+  $('[data-keep-editing]',prompt).focus();
+}
+document.addEventListener?.('keydown',event=>{
+  if(!modalSession||event.isComposing)return;
+  if(event.key==='Escape'){
+    event.preventDefault();
+    if(modalSession.cancelDiscard)modalSession.cancelDiscard();else requestCloseModal();
+  }
+  if(event.key==='Tab'){
+    const targets=modalFocusables(),first=targets[0],last=targets.at(-1);
+    if(!first){event.preventDefault();$('#modal .modal-card').focus();return}
+    const active=document.activeElement;
+    if(event.shiftKey&&(active===first||!targets.includes(active))){event.preventDefault();last.focus()}
+    else if(!event.shiftKey&&(active===last||!targets.includes(active))){event.preventDefault();first.focus()}
+  }
+});
+document.addEventListener?.('focusin',event=>{
+  if(modalSession&&!$('#modal').contains(event.target))$('#modal .modal-card').focus();
+});
+window.visualViewport?.addEventListener('resize',syncModalViewport);
+window.visualViewport?.addEventListener('scroll',syncModalViewport);
 function showModal(title,html,onSubmit,{entityKey=null}={}){
   const dialog=$('#modal'),body=$('#modalBody'),heading=$('#modalTitle');
   const key=entityKey||title;
   const same=state.modalKey===key&&!dialog.classList.contains('hidden');
+  const opening=dialog.classList.contains('hidden');
+  beginModalSession();
+  const successor=!same;
+  if(successor){modalSession.dirty=false;modalSession.busy=false;modalSession.cancelDiscard=null}
   heading.textContent=title;
   if(same&&body.childNodes?.length)renderRegion(body,html);
   else body.innerHTML=html;
@@ -162,9 +237,15 @@ function showModal(title,html,onSubmit,{entityKey=null}={}){
   const token=Symbol('modal');
   state.modalToken=token;
   state.modalKey=key;
+  if(opening||successor)$('#modal .modal-card').focus();
+  body.oninput=()=>{if(modalSession)modalSession.dirty=true};
+  body.onchange=body.oninput;
   const form=$('#modalBody form');
   if(form&&onSubmit)form.onsubmit=async e=>{
     e.preventDefault();
+    if(modalSession?.busy)return;
+    modalSession.busy=true;
+    form.setAttribute('aria-busy','true');
     const btn=$('button[type=submit]',form);if(btn)btn.disabled=true;
     try{
       await onSubmit(new FormData(form));
@@ -172,15 +253,31 @@ function showModal(title,html,onSubmit,{entityKey=null}={}){
       if(state.modalToken===token)closeModal();
     }catch(err){
       if(err?.pending&&state.modalToken===token)closeModal();
+      if(state.modalToken===token){
+        let error=$('[data-form-error]',form);
+        if(!error){error=document.createElement('p');error.dataset.formError='';error.className='error';error.setAttribute('role','alert');form.prepend(error)}
+        error.textContent=err.message;
+      }
       toast(err.message,true);
     }
-    finally{if(btn)btn.disabled=false}
+    finally{if(btn)btn.disabled=false;form.removeAttribute('aria-busy');if(state.modalToken===token&&modalSession)modalSession.busy=false}
   };
 }
-function closeModal(){state.modalToken=null;state.modalKey=null;$('#modal').classList.add('hidden');$('#modalBody').innerHTML=''}
+function closeModal(){
+  const session=modalSession;modalSession=null;
+  state.modalToken=null;state.modalKey=null;
+  $('#modal').classList.add('hidden');$('#modalBody').innerHTML='';
+  document.body.classList.remove('modal-open');
+  if(session){
+    for(const [el,inert] of session.background)el.inert=inert;
+    const trigger=session.trigger;
+    if(trigger?.isConnected&&!trigger.closest('[inert]'))trigger.focus();
+    else $('#nav button.active')?.focus();
+  }
+}
 function formObj(fd){return Object.fromEntries([...fd.entries()].map(([k,v])=>[k,typeof v==='string'?v.trim():v]))}
 function badge(status){const cls=/PRONTA|ENTREGUE|APROVADA|PAGO/.test(status)?'green':/AGUARDANDO|ORCAMENTO|PARCIAL/.test(status)?'orange':/CANCELADA|REPROVADA/.test(status)?'red':'blue';return `<span class="pill ${cls}">${esc(status.replaceAll('_',' '))}</span>`}
-function pageTitle(title,eyebrow='OFICINA'){ $('#pageTitle').textContent=title;$('#pageEyebrow').textContent=eyebrow }
+function pageTitle(title,eyebrow='OFICINA'){ document.title=title+' · ArtiSys Oficina'; $('#pageTitle').textContent=title;$('#pageEyebrow').textContent=eyebrow }
 function renderRegion(host,html){
   const template=document.createElement('template');
   template.innerHTML=html;
@@ -218,6 +315,7 @@ function showLogin(){
 }
 function showApp(){$('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');$('#userName').textContent=state.user.name;$('#userRole').textContent=state.user.role;$('#avatar').textContent=state.user.name[0]?.toUpperCase()||'A'}
 function logout(){
+  if(modalSession)closeModal();
   state.pageController?.abort();state.pageEpoch++;state.pageReady=false;
   state.token='';state.user=null;localStorage.removeItem('oficina_token');
   void updatePendingCommands();showLogin();
@@ -259,7 +357,10 @@ async function navigate(page,{force=false}={}){
   const epoch=++state.pageEpoch;
   state.pageReady=false;
   state.page=page;
-  $$('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===page));
+  $$('#nav button').forEach(b=>{
+    const active=b.dataset.page===page;b.classList.toggle('active',active);
+    if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');
+  });
   setContent('<div class="card"><div class="empty">Carregando…</div></div>');
   try{
     await pageRenderer(page)();
@@ -272,3 +373,4 @@ async function navigate(page,{force=false}={}){
 }
 
 function stat(label,value,cls=''){return `<div class="stat"><small>${label}</small><strong class="${cls}">${value}</strong></div>`}
+

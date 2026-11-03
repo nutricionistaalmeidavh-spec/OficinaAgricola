@@ -1,4 +1,5 @@
 import { chromium } from 'playwright';
+import { verifyUiContract } from './qa-ui-contract.mjs';
 import { spawn } from 'node:child_process';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -47,6 +48,8 @@ try{
   await page.locator('#appView').waitFor({state:'visible'});
   await page.locator('#pageTitle').filter({hasText:'Visão Geral'}).waitFor({state:'visible'});
   await page.locator('#content').filter({hasText:'João Silva'}).waitFor({state:'visible'});
+  const uiGeometry=await verifyUiContract(page,viewportName,outputDir);
+  await writeFile(path.join(outputDir,'ui-geometry.json'),JSON.stringify(uiGeometry,null,2));
   await sleep(700);
   await page.screenshot({path:path.join(outputDir,'01-dashboard.png'),fullPage:true});
 
@@ -222,7 +225,7 @@ try{
     }finally{await first.close()}
   }finally{setupProcess.kill('SIGTERM')}
 
-  await writeFile(path.join(outputDir,'qa-summary.json'),`${JSON.stringify({status:'passed',viewport:viewportName,checks:['login','dashboard','demo-data','work-orders','os-detail','edit-action','pdf-action','history-action','client-save-without-rerender','settings-draft-focus-preserved','vehicle-identity','review-and-warranty','first-run-admin-browser','durable-command-lost-response','offline-manual-command-retry']},null,2)}\n`);
+  await writeFile(path.join(outputDir,'qa-summary.json'),`${JSON.stringify({status:'passed',viewport:viewportName,checks:['mobile-nav-no-overlap','mobile-global-search','server-status-in-flow','modal-focus-trap-restore','modal-background-inert','form-error-draft-recovery','unsaved-discard-confirmation','keyboard-os-card','reduced-motion','login','dashboard','demo-data','work-orders','os-detail','edit-action','pdf-action','history-action','client-save-without-rerender','settings-draft-focus-preserved','vehicle-identity','review-and-warranty','first-run-admin-browser','durable-command-lost-response','offline-manual-command-retry']},null,2)}\n`);
 } catch(error){
   if(page)await page.screenshot({path:path.join(outputDir,'failure.png'),fullPage:true}).catch(()=>{});
   await writeFile(path.join(outputDir,'qa-summary.json'),`${JSON.stringify({status:'failed',viewport:viewportName,error:error.message},null,2)}\n`).catch(()=>{});
@@ -235,3 +238,4 @@ try{
   await writeFile(path.join(outputDir,'server.log'),logs.join('')).catch(()=>{});
   await rm(videoTemp,{recursive:true,force:true}).catch(()=>{});
 }
+
