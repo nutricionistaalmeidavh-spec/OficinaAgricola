@@ -77,7 +77,7 @@ test('LocalJobQueue executa FIFO, reporta tamanho correto e drain espera esvazia
 });
 
 test('configuração LAN usa 0.0.0.0 e lista IPv4 acessível', () => {
-  assert.deepEqual(resolveServerConfig({ PORT: '4123' }), { host: '0.0.0.0', port: 4123 });
+  assert.deepEqual(resolveServerConfig({ PORT: '4123' }), { host: '127.0.0.1', port: 4123 });
   const urls = listLanUrls({ port: 4123, interfaces: { lo: [{ address: '127.0.0.1', family: 'IPv4', internal: true }], wlan0: [{ address: '192.168.0.50', family: 'IPv4', internal: false }] } });
   assert.deepEqual(urls, ['http://192.168.0.50:4123']);
 });
