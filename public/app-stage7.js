@@ -17,11 +17,12 @@ function oaOrderCard(order){
 
 async function renderDashboard(){
   pageTitle('Visão Geral','OPERAÇÃO EM TEMPO REAL');
-  const [d,orders]=await Promise.all([api('/api/dashboard'),api('/api/work-orders')]);
+  const d=await api('/api/dashboard');
   const f=d.finance;
   const pipeline=OA_PIPELINE.map(column=>{
-    const items=orders.filter(order=>column.statuses.includes(order.status)).slice(0,4);
-    return `<div class="oa-board-col"><div class="oa-board-title"><span>${column.label}</span><b>${orders.filter(order=>column.statuses.includes(order.status)).length}</b></div>${items.map(oaOrderCard).join('')||'<div class="empty" style="padding:24px 8px;font-size:11px">Sem OS</div>'}</div>`;
+    const group=d.board?.[column.key]||{count:0,items:[]};
+    const items=group.items;
+    return `<div class="oa-board-col"><div class="oa-board-title"><span>${column.label}</span><b>${group.count}</b></div>${items.map(oaOrderCard).join('')||'<div class="empty" style="padding:24px 8px;font-size:11px">Sem OS</div>'}</div>`;
   }).join('');
 
   setContent(`
