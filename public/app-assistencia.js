@@ -117,13 +117,36 @@ async function saleModal() {
 async function saleDetails(id) {
   const sale = await api(`/api/sales/${id}`);
   const canCancel = ['ADMIN', 'FINANCEIRO'].includes(state.user.role) && sale.status === 'CONCLUIDA';
-  showModal(`Venda #${sale.sale_number}`, `<div class="detail-grid"><div class="detail-block"><h3>Resumo</h3><p>${dt(sale.created_at)}<br>${esc(sale.customer_name || 'Consumidor')}<br>${esc(sale.payment_method)}</p>${badge(sale.status)}</div><div class="detail-block"><h3>Total</h3><strong>${money(sale.total_cents)}</strong><p class="muted">Subtotal ${money(sale.subtotal_cents)} · desconto ${money(sale.discount_cents)}</p></div></div><div class="list" style="margin-top:14px">${sale.items.map(item => `<div class="list-item"><div><strong>${esc(item.description)}</strong><br><small>${item.quantity} × ${money(item.unit_price_cents)}</small></div><strong>${money(item.total_cents)}</strong></div>`).join('')}</div>${canCancel ? '<button id="cancelSale" class="btn danger" style="margin-top:14px">Cancelar venda e estornar estoque</button>' : ''}`);
+  showModal(`Venda #${sale.sale_number}`, `<div class="detail-grid"><div class="detail-block"><h3>Resumo</h3><p>${dt(sale.created_at)}<br>${esc(sale.customer_name || 'Consumidor')}<br>${esc(sale.payment_method)}</p>${badge(sale.status)}</div><div class="detail-block"><h3>Total</h3><strong>${money(sale.total_cents)}</strong><p class="muted">Subtotal ${money(sale.subtotal_cents)} · desconto ${money(sale.discount_cents)}</p></div></div><div class="list" style="margin-top:14px">${sale.items.map(item => `<div class="list-item"><div><strong>${esc(item.description)}</strong><br><small>${item.quantity} × ${money(item.unit_price_cents)}</small></div><strong>${money(item.total_cents)}</strong></div>`).join('')}</div>${canCancel ? '<button id="cancelSale" type="button" class="btn danger" style="margin-top:14px">Cancelar venda e estornar estoque</button>' : ''}`);
   const cancel = $('#cancelSale');
-  if (cancel) cancel.onclick = async () => {
-    const reason = prompt('Motivo do cancelamento:') || '';
-    await api(`/api/sales/${id}/cancel`, { method: 'POST', body: { reason } });
-    toast('Venda cancelada e estoque estornado'); closeModal(); await refreshCurrentPage();
-  };
+  if (cancel) cancel.onclick = () => cancelSaleModal(sale);
+}
+
+function cancelSaleModal(sale) {
+  const requestId = newCommandId();
+  showModal(`Confirmar cancelamento da venda #${sale.sale_number}`,
+    `<form class="form-stack">
+      <p><strong>Venda #${esc(sale.sale_number)} · ${money(sale.total_cents)}</strong></p>
+      <p class="muted">Esta ação cancela a venda, estorna os itens de estoque e registra o estorno financeiro no caixa aberto. A venda permanece no histórico.</p>
+      <label>Motivo do cancelamento
+        <textarea name="reason" required minlength="3" maxlength="500" placeholder="Descreva por que a venda será cancelada"></textarea>
+      </label>
+      <div class="action-row">
+        <button type="button" id="keepSale" class="btn">Manter venda</button>
+        <button type="submit" class="btn danger">Confirmar cancelamento e estorno</button>
+      </div>
+    </form>`,
+    async fd => {
+      const reason = String(fd.get('reason') || '').trim();
+      if (reason.length < 3) throw new Error('Motivo do cancelamento obrigatório (mínimo 3 caracteres)');
+      const result = await api(`/api/sales/${sale.id}/cancel`, {
+        method: 'POST', body: { reason, requestId }
+      });
+      if (result.status !== 'CANCELADA') throw new Error('Cancelamento não confirmado. Consulte o histórico.');
+      toast(`Venda #${sale.sale_number} cancelada e estornos registrados.`);
+      await refreshCurrentPage();
+    });
+  $('#keepSale').onclick = () => closeModal();
 }
 
 function openCashModal() {
