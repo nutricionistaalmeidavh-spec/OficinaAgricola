@@ -12,6 +12,7 @@ let db = null;
 let serverUrl = null;
 let eventRuntime = null;
 let outboxTimer = null;
+let backupTimer = null;
 
 function dataRoot() {
   const local = process.env.LOCALAPPDATA || app.getPath('userData');
@@ -25,7 +26,7 @@ async function startLocalServer() {
 
   const [
     {openDatabase,migrate},{seed},{migrateAssistencia},{createAssistenciaServer},
-    {createEventRuntime},{dispatchOutbox},{recoverOrphanAttachments}
+    {createEventRuntime},{dispatchOutbox},{recoverOrphanAttachments},{backupAndVerify}
   ]=await Promise.all([
     import('../dist/src/db.js'),
     import('../dist/src/seed.js'),
@@ -34,6 +35,7 @@ async function startLocalServer() {
     import('../dist/src/platform/event-runtime.js'),
     import('../dist/src/platform/outbox.js'),
     import('../dist/src/services/operations.js'),
+    import('../dist/src/platform/backup.js'),
   ]);
   // Identidade nova: nenhuma busca por pastas ou bancos de versões antigas.
   const dbPath = join(root, 'data', 'artisys-oficina.sqlite');
@@ -69,6 +71,17 @@ async function startLocalServer() {
   flushEvents();
   outboxTimer=setInterval(flushEvents,15000);
   outboxTimer.unref?.();
+
+  function verifiedBackup(){
+    try{
+      const result=backupAndVerify({databasePath:dbPath,uploadsPath:storageDir,
+        backupRoot:join(root,'backups'),keep:7});
+      console.info('[desktop-backup] Verificado:',result.backupDir);
+    }catch(error){console.error('[desktop-backup]',error.message)}
+  }
+  backupTimer=setInterval(verifiedBackup,24*60*60*1000);
+  backupTimer.unref?.();
+  setImmediate(verifiedBackup);
 
   serverUrl = `http://127.0.0.1:${port}`;
   return serverUrl;
@@ -133,6 +146,7 @@ app.whenReady().then(async () => {
 
 app.on('before-quit', () => {
   if(outboxTimer)clearInterval(outboxTimer);
+  if(backupTimer)clearInterval(backupTimer);
   try { server?.close(); } catch {}
   try { eventRuntime?.close(); } catch {}
   try { db?.close(); } catch {}
