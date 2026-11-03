@@ -46,6 +46,25 @@ export function listWorkOrders(db,{status,search='',limit=200}={}){
     ${clauses.length?'WHERE '+clauses.join(' AND '):''} ORDER BY wo.id DESC LIMIT ?`).all(...params);
 }
 
+// Paginação keyset sobre a tabela canônica: sem limite global de 200 OS.
+export function listWorkOrdersPage(db,{status='',search='',cursor=null,limit=60}={}){
+  const size=Math.min(100,Math.max(1,Number(limit)||60));
+  const next=cursor==null||cursor===''?null:Number(cursor);
+  if(next!==null&&(!Number.isSafeInteger(next)||next<=0))throw new Error('Cursor inválido');
+  const q=String(search||'').trim(),where=[],args=[];
+  if(status){where.push('wo.status=?');args.push(status)}
+  if(q){where.push('(CAST(wo.os_number AS TEXT) LIKE ? OR c.name LIKE ? OR m.model LIKE ? OR wo.problem_reported LIKE ?)');const like='%'+q+'%';args.push(like,like,like,like)}
+  const base=' FROM work_orders wo JOIN customers c ON c.id=wo.customer_id JOIN machines m ON m.id=wo.machine_id LEFT JOIN technicians t ON t.id=wo.technician_id';
+  const filters=where.length?' WHERE '+where.join(' AND '):'';
+  const total=Number(db.prepare('SELECT COUNT(*) n'+base+filters).get(...args).n);
+  const pagination=next!==null?(where.length?' AND ':' WHERE ')+'wo.id<?':'';
+  const items=db.prepare('SELECT wo.*,c.name customer_name,m.type machine_type,m.brand machine_brand,m.model machine_model,t.name technician_name'+base+filters+pagination+' ORDER BY wo.id DESC LIMIT ?')
+    .all(...args,...(next!==null?[next]:[]),size+1);
+  const hasMore=items.length>size;
+  if(hasMore)items.pop();
+  return {items,total,nextCursor:hasMore?items[items.length-1].id:null};
+}
+
 export function updateWorkOrder(db,id,input,{changedBy=null}={}){
   const old=getWorkOrder(db,id);
   const customerId=input.customerId===undefined?old.customer_id:Number(input.customerId);
