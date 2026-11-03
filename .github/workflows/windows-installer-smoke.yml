@@ -43,6 +43,15 @@ jobs:
         run: npm ci
       - name: Quality gate
         run: npm run ci
+      - name: Validar parser PowerShell antes da compilação nativa
+        shell: pwsh
+        run: |
+          foreach ($script in @('scripts/smoke-installer.ps1','scripts/build-acbr-native.ps1','scripts/build-electron.ps1')) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script).Path,[ref]$tokens,[ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_.Message }; throw "Erro de sintaxe PowerShell: $script" }
+          }
       - name: Build application files
         run: npm run build
       - name: Python 3.12 apenas no builder (não no cliente)
