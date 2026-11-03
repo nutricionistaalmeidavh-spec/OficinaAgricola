@@ -1,11 +1,10 @@
-// Motor de interpretação SAE J1979; sem dependência de hardware ou serviço remoto.
-// Os adaptadores descrevem capacidades. Não existe driver J2534 pronto no núcleo.
+// Motor SAE J1979/J1939, independente do transporte físico. Drivers externos opcionais.
 const ADAPTERS=Object.freeze([
  {id:'ELM327_SERIAL',label:'ELM327 USB/serial',available:true,source:'REAL',transport:'WEB_SERIAL'},
  {id:'OBDLINK_STN_SERIAL',label:'OBDLink/STN USB serial (modo ELM)',available:true,source:'REAL',transport:'WEB_SERIAL'},
  {id:'SIMULATOR',label:'Simulador offline - somente testes',available:true,source:'SIMULATED',transport:'NONE'},
- {id:'J2534',label:'J2534 Pass-Thru - exige ponte e driver homologado',available:false,source:'REAL',transport:'BRIDGE'},
- {id:'J1939',label:'J1939 agrícola - depende de hardware e protocolo',available:false,source:'REAL',transport:'CAN'}
+ {id:'J2534',label:'J2534 Pass-Thru (driver Windows)',available:true,source:'REAL',transport:'LOCAL_NATIVE',requires:'Driver J2534 04.04 e interface conectada'},
+ {id:'J1939',label:'J1939 CAN (leitura passiva)',available:true,source:'REAL',transport:'LOCAL_CAN',requires:'Interface CAN e python-can instalado'}
 ]);
 export const listDiagnosticAdapters=()=>ADAPTERS.map(x=>({...x}));
 const specs={
@@ -92,6 +91,50 @@ function parseVin(raw){
  if(!/^[A-HJ-NPR-Z0-9]{17}$/.test(vin))throw new Error('VIN incompleto ou inválido');
  return vin;
 }
+// PGNs de quadro único J1939, decodificados de forma passiva; nunca emite CAN.
+export function decodeJ1939Frame(frame){
+ if(!frame||!Number.isInteger(frame.id)||frame.id<0||frame.id>0x1FFFFFFF)
+   throw new Error('Identificador J1939 inválido');
+ const compact=String(frame.data||'').replace(/\\s/g,'').toUpperCase();
+ if(!/^[0-9A-F]{16}$/.test(compact))throw new Error('Quadro J1939 inválido: são necessários 8 bytes');
+ const b=compact.match(/.{2}/g).map(h=>parseInt(h,16));
+ const pf=(frame.id>>>16)&255,ps=(frame.id>>>8)&255;
+ const pgn=pf<240?(frame.id>>>8)&0x3FF00:(frame.id>>>8)&0x3FFFF;
+ const sourceAddress=frame.id&255,readings={},dtcs=[];
+ const push=(key,name,unit,value)=>{if(value!=null&&Number.isFinite(value))readings[key]={name,unit,value:Math.round(value*100)/100}};
+ if(pgn===61444){
+  const raw=b[3]+b[4]*256;if(raw!==65535)push('engineRpm','Rotação motor','rpm',raw*0.125);
+ }else if(pgn===65262){
+  if(b[0]!==255)push('coolantTemp','Temperatura do líquido','°C',b[0]-40);
+ }else if(pgn===65253){
+  const raw=(b[0]+b[1]*256+b[2]*65536+b[3]*16777216)>>>0;
+  if(raw!==4294967295)push('engineHours','Horímetro','h',raw*0.05);
+ }else if(pgn===65226){
+  for(let i=2;i+3<8;i+=4){
+   if(b[i]===255&&b[i+1]===255&&b[i+2]===255&&b[i+3]===255)continue;
+   const spn=b[i]+b[i+1]*256+((b[i+2]>>>5)&7)*65536,fmi=b[i+2]&31;
+   dtcs.push({spn,fmi,occurrences:b[i+3]&127,sourceAddress});
+  }
+ }
+ return {pgn,sourceAddress,readings,dtcs};
+}
+export function parseJ1939Capture(input){
+ const frames=input?.j1939?.frames;
+ if(!Array.isArray(frames)||frames.length<1||frames.length>400)throw new Error('Quadros J1939 inválidos');
+ const readings={},dtcs=[],seen=new Set(),pgNs=new Set();
+ for(const frame of frames){
+  const result=decodeJ1939Frame(frame);pgNs.add(result.pgn);
+  Object.assign(readings,result.readings);
+  for(const code of result.dtcs){const key=code.spn+'-'+code.fmi+'-'+code.sourceAddress;
+   if(!seen.has(key)){seen.add(key);dtcs.push(code)}
+  }
+ }
+ if(!Object.keys(readings).length&&!dtcs.length)throw new Error('Nenhuma informação J1939 conhecida nos quadros');
+ return {adapterId:'J1939',source:'REAL',protocol:String(input.protocol||'SAE J1939 CAN (passivo)').slice(0,80),
+  storedCodes:dtcs.map(x=>'SPN'+x.spn+'-FMI'+x.fmi),pendingCodes:[],permanentCodes:[],
+  readings,readiness:null,freezeFrame:{},vin:null,samples:[],issues:[],
+  j1939:{frameCount:frames.length,pgNs:[...pgNs],dtcs,frames:frames.slice(0,100)}};
+}
 function record(value){
  return value&&typeof value==='object'&&!Array.isArray(value)&&Object.getPrototypeOf(value)===Object.prototype;
 }
@@ -102,6 +145,7 @@ export function parseDiagnosticCapture(input){
  if(!adapter||!adapter.available)throw new Error('Adaptador indisponível no núcleo local');
  const source=String(input.source||adapter.source).toUpperCase();
  if(source!==adapter.source)throw new Error('Simulador exige marcação SIMULATED');
+ if(adapterId==='J1939')return parseJ1939Capture(input);
  if(!record(input.responses)||!Object.keys(input.responses).length||Object.keys(input.responses).length>35)
    throw new Error('Respostas da captura inválidas');
  const size=JSON.stringify({responses:input.responses,samples:input.samples||[]}).length;
