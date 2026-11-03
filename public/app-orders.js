@@ -4,7 +4,7 @@ function osCard(order){
   return `<button type="button" class="os-card" data-os="${order.id}" aria-label="Abrir OS ${order.os_number}"><strong>OS #${order.os_number} · ${esc(order.customer_name)}</strong><p>${esc(order.machine_brand)} ${esc(order.machine_model)}<br>${esc(order.problem_reported)}</p>${badge(order.status)}</button>`;
 }
 function bindOrderCards(host=document){
-  $host.querySelectorAll('[data-os]').forEach(card=>{
+  host.querySelectorAll('[data-os]').forEach(card=>{
     const open=()=>openWorkOrder(card.dataset.os);
     card.onclick=open;
     // Botão nativo preserva acionamento por teclado sem handler duplicado.
