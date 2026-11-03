@@ -1,3 +1,4 @@
+import {selectPage} from '../platform/pagination.js';
 import { nowIso, transaction } from '../db.js';
 import { getWorkOrder } from './work-orders.js';
 import {runIdempotent} from '../platform/idempotency.js';
@@ -90,3 +91,11 @@ export function reverseWorkOrderPart(db,itemId,{note='',createdBy=null,workOrder
 }
 export function listWorkOrderParts(db,workOrderId){return db.prepare(`SELECT wop.*,p.sku,p.description FROM work_order_parts wop JOIN parts p ON p.id=wop.part_id WHERE wop.work_order_id=? ORDER BY wop.id`).all(workOrderId)}
 export function lowStockParts(db){return db.prepare('SELECT * FROM parts WHERE active=1 AND quantity<=min_stock ORDER BY quantity-min_stock,description').all()}
+
+export function listPartsPage(db,{includeInactive=false,search='',limit=50,cursor=null}={}){
+  const where=[],args=[];
+  if(!includeInactive)where.push('p.active=1');
+  if(search){const q='%'+text(search)+'%';where.push('(p.sku LIKE ? OR p.description LIKE ? OR p.category LIKE ?)');args.push(q,q,q);}
+  return selectPage(db,{from:'FROM parts p',select:'p.*',where,args,
+    sort:'p.description COLLATE NOCASE',id:'p.id',direction:'ASC',cursor,limit,scope:'parts'});
+}
