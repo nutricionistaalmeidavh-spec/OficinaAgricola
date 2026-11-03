@@ -144,7 +144,7 @@ function cashMoveModal() {
 
 function closeCashModal(expectedCents) {
   const requestId=newCommandId();
-  showModal('Fechar caixa', `<form class="form-stack"><p>Valor esperado em dinheiro: <strong>${money(expectedCents)}</strong></p><label>Valor contado (R$)<input name="closing" type="number" min="0" step="0.01" value="${(expectedCents / 100).toFixed(2)}" required></label><label>Observação<input name="note"></label><button class="btn primary" type="submit">Fechar caixa</button></form>`, async fd => {
+  showModal('Fechar caixa', `<form class="form-stack"><p>Valor esperado em dinheiro: <strong>${money(expectedCents)}</strong></p><label>Valor contado (R$)<input name="closing" type="number" min="0" step="0.01" placeholder="Informe o valor contado" required></label><label>Observação<input name="note"></label><button class="btn primary" type="submit">Fechar caixa</button></form>`, async fd => {
     const result = await api('/api/cash/current/close', { method: 'POST', body: { requestId, closingCents: Math.round(Number(fd.get('closing')) * 100), note: fd.get('note') } });
     toast(`Caixa fechado. Diferença: ${money(result.difference_cents)}`); await refreshCurrentPage();
   });
