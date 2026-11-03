@@ -110,8 +110,15 @@ export function financeSummary(db,{from='1970-01-01T00:00:00.000Z',to='2999-12-3
   `).get(from,to).total):0;
   const received=Number(db.prepare(`SELECT COALESCE(SUM(amount_cents),0) total FROM payment_events WHERE created_at BETWEEN ? AND ?`).get(from,to).total);
   const expenses=Number(db.prepare(`SELECT COALESCE(SUM(amount_cents),0) total FROM expenses WHERE paid_at IS NOT NULL AND paid_at BETWEEN ? AND ?`).get(from,to).total);
-  const approvedIds=db.prepare(`SELECT q.work_order_id FROM quotes q JOIN work_orders wo ON wo.id=q.work_order_id WHERE q.approval_status='APROVADO' AND wo.status<>'CANCELADA' AND q.approved_at BETWEEN ? AND ?`).all(from,to).map(r=>r.work_order_id);
-  let pending=0; for(const id of approvedIds) pending+=getPaymentSummary(db,id).pendingCents;
+  // Agregação única: não executar duas consultas adicionais por OS aprovada.
+  const pending=Number(db.prepare(`
+    SELECT COALESCE(SUM(MAX(0,wo.quote_total_cents-
+      COALESCE((SELECT SUM(r.amount_cents) FROM receipts r
+                WHERE r.work_order_id=wo.id AND r.reversed_at IS NULL),0))),0) total
+    FROM quotes q JOIN work_orders wo ON wo.id=q.work_order_id
+    WHERE q.approval_status='APROVADO' AND wo.status<>'CANCELADA'
+      AND q.approved_at BETWEEN ? AND ?
+  `).get(from,to).total);
   return {invoicedCents:invoiced+posInvoiced,receivedCents:received,pendingCents:pending,expensesCents:expenses,resultCents:received-expenses};
 }
 
