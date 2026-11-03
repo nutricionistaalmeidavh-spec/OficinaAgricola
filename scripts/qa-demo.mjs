@@ -141,7 +141,16 @@ try{
   await page.locator('#pendingCommands').waitFor({state:'visible'});
   await page.unroute('**/api/customers',noNetwork);
   await page.locator('#pendingCommands').click();
+  // A fila de risco exige confirmação no diálogo, antes de retornar à navegação.
+  const retry=page.locator('[data-queue-retry]').first();
+  await retry.waitFor({state:'visible'});
+  if((await retry.textContent()).includes('Revisar')){
+    await retry.click();
+    await page.getByRole('button',{name:'Confirmar tentativa desta operação'}).waitFor({state:'visible'});
+  }
+  await retry.click();
   await page.locator('#pendingCommands').waitFor({state:'hidden',timeout:20000});
+  await page.locator('#modal').waitFor({state:'hidden'});
   const manualCustomers=await page.evaluate(()=>api('/api/customers'));
   if(manualCustomers.filter(c=>c.name===manualName).length!==1)
     throw new Error('Recuperação manual não gravou exatamente um cliente');
