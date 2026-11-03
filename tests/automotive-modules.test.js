@@ -49,7 +49,7 @@ test('compatibilidade só retorna peça com aplicação cadastrada e sem falso p
   }finally{db.close()}
 });
 test('OBD-II interpreta quadro hexadecimal modo 03 e rejeita resposta inválida',()=>{
-  assert.deepEqual(decodeDtcResponse('SEARCHING...\\r43 01 33 02 10 00 00\\r>'),['P0133','P0210']);
+  assert.deepEqual(decodeDtcResponse('SEARCHING...\r43 01 33 02 10 00 00\r>'),['P0133','P0210']);
   assert.deepEqual(decodeDtcResponse('43 00 00 00 00'),[]);
   assert.throws(()=>decodeDtcResponse('NO DATA'),/resposta|dados|DTC/i);
   assert.throws(()=>decodeDtcResponse('44 01 33'),/resposta|modo/i);

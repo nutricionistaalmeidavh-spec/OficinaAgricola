@@ -85,7 +85,7 @@ export function deletePartFitment(db,partId,id){
 export function listCompatibleParts(db,machineId){
   const m=machine(db,machineId),brand=norm(m.brand),model=norm(m.model),engine=norm(m.engine),fuel=norm(m.fuel_type);
   if(!brand||!model)return [];
-  const rows=db.prepare('SELECT f.*,p.* FROM part_fitments f JOIN parts p ON p.id=f.part_id WHERE p.active=1 AND f.brand_key=? AND f.model_key=? ORDER BY p.description').all(brand,model);
+  const rows=db.prepare('SELECT f.id fitment_id,f.part_id,f.year_from,f.year_to,f.engine_key,f.fuel_type,p.id,p.sku,p.description,p.quantity FROM part_fitments f JOIN parts p ON p.id=f.part_id WHERE p.active=1 AND f.brand_key=? AND f.model_key=? ORDER BY p.description').all(brand,model);
   const seen=new Set();
   return rows.filter(row=>{
     if(seen.has(row.part_id))return false;
@@ -93,7 +93,7 @@ export function listCompatibleParts(db,machineId){
     if(row.engine_key&&row.engine_key!==engine)return false;
     if(row.fuel_type&&row.fuel_type!==fuel)return false;
     seen.add(row.part_id);return true;
-  }).map(row=>({id:row.part_id,sku:row.sku,description:row.description,quantity:row.quantity,fitment_id:row.id}));
+  }).map(row=>({id:row.part_id,sku:row.sku,description:row.description,quantity:row.quantity,fitment_id:row.fitment_id}));
 }
 export function createDiagnosticScan(db,machineId,input){
   return transaction(db,()=>{

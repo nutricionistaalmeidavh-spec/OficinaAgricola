@@ -51,8 +51,8 @@ function parseOdometer(value){
   return n;
 }
 function normalizeRenavam(value){
-  const v=text(value).replace(/[.\\s-]/g,'');
-  if(v&&!/^\\d{11}$/.test(v))throw new Error('RENAVAM inválido (11 dígitos)');
+  const v=text(value).replace(/[.\s-]/g,'');
+  if(v&&!/^\d{11}$/.test(v))throw new Error('RENAVAM inválido (11 dígitos)');
   return v||null;
 }
 const FUEL_TYPES=new Set(['GASOLINA','ETANOL','FLEX','DIESEL','GNV','ELETRICO','HIBRIDO','OUTRO']);
