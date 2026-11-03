@@ -126,6 +126,9 @@ export async function verifyUiContract(page,viewportName,outputDir){
   let cancelRequests=0,cancelBody=null;
   const salesRoute=async route=>{
     const url=new URL(route.request().url()),method=route.request().method();
+    if(url.pathname==='/api/sales/page'&&method==='GET')
+      return route.fulfill({status:200,contentType:'application/json',
+        body:JSON.stringify({items:[fakeSale],total:1,nextCursor:null})});
     if(url.pathname==='/api/sales'&&method==='GET')
       return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify([fakeSale])});
     if(url.pathname==='/api/sales/'+fakeSale.id&&method==='GET')
