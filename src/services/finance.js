@@ -1,3 +1,4 @@
+import {selectPage} from '../platform/pagination.js';
 import { createHash } from 'node:crypto';
 import { nowIso, transaction } from '../db.js';
 import { activeCashForMethod, postPaymentEvent } from './payment-ledger.js';
@@ -112,4 +113,11 @@ export function financeSummary(db,{from='1970-01-01T00:00:00.000Z',to='2999-12-3
   const approvedIds=db.prepare(`SELECT q.work_order_id FROM quotes q JOIN work_orders wo ON wo.id=q.work_order_id WHERE q.approval_status='APROVADO' AND wo.status<>'CANCELADA' AND q.approved_at BETWEEN ? AND ?`).all(from,to).map(r=>r.work_order_id);
   let pending=0; for(const id of approvedIds) pending+=getPaymentSummary(db,id).pendingCents;
   return {invoicedCents:invoiced+posInvoiced,receivedCents:received,pendingCents:pending,expensesCents:expenses,resultCents:received-expenses};
+}
+
+export function listExpensesPage(db,{from='1970-01-01T00:00:00.000Z',to='2999-12-31T23:59:59.999Z',limit=50,cursor=null}={}){
+  const sort="COALESCE(e.paid_at,e.due_date||'T00:00:00.000Z',e.created_at)";
+  return selectPage(db,{from:'FROM expenses e LEFT JOIN work_orders wo ON wo.id=e.work_order_id',
+    select:'e.*,wo.os_number',where:[sort+' BETWEEN ? AND ?'],args:[from,to],
+    sort,id:'e.id',cursor,limit,scope:'expenses'});
 }
