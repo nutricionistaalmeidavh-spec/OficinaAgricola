@@ -15,6 +15,25 @@ if ($installerProcess.ExitCode -ne 0) { throw "Instalador encerrou com código $
 $exe = Get-ChildItem -Path $installDir -Filter 'ArtiSys Oficina.exe' -Recurse -File | Select-Object -First 1
 if (-not $exe) { throw 'Executável não instalado no diretório limpo' }
 
+# Garantir que o pacote final contém a ponte real e que ela funciona sem Python do Windows.
+$bridgeExe = Join-Path $exe.DirectoryName 'resources\diagnostics\ArtiSys-Diagnostic-Bridge\ArtiSys-Diagnostic-Bridge.exe'
+if (-not (Test-Path -LiteralPath $bridgeExe -PathType Leaf)) {
+  throw 'Instalador não incluiu a ponte J2534/J1939 embutida'
+}
+$originalPath = $env:PATH
+try {
+  $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+  $probe = '{"action":"probe"}' | & $bridgeExe
+  if ($LASTEXITCODE -ne 0) { throw 'Ponte embutida falhou sem Python no PATH' }
+  $probeJson = $probe | Out-String | ConvertFrom-Json
+  if ($probeJson.ok -ne $true -or $probeJson.data.j1939.pythonCan -ne $true) {
+    throw 'Ponte embutida não está funcional ou python-can não foi empacotado'
+  }
+} finally {
+  $env:PATH = $originalPath
+}
+Write-Host 'PASS: Ponte J2534/J1939 embutida funciona sem Python instalado no PATH'
+
 $hostUrl = 'http://127.0.0.1:3344'
 $appProcess = $null
 try {
@@ -52,6 +71,12 @@ try {
   # Smoke real da fila do servidor desktop: criar cliente duas vezes com a
   # mesma chave e verificar exatamente um evento de domínio projetado no JSONL.
   $headers = @{ Authorization = "Bearer $($login.token)" }
+  $hardware = Invoke-RestMethod -Uri "$hostUrl/api/diagnostics/hardware" -Headers $headers
+  if (-not $hardware.j1939.pythonCan) {
+    throw 'Servidor Electron não conseguiu executar sua ponte de diagnóstico empacotada'
+  }
+  Write-Host 'PASS: Rota autenticada de diagnóstico usou ponte embutida no Windows limpo'
+
   $clientBody = '{"name":"Cliente QA EventBus Windows","requestId":"windows-event-outbox-once"}'
   $customer = Invoke-RestMethod -Uri "$hostUrl/api/customers" -Method Post -Headers $headers -ContentType 'application/json' -Body $clientBody
   $again = Invoke-RestMethod -Uri "$hostUrl/api/customers" -Method Post -Headers $headers -ContentType 'application/json' -Body $clientBody
