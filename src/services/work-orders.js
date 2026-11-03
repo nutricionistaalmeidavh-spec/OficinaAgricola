@@ -48,6 +48,7 @@ export function listWorkOrders(db,{status,search='',limit=200}={}){
 
 export function updateWorkOrder(db,id,input,{changedBy=null}={}){
   const old=getWorkOrder(db,id);
+  if(input.expectedVersion!==undefined&&Number(input.expectedVersion)!==Number(old.version))throw new Error('Conflito de versão: OS foi atualizada por outro usuário');
   const customerId=input.customerId===undefined?old.customer_id:Number(input.customerId);
   const machineId=input.machineId===undefined?old.machine_id:Number(input.machineId);
   const customer=db.prepare('SELECT * FROM customers WHERE id=?').get(customerId);
@@ -69,9 +70,10 @@ export function updateWorkOrder(db,id,input,{changedBy=null}={}){
   const nextCustomerSnapshot=Number(customerId)===Number(old.customer_id)?old.snapshot_customer:customerSnapshot(customer);
   const nextMachineSnapshot=Number(machineId)===Number(old.machine_id)?old.snapshot_machine:machineSnapshot(machine);
   return transaction(db,()=>{
-    db.prepare(`UPDATE work_orders SET customer_id=?,machine_id=?,entered_at=?,problem_reported=?,diagnosis=?,technician_id=?,estimated_delivery=?,priority=?,internal_notes=?,snapshot_customer=?,snapshot_machine=?,updated_at=? WHERE id=?`).run(
+    db.prepare(`UPDATE work_orders SET customer_id=?,machine_id=?,entered_at=?,problem_reported=?,diagnosis=?,technician_id=?,estimated_delivery=?,priority=?,internal_notes=?,snapshot_customer=?,snapshot_machine=?,updated_at=?,version=version+1 WHERE id=? AND version=?`).run(
       next.customer_id,next.machine_id,next.entered_at,next.problem_reported,next.diagnosis,next.technician_id,next.estimated_delivery,next.priority,next.internal_notes,
-      nextCustomerSnapshot,nextMachineSnapshot,t,id);
+      nextCustomerSnapshot,nextMachineSnapshot,t,id,old.version);
+    if(db.prepare('SELECT changes() n').get().n!==1)throw new Error('Conflito de versão: OS atualizada simultaneamente');
     const insert=db.prepare('INSERT INTO work_order_change_history(work_order_id,field,old_value,new_value,changed_by,changed_at) VALUES(?,?,?,?,?,?)');
     for(const field of tracked){if(auditValue(old[field])!==auditValue(next[field]))insert.run(id,field,auditValue(old[field]),auditValue(next[field]),changedBy,t)}
     return getWorkOrder(db,id);
@@ -94,13 +96,16 @@ export function duplicateWorkOrder(db,id,input={}){
 }
 
 // Única autoridade para mudanças de estado da OS; chamador mantém a transação.
-export function transitionWorkOrderInTransaction(db,id,toStatus,{reason='',changedBy=null}={}){
-  const old=getWorkOrder(db,id); assertTransition(old.status,toStatus); const t=nowIso();
+export function transitionWorkOrderInTransaction(db,id,toStatus,{reason='',changedBy=null,expectedVersion=null}={}){
+  const old=getWorkOrder(db,id);
+  if(expectedVersion!==null&&Number(expectedVersion)!==Number(old.version))throw new Error('Conflito de versão: OS alterada por outro funcionário');
+  assertTransition(old.status,toStatus); const t=nowIso();
   let completed=old.completed_at, delivered=old.delivered_at;
   if(toStatus==='PRONTA') completed=t;
   if(toStatus==='ENTREGUE') delivered=t;
   if(toStatus==='EM_SERVICO' && old.status==='PRONTA') completed=null;
-  db.prepare('UPDATE work_orders SET status=?,completed_at=?,delivered_at=?,updated_at=? WHERE id=?').run(toStatus,completed,delivered,t,id);
+  db.prepare('UPDATE work_orders SET status=?,completed_at=?,delivered_at=?,updated_at=?,version=version+1 WHERE id=? AND version=?').run(toStatus,completed,delivered,t,id,old.version);
+  if(db.prepare('SELECT changes() n').get().n!==1)throw new Error('Conflito de versão da OS');
   db.prepare(`INSERT INTO work_order_status_history(work_order_id,from_status,to_status,reason,changed_by,changed_at) VALUES(?,?,?,?,?,?)`).run(id,old.status,toStatus,text(reason),changedBy,t);
   return getWorkOrder(db,id);
 }
