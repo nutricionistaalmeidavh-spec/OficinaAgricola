@@ -1,7 +1,6 @@
-'use strict';
-const test = require('node:test');
-const assert = require('node:assert/strict');
-const { requireTenantContext, scopedWhere } = require('../src/platform/tenant-context');
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { requireTenantContext, scopedWhere } from '../src/platform/tenant-context.js';
 const user = { memberships: [{ companyId: 'a', active: true, role: 'manager', unitIds: ['u1'] }, { companyId: 'b', active: false, role: 'admin', allUnits: true }] };
 test('rejects unauthenticated, missing, foreign and inactive company contexts', () => {
   assert.throws(() => requireTenantContext(null, 'a'), { status: 401 });
