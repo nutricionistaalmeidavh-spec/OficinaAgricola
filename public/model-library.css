@@ -1,0 +1,43 @@
+/* ArtiSys Oficina — Biblioteca 3D P0 (escopo visual isolado) */
+.ml-screen{display:grid;gap:18px;max-width:1480px;margin:0 auto}
+.ml-hero{display:flex;align-items:end;justify-content:space-between;gap:24px;padding:30px 32px;border-radius:23px;color:#f3f8f5;background:linear-gradient(115deg,#142c28,#1e5142 72%,#2d6748);position:relative;overflow:hidden}
+.ml-hero:after{content:"";position:absolute;right:-80px;top:-100px;width:340px;height:340px;border:1px solid #ffffff21;border-radius:50%;pointer-events:none}
+.ml-kicker{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#cbe8c7;font-weight:750}
+.ml-hero h2{font-size:clamp(23px,3vw,37px);line-height:1.1;letter-spacing:-.035em;color:white;margin:12px 0}
+.ml-hero p{font-size:13px;max-width:440px;line-height:1.5;color:#d5e4dc;margin:0}
+.ml-hero-stat{z-index:1;border:1px solid #ffffff3d;background:#ffffff12;border-radius:16px;padding:14px 20px;min-width:140px;display:grid;gap:4px;text-align:center}
+.ml-hero-stat strong{font-size:35px;color:white;line-height:1;font-variant-numeric:tabular-nums}
+.ml-hero-stat span{font-size:11px;color:#e3f0e6}
+.ml-filters{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;background:#fff;border:1px solid var(--line,#e2e9e4);padding:16px;border-radius:17px}
+.ml-filters label{display:grid;gap:7px;margin:0;font-size:11px;color:#51625a;font-weight:700}
+.ml-filters input,.ml-filters select{min-width:0;width:100%;height:43px;border:1px solid #dce6df;background:#f9fbf9;color:#142d22;border-radius:10px;padding:9px 12px;font:inherit;font-size:13px;outline-offset:2px}
+.ml-filters input:focus-visible,.ml-filters select:focus-visible{outline:2px solid #2b785a}
+.ml-result-bar{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.ml-result-bar strong{font-size:13px;color:#283b31}
+.ml-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.ml-card{display:grid;min-width:0;grid-template-rows:150px 1fr;border:1px solid #e4ebe6;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 5px 18px rgba(18,51,35,.04);transition:border-color .15s}
+.ml-card:hover{border-color:#a9ccb7}
+.ml-illustration,.ml-detail-picture{position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;background:radial-gradient(ellipse at 50% 80%,#fff9,transparent 60%),linear-gradient(140deg,#e2eae5,#f7f9f6);color:#6b9d87}
+.ml-theme-suv,.ml-theme-pickup,.ml-theme-utility{background:linear-gradient(135deg,#dceadf,#f8f8f0);color:#779c75}
+.ml-theme-coupe,.ml-theme-sports{background:linear-gradient(135deg,#dde8ea,#f4f8fa);color:#668f97}
+.ml-theme-van,.ml-theme-minivan{background:linear-gradient(135deg,#e5e9df,#faf7ec);color:#a3aa87}
+.ml-preview-label{position:absolute;left:11px;top:10px;font-size:9px;font-weight:650;letter-spacing:.01em;color:#526b61;background:#ffffffc9;padding:4px 6px;border-radius:6px;z-index:1}
+.ml-vehicle{height:145px;width:100%;max-width:360px;display:block}
+.ml-card-body{display:flex;flex-direction:column;gap:7px;padding:13px 14px}
+.ml-brand{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:#718277;font-weight:800}
+.ml-card h3{font-size:16px;line-height:1.25;color:#17382b;margin:0;overflow-wrap:anywhere}
+.ml-card-meta{display:flex;justify-content:space-between;gap:5px;align-items:center;color:#667770;font-size:11px;margin-top:auto;padding-top:8px}
+.ml-detail{margin-top:8px;width:100%;justify-content:center}
+.ml-empty{grid-column:1/-1;border:1px dashed #ccd9d1;background:#fafcfa;border-radius:16px;padding:45px 20px;text-align:center;color:#5b7467;font-size:13px}
+.ml-pagination{display:flex;justify-content:center;align-items:center;gap:15px;padding:5px}
+.ml-pagination span{font-size:12px;color:#617267;min-width:104px;text-align:center}
+.ml-footnote{border:1px solid #e2e7df;border-radius:12px;padding:14px 17px;background:#f6f9f5;font-size:12px;color:#627368;line-height:1.55}
+.ml-footnote strong{color:#344c3a}
+.ml-detail-modal{display:grid;gap:8px;color:#2b4136;line-height:1.5}
+.ml-detail-modal p{margin:2px 0;font-size:13px}
+.ml-detail-modal a{color:#1d7251;text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere}
+.ml-detail-picture{border-radius:12px;height:205px}
+.ml-detail-picture .ml-vehicle{height:195px;max-width:460px}
+@media(max-width:1150px){.ml-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:840px){.ml-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.ml-hero{padding:23px 21px}.ml-filters{grid-template-columns:1fr 1fr}.ml-filters label:first-child{grid-column:1/-1}.ml-card{grid-template-rows:126px 1fr}.ml-vehicle{height:120px}.ml-card h3{font-size:14px}}
+@media(max-width:480px){.ml-hero{padding:21px 17px;align-items:center}.ml-hero h2{font-size:24px}.ml-hero-stat{min-width:82px;padding:12px 9px}.ml-hero-stat strong{font-size:25px}.ml-hero-stat span{font-size:9px}.ml-filters{gap:9px;padding:12px}.ml-card-body{padding:11px 10px}.ml-card-meta{font-size:10px}.ml-preview-label{font-size:8px;left:7px;top:7px}.ml-illustration{min-height:0}.ml-card{grid-template-rows:105px 1fr}.ml-vehicle{height:110px}.ml-pagination{gap:8px}}
