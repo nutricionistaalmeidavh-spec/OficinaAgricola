@@ -65,7 +65,7 @@ button:active:not(:disabled){filter:brightness(.94)}
 .modal-head{flex:none;position:static}.modal-head h2{overflow-wrap:anywhere}
 #modalBody{overflow:auto;min-height:0;overscroll-behavior:contain;scroll-padding:16px}
 body.modal-open{overflow:hidden}
-.toast{z-index:var(--z-toast);max-width:min(440px,calc(100vw - 32px));overflow-wrap:anywhere}
+.toast{z-index:var(--z-toast);max-width:min(440px,calc(100vw - 32px));overflow-wrap:anywhere;pointer-events:none}
 @media(max-width:840px){
   .global-search-wrap{flex:initial;min-width:0}.top-actions{max-width:190px;justify-content:flex-end}
   .pending-commands{max-width:140px;font-size:12px}
