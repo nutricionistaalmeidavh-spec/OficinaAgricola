@@ -131,3 +131,6 @@ body.modal-open{overflow:hidden}
 
 /* P0 fiscal: papel sem acesso nunca vê o atalho, inclusive na navegação mobile. */
 .sidebar #nav button[hidden],.mobile-more-panel button[hidden]{display:none!important}
+
+/* Notificação informativa não pode bloquear navegação ou botões no mobile. */
+.toast{pointer-events:none}
