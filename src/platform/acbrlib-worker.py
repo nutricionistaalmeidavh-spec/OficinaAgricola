@@ -286,6 +286,28 @@ def nfse_consult(lib, req):
             "accessKey": key, "protocol": code, "number": issued, "series": series, "xml": xml}
 
 
+def native_library(library_path):
+    # Python 3.8+ no Windows exige caminhos explicitamente autorizados para
+    # resolver dependências transitivas de DLLs. Nada é copiado para System32.
+    parent = Path(library_path).resolve().parent
+    if os.name == "nt":
+        for directory in (parent, parent / "deps"):
+            if directory.is_dir():
+                os.add_dll_directory(str(directory))
+    return ct.CDLL(str(library_path))
+
+
+def probe_library(path):
+    lib = native_library(path)
+    prefix = "NFSE" if "nfse" in Path(path).name.lower() else "NFE"
+    required = (prefix + "_Inicializar", prefix + "_Finalizar",
+                prefix + "_CarregarINI", prefix + "_LimparLista")
+    for name in required:
+        if not hasattr(lib, name):
+            raise ACBrError("DLL nativa sem exportação obrigatória: " + name)
+    return {"ok": True, "library": prefix, "exports": list(required)}
+
+
 def execute(req):
     if req.get("operation") not in ("transmit", "consult") or req.get("kind") not in ("NFE", "NFSE"):
         raise ACBrError("Operação fiscal inválida")
@@ -296,7 +318,7 @@ def execute(req):
     for field in ("libraryPath", "configPath", "iniPath"):
         if not Path(req.get(field, "")).is_file():
             raise ACBrError("Arquivo local obrigatório não encontrado: " + field)
-    lib = ct.CDLL(req["libraryPath"])
+    lib = native_library(req["libraryPath"])
     prefix = req["kind"]
     initialized = False
     try:
@@ -315,6 +337,17 @@ def execute(req):
 
 
 def main():
+    # Diagnóstico offline para smoke do instalador: não lê certificado nem transmite.
+    if len(sys.argv) == 2 and sys.argv[1] == "--self-test":
+        print(json.dumps({"ok": True, "frozen": bool(getattr(sys, "frozen", False))}))
+        return
+    if len(sys.argv) == 3 and sys.argv[1] == "--probe":
+        try:
+            print(json.dumps(probe_library(sys.argv[2])))
+        except Exception:
+            print(json.dumps({"ok": False, "error": "Biblioteca ACBr ausente ou incompatível"}))
+            sys.exit(2)
+        return
     # Nunca incluir dados de notas, INIs ou segredos em tracebacks ou stderr.
     try:
         raw = sys.stdin.buffer.read(65536 + 1)
