@@ -18,7 +18,7 @@ function oaOrderCard(order){
 async function renderDashboard(){
   pageTitle('Visão Geral','OPERAÇÃO EM TEMPO REAL');
   const [d,orders]=await Promise.all([api('/api/dashboard'),api('/api/work-orders')]);
-  const f=d.finance;
+  const f=d.finance||null;
   const pipeline=OA_PIPELINE.map(column=>{
     const items=orders.filter(order=>column.statuses.includes(order.status)).slice(0,4);
     return `<div class="oa-board-col"><div class="oa-board-title"><span>${column.label}</span><b>${orders.filter(order=>column.statuses.includes(order.status)).length}</b></div>${items.map(oaOrderCard).join('')||'<div class="empty" style="padding:24px 8px;font-size:11px">Sem OS</div>'}</div>`;
@@ -31,7 +31,7 @@ async function renderDashboard(){
       ${oaKpi('Aguard. aprovação',d.counts.AGUARDANDO_APROVACAO,'warn')}
       ${oaKpi('Em serviço',d.counts.EM_SERVICO,'active')}
       ${oaKpi('Prontas',d.counts.PRONTA,'ready')}
-      ${oaKpi('Faturamento do período',money(f.invoicedCents),'accent')}
+      ${f?oaKpi('Faturamento do período',money(f.invoicedCents),'accent'):''}
     </div>
     <section class="oa-board-card">
       <div class="oa-board-head"><div><h2>Ordens por status</h2><small>Acompanhamento rápido do fluxo da oficina</small></div><button class="btn sm" data-go="work-orders">Ver todas</button></div>

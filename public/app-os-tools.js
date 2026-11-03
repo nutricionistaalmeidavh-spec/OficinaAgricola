@@ -31,7 +31,7 @@ async function editFullWorkOrder(id){
     <div class="card"><small>Alterações de cliente, equipamento, problema, diagnóstico, técnico, datas, prioridade e observações serão registradas com usuário, data/hora, valor anterior e novo.</small></div>
     <button class="btn primary" type="submit">Salvar alterações</button>
   </form>`,async fd=>{
-    const o=formObj(fd); const body={customerId:Number(o.customerId),machineId:Number(o.machineId),problemReported:o.problemReported,diagnosis:o.diagnosis,technicianId:o.technicianId?Number(o.technicianId):null,priority:o.priority,enteredAt:new Date(o.enteredAt).toISOString(),estimatedDelivery:o.estimatedDelivery?new Date(o.estimatedDelivery).toISOString():null,internalNotes:o.internalNotes};
+    const o=formObj(fd); const body={expectedVersion:os.version,customerId:Number(o.customerId),machineId:Number(o.machineId),problemReported:o.problemReported,diagnosis:o.diagnosis,technicianId:o.technicianId?Number(o.technicianId):null,priority:o.priority,enteredAt:new Date(o.enteredAt).toISOString(),estimatedDelivery:o.estimatedDelivery?new Date(o.estimatedDelivery).toISOString():null,internalNotes:o.internalNotes};
     await api(`/api/work-orders/${id}`,{method:'PATCH',body}); toast('OS atualizada e alteração registrada'); await refreshCurrentPage();
   });
   $('#editOsCustomer').onchange=e=>{const opts=machineOptions(machines,e.target.value,null);renderRegion($('#editOsMachine'),opts||'<option value="">Nenhum equipamento deste cliente</option>')};
@@ -50,7 +50,7 @@ async function showWorkOrderHistory(id){
 
 async function downloadWorkOrderPdf(id,number){
   try{
-    const res=await fetch(`/api/work-orders/${id}/documents/work-order/pdf`,{headers:{Authorization:`Bearer ${state.token}`}}); if(!res.ok){let msg=await res.text();try{msg=JSON.parse(msg).error}catch{}throw new Error(msg)}
+    const res=await fetch(`/api/work-orders/${id}/documents/work-order/pdf`,{credentials:'same-origin'}); if(!res.ok){let msg=await res.text();try{msg=JSON.parse(msg).error}catch{}throw new Error(msg)}
     const blob=await res.blob(); const url=URL.createObjectURL(blob); const a=document.createElement('a');a.href=url;a.download=`OS-${number}.pdf`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);toast('PDF da OS gerado');
   }catch(e){toast(e.message,true)}
 }

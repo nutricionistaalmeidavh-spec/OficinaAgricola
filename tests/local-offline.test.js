@@ -6,9 +6,9 @@ import { resolveServerConfig, listLanUrls } from '../src/platform/network.js';
 const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 const readRepo = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('Assistência Técnica usa 3344 e escuta a rede local por padrão', () => {
-  assert.deepEqual(resolveServerConfig({}), { host: '0.0.0.0', port: 3344 });
-  assert.deepEqual(listLanUrls({ interfaces: { eth0: [{ family: 'IPv4', internal: false, address: '192.168.1.20' }] } }), ['http://192.168.1.20:3344']);
+test('Assistência Técnica usa 3344 e escuta somente loopback por padrão', () => {
+  assert.deepEqual(resolveServerConfig({}), { host: '127.0.0.1', port: 3344 });
+  assert.deepEqual(listLanUrls({ interfaces: { eth0: [{ family: 'IPv4', internal: false, address: '192.168.1.20' }] } }), ['https://192.168.1.20:3344']);
 });
 
 test('UI mostra estado do servidor local e transforma falha de rede em mensagem útil', async () => {

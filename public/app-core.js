@@ -1,5 +1,5 @@
 const $=(s,root=document)=>root.querySelector(s); const $$=(s,root=document)=>[...root.querySelectorAll(s)];
-const state={token:localStorage.getItem('oficina_token')||'',user:null,page:'dashboard',pageReady:false,pageEpoch:0,pageController:null,modalToken:null,modalKey:null};
+const state={token:'',user:null,page:'dashboard',pageReady:false,pageEpoch:0,pageController:null,modalToken:null,modalKey:null};
 const dirtyInputs=new WeakSet();
 // ID + usuário evita reenviar comandos para outra conta quando um banco for recriado.
 const currentCommandOwner=()=>state.user?
@@ -8,9 +8,15 @@ const commandQueue=window.OficinaCommands?.createQueue({
   send:({path,method,body})=>{
     // Autorizações nunca entram no IndexedDB; cada envio usa a sessão atual.
     const headers={'Content-Type':'application/json'};
-    if(state.token)headers.Authorization='Bearer '+state.token;
     const transport=window.localRuntime?.request||fetch;
     return transport(path,{method,headers,body:JSON.stringify(body)});
+  },
+  lookup:async({path,method,requestId})=>{
+    const query=new URLSearchParams({path,method,requestId});
+    const transport=window.localRuntime?.request||fetch;
+    const response=await transport('/api/commands/status?'+query.toString());
+    if(!response.ok)throw new Error('Não foi possível consultar a confirmação');
+    return response.json();
   }
 });
 async function updatePendingCommands(){
@@ -24,8 +30,8 @@ async function updatePendingCommands(){
     const count=pending.length;
     button.classList.toggle('hidden',count===0);
     button.textContent=count===0?'':count===1
-      ?'1 operação aguardando confirmação · Tentar novamente'
-      :count+' operações aguardando confirmação · Tentar novamente';
+      ?'1 operação aguardando confirmação · Revisar'
+      :count+' operações aguardando confirmação · Revisar';
   }catch(error){
     // Erro de armazenamento não pode ser tratado como operação confirmada.
     button.classList.remove('hidden');
@@ -48,6 +54,61 @@ async function resumePendingCommands(manual=false){
     }
   }catch(error){if(manual)toast(error.message,true)}
   finally{await updatePendingCommands()}
+}
+function pendingCommandLabel(record){
+  const path=record.path,body=record.body||{};
+  const label=path.includes('/receipts')?'Recebimento':
+    path.includes('/sales')?'Venda':
+    path.includes('/cash/')?'Operação de caixa':
+    path.includes('/inventory/')||path.endsWith('/parts')?'Movimentação de estoque':
+    path.includes('/work-orders')?'Ordem de serviço':
+    path.includes('/customers')?'Cliente':
+    path.includes('/machines')?'Equipamento':
+    path.includes('/expenses')?'Despesa':'Alteração de cadastro';
+  const name=body.name||body.description||body.title||body.problemReported||'';
+  const value=Number(body.amountCents);
+  return {label,detail:String(name).slice(0,120),
+    amount:Number.isFinite(value)&&value>0?money(value):null};
+}
+async function openPendingCommands(){
+  if(!state.user||!commandQueue)return;
+  const owner=currentCommandOwner(),rows=await commandQueue.list(owner);
+  if(!rows.length){toast('Nenhuma operação pendente');return}
+  rows.sort((a,b)=>a.createdAt-b.createdAt);
+  showModal('Operações aguardando confirmação',
+    `<div class="pending-list">
+      <p class="muted">Estas operações estão salvas neste dispositivo. O sistema consulta o servidor antes de reenviar uma tentativa.</p>
+      ${rows.map(item=>{
+        const d=pendingCommandLabel(item);
+        const highRisk=(item.policy||'review')==='review';
+        return `<section class="pending-item" data-pending-id="${esc(item.id)}">
+          <strong>${esc(d.label)}</strong> <span class="pill orange">${highRisk?'Revisão obrigatória':'Aguardando confirmação'}</span>
+          <p>${esc(d.detail)}${d.amount?' · '+esc(d.amount):''}</p>
+          <small>${new Date(item.createdAt).toLocaleString('pt-BR')} · ${item.status==='auth'?'Sessão necessária':item.status==='pending'?'Sem confirmação':'Enviado'}</small>
+          <div class="action-row"><button type="button" class="btn sm ${highRisk?'':'soft'}" data-queue-retry="${esc(item.id)}">
+            ${highRisk?'Revisar e tentar novamente':'Consultar / tentar novamente'}
+          </button></div>
+        </section>`;
+      }).join('')}
+    </div>`);
+  $$('[data-queue-retry]').forEach(button=>button.onclick=async()=>{
+    const id=button.dataset.queueRetry;
+    if(!state.user||currentCommandOwner()!==owner)return;
+    if(button.textContent.includes('Revisar')){
+      button.textContent='Confirmar tentativa desta operação';
+      button.classList.add('primary');
+      return;
+    }
+    button.disabled=true;
+    try{
+      const count=await commandQueue.replay(owner,{manual:true,ids:[id]});
+      if(count)await refreshCurrentPage();
+      await updatePendingCommands();
+      const remain=await commandQueue.list(owner);
+      if(!remain.length){closeModal();toast('Operação confirmada');}
+      else{closeModal();await openPendingCommands()}
+    }catch(error){toast(error.message,true);button.disabled=false}
+  });
 }
 commandQueue?.bus.on('pending',()=>void updatePendingCommands());
 commandQueue?.bus.on('confirmed',()=>void updatePendingCommands());
@@ -134,7 +195,8 @@ const money=c=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).
 const dt=v=>v?new Date(v).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'}):'—';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 async function api(path,{method='GET',body,raw=false}={}){
-  const headers={};if(state.token)headers.Authorization=`Bearer ${state.token}`;
+  const headers={};
+  if(path==='/api/auth/login')headers['X-Session-Transport']='cookie';
   if(body!==undefined)headers['Content-Type']='application/json';
   const requester=window.localRuntime?.request||fetch;
   const isRead=method==='GET',epoch=state.pageEpoch;
@@ -295,9 +357,9 @@ async function boot(){
   $('#today').textContent=new Date().toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'short'});
   try{
     const setup=await api('/api/setup/status');
-    if(setup.required){state.token='';localStorage.removeItem('oficina_token');return showSetup()}
+    if(setup.required){state.token='';return showSetup()}
   }catch{ /* The login view will display server errors if offline. */ }
-  if(!state.token)return showLogin();
+  // Sessão restaurada automaticamente pelo cookie HttpOnly; nunca pelo localStorage.
   try{
     state.user=await api('/api/auth/me');
     showApp();await navigate('dashboard');
@@ -317,7 +379,7 @@ function showApp(){$('#loginView').classList.add('hidden');$('#appView').classLi
 function logout(){
   if(modalSession)closeModal();
   state.pageController?.abort();state.pageEpoch++;state.pageReady=false;
-  state.token='';state.user=null;localStorage.removeItem('oficina_token');
+  state.token='';state.user=null;
   void updatePendingCommands();showLogin();
 }
 
@@ -348,6 +410,8 @@ async function refreshCurrentPage(){
   finally{refreshPromise=null;refreshQueued=false}
 }
 async function navigate(page,{force=false}={}){
+  $('#mobileMorePanel')?.classList.add('hidden');
+  $('#mobileMoreBtn')?.setAttribute?.('aria-expanded','false');
   if(state.page===page&&state.pageReady){
     if(force)return refreshCurrentPage();
     return;

@@ -81,9 +81,9 @@ export function consumePart(db,workOrderId,partId,input){
     return db.prepare('SELECT * FROM work_order_parts WHERE id=?').get(Number(r.lastInsertRowid));
   });
 }
-export function reverseWorkOrderPart(db,itemId,{note='',createdBy=null}={}){
+export function reverseWorkOrderPart(db,itemId,{note='',createdBy=null,workOrderId=null}={}){
   return transaction(db,()=>{
-    const item=db.prepare('SELECT * FROM work_order_parts WHERE id=?').get(itemId); if(!item)throw new Error('Consumo não encontrado'); if(item.reversed_at)throw new Error('Consumo já estornado');
+    const item=db.prepare('SELECT * FROM work_order_parts WHERE id=?').get(itemId); if(!item)throw new Error('Consumo não encontrado'); if(workOrderId!==null&&Number(item.work_order_id)!==Number(workOrderId))throw new Error('Consumo não pertence à OS informada'); if(item.reversed_at)throw new Error('Consumo já estornado');
     postStockMovement(db,item.part_id,{type:'ESTORNO',quantity:item.quantity,workOrderId:item.work_order_id,note,createdBy}); const t=nowIso();
     db.prepare('UPDATE work_order_parts SET reversed_at=? WHERE id=?').run(t,itemId); return {...item,reversed_at:t};
   });

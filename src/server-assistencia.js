@@ -1,6 +1,9 @@
 import { createServer } from 'node:http';
+import {createServer as createHttpsServer} from 'node:https';
 import { openDatabase, migrate, transaction } from './db.js';
 import { validateSession } from './auth.js';
+import {authTokenFrom,assertSameOrigin,hardenHttpResponse} from './platform/session-http.js';
+import {assertSecureNetwork} from './platform/network.js';
 import { createAppServer } from './server.js';
 import { migrateAssistencia } from './assistencia-schema.js';
 import {enqueueHttpEvent,dispatchOutbox} from './platform/outbox.js';
@@ -45,10 +48,7 @@ async function readJson(req, max = 4 * 1024 * 1024) {
   catch { throw new Error('JSON inválido'); }
 }
 
-function tokenFrom(req) {
-  const auth = req.headers.authorization || '';
-  return auth.startsWith('Bearer ') ? auth.slice(7).trim() : null;
-}
+const tokenFrom=authTokenFrom;
 
 function requireUser(db, req, allowed) {
   const user = validateSession(db, tokenFrom(req));
@@ -65,6 +65,8 @@ function positiveId(value) {
 function errorStatus(error) {
   const message = String(error?.message || '');
   if (/Credenciais|Sessão/.test(message)) return 401;
+  if (/Origem|HTTPS obrigatório/.test(message)) return 403;
+  if (/Conflito de versão/.test(message)) return 409;
   if (/Permissão/.test(message)) return 403;
   if (/não encontrad/i.test(message)) return 404;
   if (/já |insuficiente|caixa aberto|Abra o caixa|UNIQUE constraint/i.test(message)) return 409;
@@ -150,18 +152,22 @@ export function createAssistenciaServer({
   db = openDatabase(process.env.DATABASE_PATH || './data/artisys-oficina.sqlite'),
   storageDir = process.env.STORAGE_DIR || './storage/assistencia-tecnica/uploads',
   eventRuntime = null,
+  tls = null,
 } = {}) {
   migrate(db);
   migrateAssistencia(db);
   const baseServer = createAppServer({ db, storageDir, eventRuntime });
 
-  return createServer(async (req, res) => {
+  const handler=async (req,res) => {
     const url = new URL(req.url || '/', 'http://localhost');
     if (!isAssistenciaApi(url.pathname)) {
       baseServer.emit('request', req, res);
       return;
     }
+    hardenHttpResponse(res,req);
     try {
+      assertSecureNetwork(req);
+      assertSameOrigin(req);
       const mutation=['POST','PUT','PATCH','DELETE'].includes(req.method||'');
       const body=mutation?await readJson(req):{};
       const actor=mutation?validateSession(db,tokenFrom(req)):null;
@@ -179,5 +185,6 @@ export function createAssistenciaServer({
       console.error('[assistencia]', req.method, url.pathname, error.message);
       json(res, errorStatus(error), { error: error.message || 'Erro interno' });
     }
-  });
+  };
+  return tls?createHttpsServer(tls,handler):createServer(handler);
 }

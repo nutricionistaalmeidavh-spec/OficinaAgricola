@@ -92,7 +92,7 @@ test('servidor da assistência publica eventos reais de OS, estoque, venda e cai
   const machine = await request(base, '/api/machines', { method: 'POST', token, body: { customerId: customer.id, type: 'Notebook', brand: 'Dell', model: 'Latitude' } });
   const tech = await request(base, '/api/technicians', { method: 'POST', token, body: { name: 'Técnico Evento' } });
   const os = await request(base, '/api/work-orders', { method: 'POST', token, body: { customerId: customer.id, machineId: machine.id, technicianId: tech.id, problemReported: 'Não liga' } });
-  await request(base, `/api/work-orders/${os.id}/status`, { method: 'POST', token, body: { status: 'DIAGNOSTICO' } });
+  await request(base, `/api/work-orders/${os.id}/status`, { method: 'POST', token, body: { status: 'DIAGNOSTICO', expectedVersion: os.version } });
 
   const part = await request(base, '/api/parts', { method: 'POST', token, body: { sku: 'EVT-1', description: 'Peça Evento', salePriceCents: 5000, minStock: 1 } });
   await request(base, '/api/inventory/movements', { method: 'POST', token, body: { partId: part.id, type: 'ENTRADA', quantity: 3 } });

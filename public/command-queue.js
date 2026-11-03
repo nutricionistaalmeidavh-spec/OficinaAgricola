@@ -11,8 +11,23 @@
    if(Array.isArray(value))return value.some(hasPrivateValue);
    return Object.keys(value).some(k=>privateKey.test(k)||hasPrivateValue(value[k]));
  }
- function isQueueable(path,body){
-   if(typeof path!=='string'||!path.startsWith('/api/')||forbiddenPath.test(path))return false;
+ // Nunca armazenar operações irreversíveis, sessões ou consultas não cadastradas.
+ const safeCreate=/^\/api\/(?:customers|machines|work-orders|parts|services|schedule|expenses|inventory\/movements|sales|cash\/open|cash\/current\/movements|cash\/current\/close)$/;
+ const safeLinked=/^\/api\/work-orders\/\d+\/(?:parts|receipts|checklists)$/;
+ const safeUpdate=/^\/api\/(?:customers|machines|parts|services|schedule|expenses|company|work-orders)(?:\/\d+)?$/;
+ function operationPolicy(path,method='POST'){
+   const verb=String(method||'POST').toUpperCase();
+   if(verb==='POST'&&safeCreate.test(path)){
+     return /(?:sales|cash|expenses|inventory)/.test(path)?'review':'auto';
+   }
+   if(verb==='POST'&&safeLinked.test(path))return /receipts|parts/.test(path)?'review':'auto';
+   if(['PATCH','PUT'].includes(verb)&&safeUpdate.test(path))return 'review';
+   if(verb==='PUT'&&/^\/api\/work-orders\/\d+\/quote$/.test(path))return 'review';
+   return 'never';
+ }
+ function isQueueable(path,body,method='POST'){
+   if(typeof path!=='string'||!path.startsWith('/api/')||forbiddenPath.test(path)||
+      operationPolicy(path,method)==='never')return false;
    if(!body||typeof body!=='object'||Array.isArray(body)||hasPrivateValue(body))return false;
    try{return stringify(body).length<=MAX_BYTES}catch{return false}
  }
@@ -72,23 +87,43 @@
      list:ownerId=>operation('readonly',store=>store.index('ownerId').getAll(String(ownerId)))
    };
  }
- function createQueue({store=openIndexedDB(),send,bus=createEventBus(),now=()=>Date.now(),
+ function createQueue({store=openIndexedDB(),send,lookup=null,bus=createEventBus(),now=()=>Date.now(),
    createId=()=>root.crypto?.randomUUID?.()||('op-'+Date.now()+'-'+Math.random().toString(36).slice(2))}={}){
    if(typeof send!=='function')throw new Error('Transportador de comandos obrigatório');
+   const channel=root.BroadcastChannel?new root.BroadcastChannel('oficina-command-status'):null;
+   if(channel)channel.onmessage=()=>bus.emit('external-change',{});
    const inFlight=new Map();
    let replaying=null;
-   const notify=(type,record,extra={})=>bus.emit(type,{
-     requestId:record.body.requestId,ownerId:record.ownerId,
-     method:record.method,path:record.path,...extra
-   });
+   const notify=(type,record,extra={})=>{
+     bus.emit(type,{requestId:record.body.requestId,ownerId:record.ownerId,
+       method:record.method,path:record.path,...extra});
+     channel?.postMessage({type,ownerId:record.ownerId});
+   };
    const fingerprint=(method,path,body)=>method+' '+path+' '+stringify(
      Object.fromEntries(Object.entries(body).filter(([key])=>key!=='requestId').sort(([a],[b])=>a.localeCompare(b)))
    );
    async function attempt(record){
      if(inFlight.has(record.id))return inFlight.get(record.id);
      const task=(async()=>{
+       const perform=async()=>{
+         // Fonte de verdade: consultar o SQLite antes de repetir uma operação incerta.
+         if(typeof lookup==='function'&&record.status!=='sending'){
+           const state=await lookup({method:record.method,path:record.path,
+             requestId:record.body.requestId,ownerId:record.ownerId}).catch(()=>null);
+           if(state?.status==='CONFIRMED'){
+             await store.delete(record.id);
+             notify('confirmed',record,{recovered:true});
+             return {ok:true,status:200,text:async()=>JSON.stringify(state.result||{})};
+           }
+         }
+         return send({method:record.method,path:record.path,body:record.body,ownerId:record.ownerId});
+       };
        let response;
-       try{response=await send({method:record.method,path:record.path,body:record.body,ownerId:record.ownerId})}
+       try{
+         // Web Locks coordena abas da mesma origem. Idempotência SQLite é a proteção final.
+         response=root.navigator?.locks?.request
+           ?await root.navigator.locks.request('oficina:'+record.id,perform):await perform();
+       }
        catch(error){
          await store.put({...record,status:'pending',lastAttemptAt:now(),lastError:'Sem conexão'});
          notify('pending',record);
@@ -119,7 +154,7 @@
    }
    async function execute({ownerId,path,method='POST',body={}}){
      const verb=String(method).toUpperCase();
-     if(!isQueueable(path,body))return send({ownerId,path,method:verb,body});
+     if(!isQueueable(path,body,verb))return send({ownerId,path,method:verb,body});
      if(ownerId===null||ownerId===undefined||ownerId==='')throw new Error('Sessão necessária para salvar operação');
      const user=String(ownerId);
      const requestId=String(body.requestId||createId());
@@ -136,18 +171,20 @@
          throw pendingError();
      }
      const record=existing||{id,ownerId:user,method:verb,path,body:payload,
-       createdAt:now(),status:'sending'};
+       policy:operationPolicy(path,verb),createdAt:now(),status:'sending'};
      // Persistência ANTES de chamar HTTP: em caso de queda nada é perdido.
      await store.put(record);
      return attempt(record);
    }
-   async function replay(ownerId,{manual=false,maxAutoAgeMs=30*60*1000}={}){
+   async function replay(ownerId,{manual=false,maxAutoAgeMs=30*60*1000,ids=null}={}){
      if(ownerId===null||ownerId===undefined)return 0;
      if(replaying)return replaying;
      replaying=(async()=>{
        let count=0;
        const entries=(await store.list(String(ownerId))).sort((a,b)=>a.createdAt-b.createdAt);
        for(const record of entries){
+         if(ids&&!ids.includes(record.id))continue;
+         if(!manual&&(record.policy||'review')!=='auto')continue;
          if(!manual&&now()-record.createdAt>maxAutoAgeMs)continue;
          if(record.status==='auth'&&!manual)continue;
          try{
@@ -165,5 +202,5 @@
    }
    return {execute,replay,list:ownerId=>store.list(String(ownerId)),bus};
  }
- root.OficinaCommands={createQueue,createEventBus,openIndexedDB,isQueueable};
+ root.OficinaCommands={createQueue,createEventBus,openIndexedDB,isQueueable,operationPolicy};
 })(window);

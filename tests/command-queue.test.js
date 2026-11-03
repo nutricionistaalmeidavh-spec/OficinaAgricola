@@ -30,7 +30,7 @@ test('RED: write-ahead persists before network, restores same ID after reload an
  assert.equal(pending[0].body.requestId,'sale-durable-001');
  assert.equal(JSON.stringify(pending).includes('Bearer '),false);
  const recovered=mod.createQueue({store,send:async cmd=>{sent.push(cmd);return ok()}});
- assert.equal(await recovered.replay(7),1);
+ assert.equal(await recovered.replay(7,{manual:true}),1);
  assert.equal((await store.list('7')).length,0);
  assert.equal(sent[0].body.requestId,sent[1].body.requestId);
 });
@@ -119,4 +119,37 @@ test('old pending commands require explicit user retry instead of silent delayed
  assert.equal((await store.list('1')).length,1);
  assert.equal(await recovered.replay(1,{manual:true}),1);
  assert.equal(calls,1);
+});
+
+test('P0: operações financeiras pendentes exigem ação humana; cadastros recentes podem ser recuperados automaticamente',async()=>{
+ const mod=loadQueue(),store=memoryStore(),events=[];
+ const failing=mod.createQueue({store,send:async()=>offline()});
+ await assert.rejects(failing.execute({ownerId:1,path:'/api/sales',body:{requestId:'sale-review',items:[{serviceId:1,quantity:1}],paymentMethod:'PIX'}}));
+ await assert.rejects(failing.execute({ownerId:1,path:'/api/customers',body:{requestId:'customer-auto',name:'Joana'}}));
+ const resumed=mod.createQueue({store,send:async x=>{events.push(x.path);return ok()}});
+ assert.equal(await resumed.replay(1),1);
+ assert.deepEqual(events,['/api/customers']);
+ assert.equal((await store.list('1')).length,1);
+ assert.equal(await resumed.replay(1,{manual:true}),1);
+ assert.equal((await store.list('1')).length,0);
+});
+
+test('P0: consulta server-side confirma operação já gravada sem reexecutar HTTP',async()=>{
+ const mod=loadQueue(),store=memoryStore();let sent=0;
+ const lost=mod.createQueue({store,send:async()=>offline()});
+ await assert.rejects(lost.execute({ownerId:5,path:'/api/customers',body:{requestId:'server-already-ack',name:'Maria'}}));
+ const q=mod.createQueue({store,
+   send:async()=>{sent++;return ok()},
+   lookup:async()=>({status:'CONFIRMED',result:{id:71,name:'Maria'}})
+ });
+ const confirmed=await q.replay(5);
+ assert.equal(confirmed,1);assert.equal(sent,0);
+ assert.equal((await store.list('5')).length,0);
+});
+test('P0: comandos destrutivos e dados de credenciais nunca entram na fila persistida',()=>{
+ const mod=loadQueue();
+ assert.equal(mod.isQueueable('/api/sales/7/cancel',{requestId:'cancel-7'},'POST'),false);
+ assert.equal(mod.isQueueable('/api/work-orders/3/parts/17/reverse',{requestId:'reverse-17'},'POST'),false);
+ assert.equal(mod.isQueueable('/api/auth/login',{username:'admin'},'POST'),false);
+ assert.equal(mod.isQueueable('/api/company',{name:'Nova empresa'},'PATCH'),true);
 });
