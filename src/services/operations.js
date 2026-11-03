@@ -1,3 +1,4 @@
+import {selectPage} from '../platform/pagination.js';
 import { mkdirSync, writeFileSync, rmSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve, relative } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -184,4 +185,11 @@ export function recoverOrphanAttachments(db,storageDir,{olderThanMs=3600000}={})
     }
   }
   return removed;
+}
+
+export function listSchedulePage(db,{from='1970-01-01T00:00:00.000Z',to='2999-12-31T23:59:59.999Z',limit=50,cursor=null}={}){
+  return selectPage(db,{from:'FROM schedule_events e LEFT JOIN customers c ON c.id=e.customer_id LEFT JOIN machines m ON m.id=e.machine_id LEFT JOIN technicians t ON t.id=e.technician_id LEFT JOIN work_orders wo ON wo.id=e.work_order_id',
+    select:'e.*,c.name customer_name,m.model machine_model,t.name technician_name,wo.os_number',
+    where:['e.starts_at>=?','e.starts_at<=?'],args:[from,to],
+    sort:'e.starts_at',id:'e.id',direction:'ASC',cursor,limit,scope:'schedule'});
 }
