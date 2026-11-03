@@ -1,3 +1,4 @@
+import {selectPage} from '../platform/pagination.js';
 import { createHash } from 'node:crypto';
 import { nowIso, transaction } from '../db.js';
 import { postStockMovement } from './inventory.js';
@@ -273,4 +274,13 @@ export function closeCashSession(db,{closingCents,note='',requestId=null}={}){
       .run(nowIso(),closing,summary.expectedCashCents,difference,text(note)||session.notes,session.id);
     return db.prepare('SELECT * FROM cash_sessions WHERE id=?').get(session.id);
   });
+}
+
+export function listSalesPage(db,{limit=50,search='',status='',cursor=null}={}){
+  const where=[],args=[];
+  if(search){const q='%'+text(search)+'%';where.push('(CAST(s.sale_number AS TEXT) LIKE ? OR c.name LIKE ?)');args.push(q,q);}
+  if(status){where.push('s.status=?');args.push(text(status));}
+  return selectPage(db,{from:'FROM sales s LEFT JOIN customers c ON c.id=s.customer_id LEFT JOIN users u ON u.id=s.created_by',
+    select:'s.*,c.name customer_name,u.name created_by_name',where,args,
+    sort:'s.id',id:'s.id',cursor,limit,scope:'sales'});
 }
