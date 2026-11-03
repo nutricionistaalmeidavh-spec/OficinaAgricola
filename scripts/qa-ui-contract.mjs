@@ -42,10 +42,20 @@ export async function verifyUiContract(page,viewportName,outputDir){
     assert.equal(geometry.statusPosition,'static');
     assert.equal(geometry.searchVisible,true);
     assert.ok(geometry.labels.every(item=>item.fits),`Nav labels overlap: ${JSON.stringify(geometry.labels)}`);
-    await page.locator('[data-page="settings"]').scrollIntoViewIfNeeded();
     if(width<=840){
-      const last=await page.locator('[data-page="settings"]').boundingBox();
-      assert.ok(last.x>=0&&last.x+last.width<=width,'Last menu item is unreachable');
+      // Configurações está no menu Mais: o destino equivalente no nav principal é oculto.
+      const more=page.locator('#mobileMoreBtn');
+      await more.waitFor({state:'visible'});
+      await more.click();
+      const settings=page.locator('#mobileMorePanel [data-mobile-page="settings"]');
+      await settings.waitFor({state:'visible'});
+      const last=await settings.boundingBox();
+      assert.ok(last&&last.x>=0&&last.x+last.width<=width,'Last menu item is unreachable');
+      assert.equal(await more.getAttribute('aria-expanded'),'true');
+      await more.click();
+      await settings.waitFor({state:'hidden'});
+    }else{
+      await page.locator('[data-page="settings"]').scrollIntoViewIfNeeded();
     }
     findings.push({width,...geometry});
   }

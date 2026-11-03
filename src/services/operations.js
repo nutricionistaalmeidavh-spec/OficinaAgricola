@@ -140,7 +140,7 @@ export function saveAttachment(db,workOrderId,input){
       const ext=MIME_EXT.get(command.mimeType);
       if(!ext)throw new Error('Tipo de arquivo não permitido');
       const raw=Buffer.from(String(command.base64||''),'base64');
-      const maxBytes=Number(command.maxBytes??5*1024*1024);
+      const maxBytes=5*1024*1024; // limite exclusivo do servidor, nunca do cliente
       if(raw.length===0)throw new Error('Arquivo vazio');
       if(raw.length>maxBytes)throw new Error('Arquivo excede o limite permitido');
       const root=resolve(command.storageDir||process.env.STORAGE_DIR||'./storage/uploads');

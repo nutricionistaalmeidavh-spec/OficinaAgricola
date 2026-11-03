@@ -89,3 +89,42 @@ body.modal-open{overflow:hidden}
   #nav button:hover{background:var(--green-3);color:var(--green)}
   #nav button:focus-visible{outline-color:var(--green-2)}
 }
+
+/* Mobile P0: destinos curtos + menu Mais; evita rótulos sobrepostos e scroll invisível. */
+.mobile-more-trigger,.mobile-more-panel{display:none}
+.pending-list{display:grid;gap:11px}
+.pending-item{border:1px solid var(--oa-line);border-radius:12px;padding:12px;background:#fff}
+.pending-item p{margin:7px 0;font-size:13px}
+.pending-item small{display:block;color:var(--oa-muted);margin-bottom:9px}
+@media(max-width:840px){
+  .sidebar{display:flex;flex-direction:row;align-items:center;height:calc(70px + env(safe-area-inset-bottom));
+    padding:5px 5px calc(5px + env(safe-area-inset-bottom))}
+  .sidebar #nav{display:flex!important;flex:1;min-width:0;overflow:visible;justify-content:space-around;gap:2px}
+  .sidebar #nav button{display:flex!important;flex-direction:column;align-items:center;justify-content:center;
+    min-width:0;flex:1;padding:5px 2px;gap:2px}
+  .sidebar #nav button:nth-child(n+5){display:none!important}
+  .sidebar #nav button b{font-size:10px;line-height:1.15;white-space:normal;text-align:center;
+    overflow-wrap:anywhere}
+  .sidebar #nav button .nav-icon{line-height:1.2;font-size:20px}
+  .mobile-more-trigger{display:flex;flex-direction:column;justify-content:center;align-items:center;
+    flex:0 0 62px;gap:2px;border:0;background:transparent;color:#506359;font-size:20px}
+  .mobile-more-trigger span{font-size:11px;font-weight:650}
+  .mobile-more-trigger[aria-expanded=true]{color:var(--oa-green);background:var(--oa-green-3);border-radius:10px}
+  .mobile-more-panel{position:fixed;z-index:105;bottom:calc(82px + env(safe-area-inset-bottom));
+    right:10px;left:10px;max-height:min(62vh,450px);overflow-y:auto;
+    grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;padding:12px;
+    background:#fff;border:1px solid var(--oa-line);border-radius:15px;
+    box-shadow:0 14px 42px rgba(8,24,16,.20)}
+  .mobile-more-panel:not(.hidden){display:grid}
+  .mobile-more-panel button{min-height:45px;text-align:left;font-size:13px;font-weight:600;
+    color:var(--oa-ink);background:#f7faf8;border:1px solid var(--oa-line);border-radius:9px;padding:9px}
+  .mobile-more-panel button:focus-visible{outline:3px solid var(--oa-green);outline-offset:2px}
+  .topbar{gap:7px}
+  .top-actions{gap:5px;min-width:0}
+  .pending-commands{max-width:170px;font-size:10px;padding:6px 8px}
+  .toast{left:12px;right:12px;bottom:calc(95px + env(safe-area-inset-bottom));max-width:100%}
+  .server-status{left:12px;bottom:calc(77px + env(safe-area-inset-bottom));max-width:calc(100vw - 24px)}
+  .kanban,.oa-board{scroll-snap-type:x proximity}
+  .kanban-col,.oa-board-col{scroll-snap-align:start}
+  .main{padding-bottom:calc(83px + env(safe-area-inset-bottom))}
+}

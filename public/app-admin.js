@@ -7,7 +7,7 @@ function userModal(){const requestId=newCommandId();showModal('Novo usuário',`<
 function table(headers,rows){return `<div class="table-wrap"><table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.length?rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join(''):`<tr><td colspan="${headers.length}" class="empty">Nenhum registro.</td></tr>`}</tbody></table></div>`}
 
 const pendingRecovery=$('#pendingCommands');
-if(pendingRecovery)pendingRecovery.onclick=()=>void resumePendingCommands(true);
+if(pendingRecovery)pendingRecovery.onclick=()=>void openPendingCommands();
 $('#setupForm').addEventListener('submit',async e=>{
   e.preventDefault();
   const form=e.currentTarget,button=$('button[type="submit"]',form);
@@ -24,7 +24,37 @@ $('#setupForm').addEventListener('submit',async e=>{
   }catch(err){error.textContent=err.message}
   finally{button.disabled=false}
 });
-$('#loginForm').addEventListener('submit',async e=>{e.preventDefault();$('#loginError').textContent='';const o=formObj(new FormData(e.target));try{const result=await api('/api/auth/login',{method:'POST',body:o});state.token=result.token;state.user=result.user;localStorage.setItem('oficina_token',state.token);showApp();await navigate('dashboard');void updatePendingCommands();void resumePendingCommands()}catch(err){$('#loginError').textContent=err.message}});
+$('#loginForm').addEventListener('submit',async e=>{e.preventDefault();$('#loginError').textContent='';const o=formObj(new FormData(e.target));try{const result=await api('/api/auth/login',{method:'POST',body:o});state.user=result.user;state.token='';showApp();await navigate('dashboard');void updatePendingCommands();void resumePendingCommands()}catch(err){$('#loginError').textContent=err.message}});
 $('#logoutBtn').onclick=async()=>{try{await api('/api/auth/logout',{method:'POST',body:{}})}catch{}logout()};$('#modalClose').onclick=requestCloseModal;$('#modal').addEventListener('click',e=>{if(e.target.id==='modal')requestCloseModal()});$('#refreshBtn').onclick=()=>navigate(state.page,{force:true});$$('#nav button').forEach(b=>b.onclick=()=>navigate(b.dataset.page));
+// Barra mobile: quatro destinos diretos e demais módulos acessíveis por Mais.
+const mobileMore=$('#mobileMoreBtn'),mobilePanel=$('#mobileMorePanel');
+function closeMobileMore(){
+  mobilePanel?.classList.add('hidden');
+  mobileMore?.setAttribute('aria-expanded','false');
+}
+if(mobileMore)mobileMore.onclick=()=>{
+  const open=mobilePanel.classList.toggle('hidden')===false;
+  mobileMore.setAttribute('aria-expanded',String(open));
+  if(open)mobilePanel.querySelector('button')?.focus();
+};
+$$('[data-mobile-page]').forEach(button=>button.onclick=()=>{
+  closeMobileMore();void navigate(button.dataset.mobilePage);
+});
+const mobileSearch=$('#mobileSearchBtn');
+if(mobileSearch)mobileSearch.onclick=()=>{
+  closeMobileMore();
+  showModal('Buscar na oficina',`<form class="form-stack">
+    <label>Cliente, equipamento ou OS<input name="query" type="search" minlength="2" autofocus required placeholder="Digite para buscar"></label>
+    <button class="btn primary" type="submit">Buscar</button>
+  </form>`,async fd=>{await runGlobalSearch(String(fd.get('query')||''))});
+};
+const mobileLogout=$('#mobileLogoutBtn');
+if(mobileLogout)mobileLogout.onclick=()=>{
+  closeMobileMore();$('#logoutBtn').click();
+};
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeMobileMore()});
+document.addEventListener('click',e=>{
+  if(mobileMore&&!mobileMore.contains(e.target)&&!mobilePanel?.contains(e.target))closeMobileMore();
+});
 boot();
 

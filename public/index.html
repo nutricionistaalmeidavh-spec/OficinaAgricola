@@ -62,6 +62,19 @@
         <button data-page="technicians"><span class="nav-icon">◌</span><b>Técnicos</b></button>
         <button data-page="settings"><span class="nav-icon">⚙</span><b>Configurações</b></button>
       </nav>
+      <button id="mobileMoreBtn" class="mobile-more-trigger" type="button" aria-expanded="false" aria-controls="mobileMorePanel" aria-label="Mais opções">☷ <span>Mais</span></button>
+      <div id="mobileMorePanel" class="mobile-more-panel hidden" role="group" aria-label="Mais opções da oficina">
+        <button type="button" data-mobile-page="machines">Equipamentos</button>
+        <button type="button" data-mobile-page="services">Serviços</button>
+        <button type="button" data-mobile-page="inventory">Estoque</button>
+        <button type="button" data-mobile-page="sales">Vendas e caixa</button>
+        <button type="button" data-mobile-page="finance">Financeiro</button>
+        <button type="button" data-mobile-page="reports">Relatórios</button>
+        <button type="button" data-mobile-page="technicians">Técnicos</button>
+        <button type="button" data-mobile-page="settings">Configurações</button>
+        <button type="button" id="mobileSearchBtn">Buscar cliente, OS...</button>
+        <button type="button" id="mobileLogoutBtn">Sair da conta</button>
+      </div>
       <div class="sidebar-user">
         <div class="avatar" id="avatar">A</div>
         <div><strong id="userName">—</strong><small id="userRole">—</small></div>
