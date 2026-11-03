@@ -16,6 +16,7 @@ import { createWorkOrder, listWorkOrders, listWorkOrdersPage, getWorkOrder, upda
 import { saveQuote, getQuote, submitQuote, approveQuote, rejectQuote } from './services/quotes.js';
 import { renderDocument, renderPdfDocument, renderDiagnosticPdf } from './documents.js';
 import {listDiagnosticAdapters} from './services/diagnostics.js';
+import {executeDiagnosticWorker,isLocalHardwareRequest} from './platform/diagnostic-hardware.js';
 import { createPart, listParts, updatePart, addInventoryMovement, consumePart, reverseWorkOrderPart, listWorkOrderParts, lowStockParts } from './services/inventory.js';
 import { createScheduleEvent, listSchedule, updateScheduleEvent, createChecklistTemplate, getChecklistTemplate, listChecklistTemplates, createWorkOrderChecklist, listWorkOrderChecklists, saveAttachment, listAttachments } from './services/operations.js';
 import { addReceipt, reverseReceipt, listReceipts, getPaymentSummary, createExpense, updateExpense, listExpenses, financeSummary } from './services/finance.js';
@@ -92,6 +93,16 @@ function createRouter({db,storageDir}){
   add('POST','/api/machines/:id/maintenance',ROLE_OFFICE,({params,body})=>createServiceRecord(db,int(params.id),body));
   add('GET','/api/machines/:id/compatible-parts',ROLE_ALL,({params})=>listCompatibleParts(db,int(params.id)));
   add('GET','/api/diagnostics/adapters',ROLE_ALL,()=>listDiagnosticAdapters());
+  // A ponte física só opera no computador principal, jamais através de acesso LAN.
+  add('GET','/api/diagnostics/hardware',ROLE_TECH,({req})=>{
+    if(!isLocalHardwareRequest(req))throw new Error('Permissão: diagnóstico físico somente no computador principal');
+    return executeDiagnosticWorker('probe');
+  });
+  add('GET','/api/diagnostics/capture',ROLE_TECH,({req,url})=>{
+    if(!isLocalHardwareRequest(req))throw new Error('Permissão: diagnóstico físico somente no computador principal');
+    const params=Object.fromEntries(url.searchParams);
+    return executeDiagnosticWorker('capture',params);
+  });
   add('GET','/api/machines/:id/obd-scans',ROLE_ALL,({params})=>listDiagnosticScans(db,int(params.id)));
   add('GET','/api/machines/:id/obd-scans/:scanId/pdf',ROLE_ALL,({params})=>({__binary:renderDiagnosticPdf(db,int(params.id),int(params.scanId)),mimeType:'application/pdf',filename:'Diagnostico-'+int(params.scanId)+'.pdf'}));
   add('POST','/api/machines/:id/obd-scans',ROLE_TECH,({params,body})=>createDiagnosticScan(db,int(params.id),body));
@@ -219,7 +230,7 @@ export function createAppServer({db=openDatabase(),storageDir=process.env.STORAG
             body.requestId??req.headers['idempotency-key'],{body},invoke);
           if(!res.writableEnded)enqueueHttpEvent(db,req.method,url.pathname,output,{requestId:body.requestId??req.headers['idempotency-key'],actorId:user?.id??null});
           return output;
-        }):invoke();
+        }):await invoke();
         if(res.writableEnded)return;
         if(req.method==='POST'&&url.pathname==='/api/auth/logout')clearBrowserCookie(res,req);
         if(isMutation&&eventRuntime)void dispatchOutbox(db,eventRuntime).catch(e=>console.error('[outbox]',e.message));
