@@ -100,6 +100,18 @@ async function showFiscalHistory(id){
     '<p><strong>Origem:</strong> '+esc(doc.origin_type)+' #'+doc.origin_id+'</p>'+
     (doc.access_key?'<p><strong>Chave:</strong> '+esc(doc.access_key)+'</p>':'')+
     (doc.protocol?'<p><strong>Protocolo:</strong> '+esc(doc.protocol)+'</p>':'')+
+    (doc.fiscal_number?'<p><strong>Número/série:</strong> '+esc(doc.fiscal_number)+' / '+esc(doc.fiscal_series||'—')+'</p>':'')+
+    (['AUTORIZADA','AUTORIZADA_HOMOLOGACAO'].includes(doc.status)?'<button id="downloadFiscalXml" class="btn">Baixar XML</button>':'')+
     (doc.last_error?'<p class="error">'+esc(doc.last_error)+'</p>':'')+
     '<h3>Eventos</h3><div class="list">'+(rows||'<div class="empty">Nenhum evento.</div>')+'</div>');
+  if($('#downloadFiscalXml'))$('#downloadFiscalXml').onclick=async()=>{
+    try{
+      const xml=await api('/api/fiscal/'+id+'/xml',{raw:true});
+      const blob=new Blob([xml],{type:'application/xml;charset=utf-8'});
+      const href=URL.createObjectURL(blob);
+      const link=document.createElement('a');link.href=href;link.download=doc.kind+'-'+id+'.xml';
+      document.body.appendChild(link);link.click();link.remove();
+      setTimeout(()=>URL.revokeObjectURL(href),1000);
+    }catch(error){toast(error.message,true)}
+  };
 }
