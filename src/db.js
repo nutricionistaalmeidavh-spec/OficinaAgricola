@@ -78,6 +78,7 @@ export function migrate(db) {
       internal_notes TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'ENTRADA',
       completed_at TEXT, delivered_at TEXT,
       snapshot_customer TEXT NOT NULL, snapshot_machine TEXT NOT NULL,
+      version INTEGER NOT NULL DEFAULT 1,
       quote_total_cents INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL, updated_at TEXT NOT NULL
     );
@@ -247,6 +248,8 @@ export function migrate(db) {
     CREATE INDEX IF NOT EXISTS idx_receipts_os ON receipts(work_order_id);
   `);
   // Migrate older local SQLite files additively; never truncate or rewrite balances.
+  const workOrderCols=new Set(db.prepare("PRAGMA table_info('work_orders')").all().map(c=>c.name));
+  if(!workOrderCols.has('version'))db.exec('ALTER TABLE work_orders ADD COLUMN version INTEGER NOT NULL DEFAULT 1');
   const checklistCols=new Set(db.prepare("PRAGMA table_info('checklist_template_items')").all().map(c=>c.name));
   if(!checklistCols.has('required'))
     db.exec('ALTER TABLE checklist_template_items ADD COLUMN required INTEGER NOT NULL DEFAULT 1 CHECK(required IN (0,1))');
