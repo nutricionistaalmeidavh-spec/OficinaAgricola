@@ -46,6 +46,7 @@ test('fiscal identifica documento pelo número autorizado ou vínculo comercial'
 test('kanban operacional pagina por status e trata coluna vazia',()=>{
   const orders=read('public/app-orders.js');
   assert.match(orders,/data-os-more/);
+  assert.match(orders,/\$\$\('\[data-os-more\]'\)\.forEach/);
   assert.match(orders,/status='\+encodeURIComponent\(status\)/);
   assert.match(orders,/Nenhuma OS nesta etapa/);
   assert.match(orders,/Carregando OS/);
