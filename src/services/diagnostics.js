@@ -95,7 +95,7 @@ function parseVin(raw){
 export function decodeJ1939Frame(frame){
  if(!frame||!Number.isInteger(frame.id)||frame.id<0||frame.id>0x1FFFFFFF)
    throw new Error('Identificador J1939 inválido');
- const compact=String(frame.data||'').replace(/\\s/g,'').toUpperCase();
+ const compact=String(frame.data||'').replace(/\s/g,'').toUpperCase();
  if(!/^[0-9A-F]{16}$/.test(compact))throw new Error('Quadro J1939 inválido: são necessários 8 bytes');
  const b=compact.match(/.{2}/g).map(h=>parseInt(h,16));
  const pf=(frame.id>>>16)&255,ps=(frame.id>>>8)&255;
