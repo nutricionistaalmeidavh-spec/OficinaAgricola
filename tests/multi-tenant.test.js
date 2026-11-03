@@ -65,6 +65,17 @@ test('HTTP isolation: company and unit records, member roles and revoked access'
   const bAgain=await request('GET','/api/customers',undefined,second);
   assert.deepEqual(aAgain.data.map(x=>x.name),['Cliente somente matriz']);
   assert.deepEqual(bAgain.data.map(x=>x.name),['Cliente da empresa B']);
+  const sku=await request('POST','/api/parts',{sku:'PART-A-ONLY',description:'Componente exclusivo'},1);
+  assert.equal(sku.status,200,JSON.stringify(sku.data));
+  const partsOfB=await request('GET','/api/parts',undefined,second);
+  assert.equal(partsOfB.status,200);
+  assert.deepEqual(partsOfB.data,[],'inventory is physically isolated');
+  const expense=await request('POST','/api/expenses',{description:'Despesa B',amountCents:5500},second);
+  assert.equal(expense.status,200,JSON.stringify(expense.data));
+  const expensesOfA=await request('GET','/api/expenses',undefined,1);
+  assert.equal(expensesOfA.status,200);
+  assert.deepEqual(expensesOfA.data,[],'financial entries must never cross companies');
+  assert.equal((await request('GET','/api/health')).status,200,'health must remain public');
   const unit=await request('POST','/api/tenancy/units',{companyId:newCompany.data.id,code:'FILIAL',name:'Filial Norte'});
   assert.equal(unit.status,201,JSON.stringify(unit.data));
   const member=await request('POST','/api/tenancy/memberships',{unitId:unit.data.id,username:'technician',name:'Técnico Filial',password:'StrongP@ss2026',role:'TECNICO'});
