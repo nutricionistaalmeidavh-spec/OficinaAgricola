@@ -70,6 +70,37 @@ try{
   await sleep(700);
   await page.screenshot({path:path.join(outputDir,'02-ordens.png'),fullPage:true});
 
+  // PR #14: criar OS encerrada via API real e verificar histórico, filtro, busca e modal.
+  const archivedOsNumber=await page.evaluate(async()=>{
+    const customers=await api('/api/customers');
+    const machines=await api('/api/machines');
+    const machine=machines.find(m=>m.customer_id===customers[0].id);
+    if(!machine)throw new Error('QA: equipamento de cliente não encontrado');
+    const os=await api('/api/work-orders',{method:'POST',body:{
+      customerId:customers[0].id,machineId:machine.id,
+      problemReported:'QA14 Historico Encerrado',requestId:newCommandId()
+    }});
+    await api('/api/work-orders/'+os.id+'/status',{method:'POST',body:{
+      status:'CANCELADA',expectedVersion:os.version,requestId:newCommandId()
+    }});
+    return os.os_number;
+  });
+  await page.evaluate(()=>refreshCurrentPage());
+  await page.locator('#osArchiveRows').filter({hasText:'QA14 Historico Encerrado'}).waitFor({state:'visible'});
+  await page.locator('#osArchiveStatus').selectOption('ENTREGUE');
+  await page.waitForFunction(()=>!document.querySelector('#osArchiveRows')?.textContent.includes('QA14 Historico Encerrado'));
+  await page.locator('#osArchiveStatus').selectOption('CANCELADA');
+  await page.locator('#osArchiveSearch').fill('QA14 Historico Encerrado');
+  await page.locator('#osArchiveFilter').click();
+  await page.locator('#osArchiveRows').filter({hasText:'QA14 Historico Encerrado'}).waitFor({state:'visible'});
+  await page.locator('#osArchiveRows [data-os]').first().click();
+  await page.locator('#modalTitle').filter({hasText:'OS #'+archivedOsNumber}).waitFor({state:'visible'});
+  await page.locator('#modalClose').click();
+  await page.locator('#modal').waitFor({state:'hidden'});
+  await page.screenshot({path:path.join(outputDir,'10-os-closed-history.png'),fullPage:true});
+
+
+
   await page.locator('.os-card').first().click();
   await page.getByRole('button',{name:'Gerar PDF'}).waitFor({state:'visible'});
   await page.getByRole('button',{name:'Histórico'}).waitFor({state:'visible'});
@@ -206,6 +237,23 @@ try{
   await page.locator('#modalBody').filter({hasText:'Garantia'}).waitFor({state:'visible'});
   await page.screenshot({path:path.join(outputDir,'05-historico-automotivo.png'),fullPage:true});
 
+  // P0 fiscal: a UI deve mostrar claramente que rascunhos não são notas autorizadas.
+  await page.locator('#modalClose').click();
+  await navigateQa(page,'fiscal');
+  await page.locator('#fiscalNew').waitFor({state:'visible'});
+  await page.locator('#content').filter({hasText:'Um rascunho'}).waitFor({state:'visible'});
+  await page.screenshot({path:path.join(outputDir,'09-fiscal-nao-autorizado.png'),fullPage:true});
+  await page.locator('#fiscalSettings').click();
+  await page.locator('#modalBody input[name="issuerCnpj"]').waitFor({state:'visible'});
+  await page.locator('#modalClose').click();
+  await page.locator('#fiscalNew').click();
+  await page.locator('#modalBody select[name="kind"]').waitFor({state:'visible'});
+  await page.locator('#modalClose').click();
+  await navigateQa(page,'reports');
+  await page.locator('#content').filter({hasText:'OS entregues no mês'}).waitFor({state:'visible'});
+  await page.screenshot({path:path.join(outputDir,'10-relatorios-sql.png'),fullPage:true});
+
+
 
   // Fresh installation browser flow. This server uses its own disposable SQLite file.
   const setupPort=viewportName==='desktop'?3355:3356;
@@ -244,7 +292,7 @@ try{
     }finally{await first.close()}
   }finally{setupProcess.kill('SIGTERM')}
 
-  await writeFile(path.join(outputDir,'qa-summary.json'),`${JSON.stringify({status:'passed',viewport:viewportName,checks:['navigation-contrast-aa','mobile-nav-no-overlap','mobile-global-search','server-status-in-flow','modal-focus-trap-restore','modal-background-inert','form-error-draft-recovery','unsaved-discard-confirmation','keyboard-os-card','reduced-motion','login','dashboard','demo-data','work-orders','os-detail','edit-action','pdf-action','history-action','client-save-without-rerender','settings-draft-focus-preserved','vehicle-identity','review-and-warranty','first-run-admin-browser','durable-command-lost-response','offline-manual-command-retry']},null,2)}\n`);
+  await writeFile(path.join(outputDir,'qa-summary.json'),`${JSON.stringify({status:'passed',viewport:viewportName,checks:['navigation-contrast-aa','mobile-nav-no-overlap','mobile-global-search','server-status-in-flow','modal-focus-trap-restore','modal-background-inert','form-error-draft-recovery','unsaved-discard-confirmation','keyboard-os-card','reduced-motion','login','dashboard','demo-data','work-orders','os-detail','edit-action','pdf-action','history-action','client-save-without-rerender','settings-draft-focus-preserved','vehicle-identity','review-and-warranty','fiscal-read-only-and-config','reports-sql','first-run-admin-browser','durable-command-lost-response','offline-manual-command-retry']},null,2)}\n`);
 } catch(error){
   if(page)await page.screenshot({path:path.join(outputDir,'failure.png'),fullPage:true}).catch(()=>{});
   await writeFile(path.join(outputDir,'qa-summary.json'),`${JSON.stringify({status:'failed',viewport:viewportName,error:error.message},null,2)}\n`).catch(()=>{});

@@ -17,11 +17,12 @@ function oaOrderCard(order){
 
 async function renderDashboard(){
   pageTitle('Visão Geral','OPERAÇÃO EM TEMPO REAL');
-  const [d,orders]=await Promise.all([api('/api/dashboard'),api('/api/work-orders')]);
+  const d=await api('/api/dashboard');
   const f=d.finance||null;
   const pipeline=OA_PIPELINE.map(column=>{
-    const items=orders.filter(order=>column.statuses.includes(order.status)).slice(0,4);
-    return `<div class="oa-board-col"><div class="oa-board-title"><span>${column.label}</span><b>${orders.filter(order=>column.statuses.includes(order.status)).length}</b></div>${items.map(oaOrderCard).join('')||'<div class="empty" style="padding:24px 8px;font-size:11px">Sem OS</div>'}</div>`;
+    const group=d.board?.[column.key]||{count:0,items:[]};
+    const items=group.items;
+    return `<div class="oa-board-col"><div class="oa-board-title"><span>${column.label}</span><b>${group.count}</b></div>${items.map(oaOrderCard).join('')||'<div class="empty" style="padding:24px 8px;font-size:11px">Sem OS</div>'}</div>`;
   }).join('');
 
   setContent(`
@@ -61,26 +62,23 @@ async function renderReports(){
   pageTitle('Relatórios','VISÃO OPERACIONAL');
   const now=new Date();
   const from=new Date(now.getFullYear(),now.getMonth(),1,0,0,0,0);
-  const to=new Date(now.getFullYear(),now.getMonth()+1,0,23,59,59,999);
+  const to=new Date(now.getFullYear(),now.getMonth()+1,1,0,0,0,0);
   const qs=`from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`;
   const financeAllowed=['ADMIN','FINANCEIRO'].includes(state.user.role);
-  const [dashboard,orders,finance]=await Promise.all([
-    api('/api/dashboard'),
-    api('/api/work-orders'),
-    financeAllowed?api(`/api/finance/summary?${qs}`):Promise.resolve(null),
-  ]);
-  const status=oaStatusCounts(orders);
+  const report=await api('/api/reports?'+qs);
+  const finance=report.finance;
+  const status=OA_PIPELINE.map(column=>({label:column.label,count:column.statuses.reduce((n,key)=>n+(report.statusCounts[key]||0),0)}));
   const max=Math.max(1,...status.map(item=>item.count));
-  const completed=orders.filter(order=>order.status==='ENTREGUE').length;
-  const active=orders.filter(order=>!['ENTREGUE','CANCELADA','REPROVADA'].includes(order.status)).length;
+  const completed=report.deliveredCount;
+  const active=report.openCount;
 
   setContent(`
-    <div class="section-head"><div><h2>Resumo do mês</h2><span class="muted">Indicadores derivados dos dados atuais do sistema</span></div></div>
+    <div class="section-head"><div><h2>Resumo do mês</h2><span class="muted">Indicadores completos do SQLite, sem limite de listagem</span></div></div>
     <div class="oa-report-grid">
       <div class="oa-report-card"><small>OS em fluxo</small><strong>${active}</strong></div>
-      <div class="oa-report-card"><small>OS entregues</small><strong>${completed}</strong></div>
-      <div class="oa-report-card"><small>Itens abaixo do mínimo</small><strong>${dashboard.lowStock.length}</strong></div>
-      <div class="oa-report-card"><small>${financeAllowed?'Resultado do mês':'Compromissos próximos'}</small><strong>${financeAllowed?money(finance.resultCents):dashboard.upcoming.length}</strong></div>
+      <div class="oa-report-card"><small>OS entregues no mês</small><strong>${completed}</strong></div>
+      <div class="oa-report-card"><small>Itens abaixo do mínimo</small><strong>${report.lowStockCount}</strong></div>
+      <div class="oa-report-card"><small>${financeAllowed?'Resultado do mês':'Total de OS'}</small><strong>${financeAllowed?money(finance.resultCents):report.totalCount}</strong></div>
     </div>
     <div class="oa-report-layout">
       <div class="card"><div class="card-head"><h2>Distribuição das ordens</h2><span class="muted">Fluxo atual</span></div><div class="oa-bars">

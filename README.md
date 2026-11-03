@@ -49,9 +49,18 @@ O histórico do código da Oficina Agrícola permanece recuperável pelo Git, ma
 - **Estoque:** `inventory_movements` é o único livro de origem para OS, vendas, ajustes e estornos; `parts.quantity` é a projeção reconciliável.
 - **Receitas:** `payment_events` é a origem para recebimentos/estornos de OS e vendas balcão; `cash_movements` registra a sessão do caixa quando aplicável.
 - **Interface:** gravações não recriam páginas inteiras; `refreshCurrentPage()` reconcilia os nós alterados e preserva formulários, foco e scroll. Navegação explícita continua criando a nova tela.
-- **Fiscal:** segue desativado, sem SEFAZ/ACBr obrigatórios para o funcionamento local.
+- **Fiscal:** cadastro, rascunhos NF-e/NFS-e, idempotência, XML e estados de consulta preparados. **Emissão real segue desativada sem sidecar homologado e configuração explícita**; nenhum serviço fiscal pago é obrigatório.
 - Detalhes e limites: [ADR-0002](docs/architecture/0002-canonicalidade-e-ui-estavel.md).
 
+## P0 — relatórios e preparação fiscal
+
+- Relatórios e contagens do dashboard são SQL do backend, sem corte de 200 OS ou 8 peças; entrega mensal usa `delivered_at`.
+- A página de OS carrega o histórico por cursor em `/api/work-orders/page` e permite consultar ordens antigas.
+- Página **Fiscal**: configuração da empresa com validação de CNPJ, rascunhos NF-e/NFS-e por OS/venda, histórico fiscal, consulta em falha indeterminada, XML e protocolo após autorização por adaptador.
+- O documento comercial é congelado e o livro fiscal nunca realiza uma segunda baixa no estoque nem lançamento de recebimento/caixa.
+- **Padrão seguro:** fiscal desabilitado; homologação separada de produção; ninguém recebe nota fiscal automaticamente. Sem certificado, regras tributárias e emissor homologado configurados, nenhuma emissão real ocorre.
+- O motor fiscal opcional pode usar **ACBrLib local** (`FISCAL_ACBR_NFE_LIB` / `FISCAL_ACBR_NFSE_LIB`) por `ctypes` em Python 3, ou um sidecar HTTP loopback (`FISCAL_LOCAL_PROVIDER_URL`), nunca os dois simultaneamente. Não há dependência de ACBr API paga. INI tributário revisado, certificado e homologação real continuam obrigatórios para emissão legal.
+- Documentação, limites e checklist de validação: [P0 Fiscal e Relatórios](docs/P0-FISCAL-REPORTS.md).
 ## CI exclusivo no GitHub
 As validações automatizadas são executadas por **GitHub Actions**:
 `CI` (lint, testes, build, E2E) e `ArtiSys QA` (Playwright desktop/mobile).
