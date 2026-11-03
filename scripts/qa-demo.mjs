@@ -204,10 +204,12 @@ try{
   await page.locator('#modalBody input[name="warrantyUntil"]').fill('2027-11-02');
   await page.locator('#modalBody button[type="submit"]').click();
   await page.locator('#modalBody').filter({hasText:'Garantia'}).waitFor({state:'visible'});
+  await page.getByRole('status').filter({hasText:'Garantia registrada'}).waitFor({state:'visible'});
   await page.screenshot({path:path.join(outputDir,'05-historico-automotivo.png'),fullPage:true});
 
   // P0 fiscal: a UI deve mostrar claramente que rascunhos não são notas autorizadas.
   await page.locator('#modalClose').click();
+  await page.locator('#modal').waitFor({state:'hidden'});
   await navigateQa(page,'fiscal');
   await page.locator('#fiscalNew').waitFor({state:'visible'});
   await page.locator('#content').filter({hasText:'Um rascunho'}).waitFor({state:'visible'});
