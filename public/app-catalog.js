@@ -25,7 +25,7 @@ async function machineHistoryModal(id){
  $('#newReview').onclick=()=>maintenanceModal(id,'REVISAO');
  $('#newWarranty').onclick=()=>maintenanceModal(id,'GARANTIA');
  $('#newMaintenancePlan').onclick=()=>maintenancePlanModal(id,m);
- $('#newObdScan').onclick=()=>obdScanModal(id);
+ $('#newObdScan').onclick=()=>diagnosticCaptureModal(id);
  $('[data-complete-plan]').forEach(b=>b.onclick=()=>completeMaintenancePlanModal(Number(b.dataset.completePlan),id,m));
 }
 function maintenanceModal(machineId,kind){const requestId=newCommandId();
