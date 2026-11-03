@@ -375,7 +375,7 @@ function showLogin(){
   $('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');
   $('#setupForm').classList.add('hidden');$('#loginForm').classList.remove('hidden');
 }
-function showApp(){$('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');$('#userName').textContent=state.user.name;$('#userRole').textContent=state.user.role;$('#avatar').textContent=state.user.name[0]?.toUpperCase()||'A';const fiscalLink=$('#nav [data-page="fiscal"]');if(fiscalLink)fiscalLink.hidden=!['ADMIN','FINANCEIRO'].includes(state.user.role)}
+function showApp(){$('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');$('#userName').textContent=state.user.name;$('#userRole').textContent=state.user.role;$('#avatar').textContent=state.user.name[0]?.toUpperCase()||'A';const fiscalLink=$('#nav [data-page="fiscal"]');if(fiscalLink)fiscalLink.hidden=!['ADMIN','FINANCEIRO'].includes(state.user.role);const mobileFiscalLink=$('#mobileMorePanel [data-mobile-page="fiscal"]');if(mobileFiscalLink)mobileFiscalLink.hidden=!['ADMIN','FINANCEIRO'].includes(state.user.role)}
 function logout(){
   if(modalSession)closeModal();
   state.pageController?.abort();state.pageEpoch++;state.pageReady=false;
