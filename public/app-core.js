@@ -297,7 +297,7 @@ async function boot(){
     const setup=await api('/api/setup/status');
     if(setup.required){state.token='';return showSetup()}
   }catch{ /* The login view will display server errors if offline. */ }
-  if(!state.token)return showLogin();
+  // Sessão restaurada automaticamente pelo cookie HttpOnly; nunca pelo localStorage.
   try{
     state.user=await api('/api/auth/me');
     showApp();await navigate('dashboard');
