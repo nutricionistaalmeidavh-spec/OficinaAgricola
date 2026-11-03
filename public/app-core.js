@@ -390,7 +390,7 @@ function pageRenderer(page){
     dashboard,customers:renderCustomers,machines:renderMachines,
     'work-orders':renderWorkOrders,inventory:renderInventory,schedule:renderSchedule,
     finance:renderFinance,reports:renderReports,fiscal,technicians:renderTechnicians,
-    settings:renderSettings,services:renderServices,sales:renderSales
+    settings:renderSettings,services:renderServices,sales:renderSales,market:renderMarketParity
   })[page]||dashboard;
 }
 let refreshPromise=null,refreshQueued=false;
