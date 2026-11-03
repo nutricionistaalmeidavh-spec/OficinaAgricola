@@ -2,7 +2,27 @@ import {transaction,nowIso} from './db.js';
 export function migrateAssistencia(db) {
   db.exec("CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY, applied_at TEXT NOT NULL)");
   const version='2026-11-03-assistencia-p0-p3';
-  if(db.prepare('SELECT 1 FROM schema_migrations WHERE version=?').get(version))return;
+  if(db.prepare('SELECT 1 FROM schema_migrations WHERE version=?').get(version)){
+    // Sistemas legados podem registrar linhas no livro antigo durante uma migração.
+    // Validar somente entradas ainda não materializadas, sem refazer saldo de estoque.
+    const missing=db.prepare(`
+      SELECT 1 FROM sale_stock_movements sm WHERE
+      NOT EXISTS(SELECT 1 FROM inventory_movements im
+        WHERE im.source_type='SALE_ITEM' AND im.source_item_id=sm.sale_item_id)
+      OR (sm.reversed_at IS NOT NULL AND NOT EXISTS(
+        SELECT 1 FROM inventory_movements im WHERE im.source_type='SALE_RETURN'
+          AND im.source_item_id=sm.sale_item_id)) LIMIT 1
+    `).get();
+    if(missing)transaction(db,()=>db.exec(`
+      INSERT OR IGNORE INTO inventory_movements(part_id,type,quantity_delta,work_order_id,note,created_by,created_at,source_type,source_item_id)
+      SELECT sm.part_id,'SAIDA_MANUAL',sm.quantity_delta,NULL,'Migração venda legada',NULL,sm.created_at,'SALE_ITEM',sm.sale_item_id
+      FROM sale_stock_movements sm;
+      INSERT OR IGNORE INTO inventory_movements(part_id,type,quantity_delta,work_order_id,note,created_by,created_at,source_type,source_item_id)
+      SELECT sm.part_id,'ESTORNO',-sm.quantity_delta,NULL,'Migração estorno legado',NULL,sm.reversed_at,'SALE_RETURN',sm.sale_item_id
+      FROM sale_stock_movements sm WHERE sm.reversed_at IS NOT NULL;
+    `));
+    return;
+  }
   return transaction(db,()=>{
   db.exec(`
     CREATE TABLE IF NOT EXISTS service_catalog (
