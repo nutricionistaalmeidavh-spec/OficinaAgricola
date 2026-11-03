@@ -208,7 +208,7 @@ try{
 
   // P0 fiscal: a UI deve mostrar claramente que rascunhos não são notas autorizadas.
   await page.locator('#modalClose').click();
-  await page.locator('[data-page="fiscal"]').click();
+  await navigateQa(page,'fiscal');
   await page.locator('#fiscalNew').waitFor({state:'visible'});
   await page.locator('#content').filter({hasText:'Um rascunho'}).waitFor({state:'visible'});
   await page.screenshot({path:path.join(outputDir,'09-fiscal-nao-autorizado.png'),fullPage:true});
@@ -218,7 +218,7 @@ try{
   await page.locator('#fiscalNew').click();
   await page.locator('#modalBody select[name="kind"]').waitFor({state:'visible'});
   await page.locator('#modalClose').click();
-  await page.locator('[data-page="reports"]').click();
+  await navigateQa(page,'reports');
   await page.locator('#content').filter({hasText:'OS entregues no mês'}).waitFor({state:'visible'});
   await page.screenshot({path:path.join(outputDir,'10-relatorios-sql.png'),fullPage:true});
 
