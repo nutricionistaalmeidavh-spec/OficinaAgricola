@@ -1,5 +1,6 @@
 import { resolveDatabasePath, resolveStoragePath } from './platform/data-location.js';
 import {readFileSync} from 'node:fs';
+import {dirname,join} from 'node:path';
 import { openDatabase, migrate } from './db.js';
 import { seed } from './seed.js';
 import { migrateAssistencia } from './assistencia-schema.js';
@@ -8,6 +9,7 @@ import { createEventRuntime } from './platform/event-runtime.js';
 import {dispatchOutbox} from './platform/outbox.js';
 import {recoverOrphanAttachments} from './services/operations.js';
 import {auditInvariants} from './services/reconciliation.js';
+import {startBackupSchedule} from './platform/backup-scheduler.js';
 import { listLanUrls, resolveServerConfig } from './platform/network.js';
 
 process.env.DATABASE_PATH = resolveDatabasePath();
@@ -45,6 +47,12 @@ const tls=process.env.HTTPS_CERT_FILE&&process.env.HTTPS_KEY_FILE?{
   key:readFileSync(process.env.HTTPS_KEY_FILE)
 }:null;
 const server = createAssistenciaServer({ db, storageDir: process.env.STORAGE_DIR, eventRuntime, tls });
+const stopBackupSchedule=startBackupSchedule({
+ databasePath:process.env.DATABASE_PATH,
+ uploadsPath:process.env.STORAGE_DIR,
+ backupRoot:process.env.BACKUP_ROOT||join(dirname(process.env.DATABASE_PATH),'backups'),
+ retention:Number(process.env.BACKUP_RETENTION||7)
+});
 
 server.listen(port, host, () => {
   console.log(`ArtiSys Oficina em ${tls?'https':'http'}://${host}:${port}`);
@@ -56,6 +64,7 @@ server.listen(port, host, () => {
 const shutdown = () => {
   clearInterval(outboxTimer);
   clearInterval(reconciliationTimer);
+  stopBackupSchedule();
   server.close(async () => {
     await dispatchOutbox(db,eventRuntime).catch(e=>console.error('[outbox]',e.message));
     eventRuntime.close();
