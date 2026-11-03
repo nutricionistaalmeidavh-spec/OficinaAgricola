@@ -43,7 +43,7 @@ async function renderWorkOrders({append=false}={}){
   const newOS=$('#newOS');if(newOS)newOS.onclick=()=>workOrderModal(customers,machines,techs);
   bindOrderCards($('#content'));
   const bindColumnMore=()=>{
-    $('[data-os-more]').forEach(button=>button.onclick=async()=>{
+    $$('[data-os-more]').forEach(button=>button.onclick=async()=>{
       const status=button.dataset.osMore;
       const column=button.closest('[data-os-status]');
       const loaded=osPagedRows.filter(order=>order.status===status).sort((a,b)=>b.id-a.id);
