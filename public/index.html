@@ -80,6 +80,8 @@
         </div>
         <div class="top-actions">
           <span id="today"></span>
+          <button id="pendingCommands" class="pending-commands hidden" type="button"
+            aria-live="polite" title="Reenviar operações pendentes com segurança"></button>
           <button class="icon-btn" id="refreshBtn" title="Atualizar" aria-label="Atualizar">↻</button>
         </div>
       </header>
@@ -97,6 +99,7 @@
 
   <script defer src="/pwa-register.js"></script>
   <script defer src="/local-runtime.js"></script>
+  <script defer src="/command-queue.js"></script>
   <script defer src="/app-core.js"></script>
   <script defer src="/app-catalog.js"></script>
   <script defer src="/app-orders.js"></script>
