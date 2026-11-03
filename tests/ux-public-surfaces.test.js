@@ -17,6 +17,8 @@ test('respostas públicas não revelam mensagens de infraestrutura',()=>{
     assert.match(output,/Não foi possível/);
   }
   assert.equal(publicErrorMessage(new Error('Cliente não encontrado')),'Cliente não encontrado');
+  for(const message of ['Placa inválida','RENAVAM inválido','Prioridade inválida','Muitas tentativas'])
+    assert.equal(publicErrorMessage(new Error(message)),message);
 });
 
 test('APIs da oficina e assistência usam sanitização pública sem alterar status HTTP',()=>{
