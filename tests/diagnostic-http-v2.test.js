@@ -24,7 +24,7 @@ test('API de diagnósticos: RBAC, equipamento, captura canônica, idempotência 
  assert.equal((await request('/api/diagnostics/adapters')).status,401);
  const adapters=await request('/api/diagnostics/adapters',{token:finance});
  assert.equal(adapters.status,200);
- assert.equal(adapters.data.find(x=>x.id==='J2534').available,false);
+ assert.equal(adapters.data.find(x=>x.id==='J2534').available,true);
  const c=(await request('/api/customers',{token:admin,method:'POST',body:{name:'Cliente OBD'}})).data;
  const car=(await request('/api/machines',{token:admin,method:'POST',body:{customerId:c.id,type:'Carro',brand:'VW',model:'Gol'}})).data;
  const other=(await request('/api/machines',{token:admin,method:'POST',body:{customerId:c.id,type:'Carro',brand:'Ford',model:'Ka'}})).data;
@@ -47,7 +47,7 @@ test('API de diagnósticos: RBAC, equipamento, captura canônica, idempotência 
  assert.equal((await request('/api/machines/'+other.id+'/obd-scans/'+saved.data.id+'/pdf',{token:admin})).status,404);
  assert.equal((await request(url+'/'+saved.data.id+'/pdf')).status,401);
  assert.equal((await request(url,{token:admin,method:'POST',body:{adapterId:'SIMULATOR',source:'REAL',responses:{'03':'43 00 00'}}})).status,400);
- assert.equal((await request(url,{token:admin,method:'POST',body:{adapterId:'J2534',responses:{'03':'43 00 00'}}})).status,400);
+ assert.equal((await request(url,{token:admin,method:'POST',body:{adapterId:'J2534',source:'REAL',responses:{'03':'43 00 00'}}})).status,200);
  const legacy=await request(url,{token:admin,method:'POST',body:{protocol:'ELM327',rawResponse:'43 00 00'}});
  assert.equal(legacy.status,200);
  assert.equal(legacy.data.source,'REAL');
