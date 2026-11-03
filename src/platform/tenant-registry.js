@@ -18,8 +18,14 @@ export function migrateTenantRegistry(db, legacyDb = null) {
     "CREATE INDEX IF NOT EXISTS idx_tenant_memberships_unit ON tenant_memberships(unit_id,active,user_id);" +
     "CREATE INDEX IF NOT EXISTS idx_tenant_units_company ON tenant_units(company_id,active);"
   );
+  // Never silently recreate a lost registry: old tenant-specific accounts
+  // would otherwise be granted access to the default operational database.
+  const marker=legacyDb?.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='tenant_registry_link'").get();
+  const globalUsers=db.prepare('SELECT COUNT(*) n FROM users').get().n;
+  if(marker && !globalUsers)
+    fail('Registro de empresas ausente: restaure o backup do registro antes de iniciar',409);
   // Legacy bootstrap is transactional. Never overwrite an existing registry.
-  return transaction(db, () => {
+  const result=transaction(db, () => {
     db.prepare("INSERT OR IGNORE INTO tenant_companies(id,slug,name,created_at) VALUES(1,'principal','Oficina principal',?)").run(nowIso());
     db.prepare("INSERT OR IGNORE INTO tenant_units(id,company_id,code,name,created_at) VALUES(1,1,'MATRIZ','Matriz',?)").run(nowIso());
     if (!legacyDb || db.prepare('SELECT COUNT(*) n FROM users').get().n !== 0) return;
@@ -36,6 +42,13 @@ export function migrateTenantRegistry(db, legacyDb = null) {
     const admin=db.prepare("SELECT id FROM users WHERE role='ADMIN' AND active=1 ORDER BY id LIMIT 1").get();
     if (admin) db.prepare('INSERT OR IGNORE INTO tenant_platform_admins(user_id) VALUES(?)').run(admin.id);
   });
+  if(legacyDb && db.prepare('SELECT COUNT(*) n FROM users').get().n)
+    markLegacyRegistryLink(legacyDb);
+  return result;
+}
+export function markLegacyRegistryLink(legacyDb) {
+  legacyDb.exec("CREATE TABLE IF NOT EXISTS tenant_registry_link (id INTEGER PRIMARY KEY CHECK(id=1),linked_at TEXT NOT NULL)");
+  legacyDb.prepare('INSERT OR IGNORE INTO tenant_registry_link(id,linked_at) VALUES(1,?)').run(nowIso());
 }
 
 export function registerInitialAdmin(db, userId) {
