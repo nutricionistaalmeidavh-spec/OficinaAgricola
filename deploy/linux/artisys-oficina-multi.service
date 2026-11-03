@@ -11,6 +11,8 @@ WorkingDirectory=/opt/artisys-oficina
 Environment=NODE_ENV=production
 Environment=HOST=127.0.0.1
 Environment=PORT=3344
+# Trust forwarded HTTPS only when request originates from loopback.
+Environment=TRUST_LOOPBACK_PROXY=1
 Environment=DATABASE_PATH=/srv/artisys-oficina/data/artisys-oficina.sqlite
 Environment=STORAGE_DIR=/srv/artisys-oficina/storage/uploads
 Environment=TENANCY_REGISTRY_PATH=/srv/artisys-oficina/data/oficina-registry.sqlite
