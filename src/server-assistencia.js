@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import { openDatabase, migrate, transaction } from './db.js';
 import { validateSession } from './auth.js';
 import { createAppServer } from './server.js';
+import { createLocalFiscalProvider } from './platform/local-fiscal-provider.js';
 import { migrateAssistencia } from './assistencia-schema.js';
 import {enqueueHttpEvent,dispatchOutbox} from './platform/outbox.js';
 import {runIdempotent} from './platform/idempotency.js';
@@ -153,7 +154,8 @@ export function createAssistenciaServer({
 } = {}) {
   migrate(db);
   migrateAssistencia(db);
-  const baseServer = createAppServer({ db, storageDir, eventRuntime });
+  const fiscalProvider = createLocalFiscalProvider();
+  const baseServer = createAppServer({ db, storageDir, eventRuntime, fiscalProvider });
 
   return createServer(async (req, res) => {
     const url = new URL(req.url || '/', 'http://localhost');
