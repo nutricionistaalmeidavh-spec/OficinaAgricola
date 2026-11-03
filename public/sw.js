@@ -1,4 +1,4 @@
-const CACHE_NAME = 'artisys-oficina-shell-v6';
+const CACHE_NAME = 'artisys-oficina-shell-v7';
 const SHELL = ['/', '/index.html', '/styles.css', '/ui-stage7.css', '/theme-lote-a.css', '/local-runtime.css', '/command-queue.js', '/app-core.js', '/obd-serial.js', '/obd-diagnostics.js', '/app-catalog.js', '/app-orders.js', '/app-os-tools.js', '/app-operations.js', '/app-stage7.js', '/app-assistencia.js', '/app-admin.js', '/local-runtime.js', '/pwa-register.js', '/manifest.webmanifest', '/icon.svg'];
 
 self.addEventListener('install', event => {
