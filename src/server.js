@@ -239,7 +239,7 @@ export function createAppServer({db=openDatabase(),storageDir=process.env.STORAG
         }):await invoke();
         if(res.writableEnded)return;
         if(req.method==='POST'&&url.pathname==='/api/auth/logout')clearBrowserCookie(res,req);
-        if(isMutation&&eventRuntime)void dispatchOutbox(db,eventRuntime).catch(e=>console.error('[outbox]',e.message));
+        if(isMutation&&eventRuntime)void dispatchOutbox(db,eventRuntime,100,{respectBackoff:true}).catch(e=>console.error('[outbox]',e.message));
         if(data&&Object.hasOwn(data,'__html'))return html(res,200,data.__html);
         if(data&&Object.hasOwn(data,'__binary')){
           res.writeHead(200,{'Content-Type':data.mimeType||'application/octet-stream','Content-Disposition':`inline; filename=\"${String(data.filename||'anexo').replace(/[\"\r\n]/g,'')}\"`,'Cache-Control':'private, max-age=300'});
