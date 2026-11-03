@@ -8,6 +8,7 @@ import { saveQuote, approveQuote } from '../src/services/quotes.js';
 import { createPart } from '../src/services/inventory.js';
 import { getOperationalReport } from '../src/services/reports.js';
 import { migrateFiscal, createFiscalDraft, getFiscalDocument, submitFiscalDocument, listFiscalDocuments } from '../src/services/fiscal.js';
+import {setFiscalSettings} from '../src/services/fiscal-settings.js';
 
 function fixture() {
   const db=openDatabase(':memory:');
@@ -96,6 +97,7 @@ test('P0 fiscal: perda de resposta fica indeterminada e não autoriza reenvio ce
     saveQuote(db,os.id,{items:[{kind:'MAO_DE_OBRA',description:'Serviço',quantity:1,unitPriceCents:5000}]});
     approveQuote(db,os.id);
     const draft=createFiscalDraft(db,{originType:'OS',originId:os.id,kind:'NFSE',requestId:'one'});
+    setFiscalSettings(db,{issuerCnpj:'11222333000181',issuerUf:'MG',municipalityIbge:'3170107',taxRegime:'SIMPLES',enabled:true});
     let calls=0;const provider={transmit:async()=>{calls++;throw new Error('resposta perdida')}};
     await assert.rejects(()=>submitFiscalDocument(db,draft.id,{provider}),/resposta perdida/);
     assert.equal(getFiscalDocument(db,draft.id).status,'INDETERMINADO');
