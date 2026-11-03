@@ -7,7 +7,7 @@ import { openDatabase, migrate } from '../src/db.js';
 import { migrateAssistencia } from '../src/assistencia-schema.js';
 import { createUser } from '../src/auth.js';
 import { seedDefaultChecklists } from '../src/services/operations.js';
-import { createAppServer } from '../src/server.js';
+import { createAssistenciaServer } from '../src/server-assistencia.js';
 
 async function workshop(t) {
   const db = openDatabase(':memory:');
@@ -17,7 +17,7 @@ async function workshop(t) {
   createUser(db, { username: 'admin', password: 'Admin@1234', role: 'ADMIN', name: 'Administrador QA' });
   createUser(db, { username: 'financeiro', password: 'Admin@1234', role: 'FINANCEIRO', name: 'Financeiro QA' });
   const storageDir = mkdtempSync(join(tmpdir(), 'oficina-jornada-e2e-'));
-  const server = createAppServer({ db, storageDir });
+  const server = createAssistenciaServer({ db, storageDir });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(async () => {
     await new Promise(resolve => server.close(resolve));
