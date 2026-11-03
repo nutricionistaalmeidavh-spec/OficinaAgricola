@@ -14,7 +14,7 @@ import { createApprovalLink } from '../services/market-parity.js';
 import {
   migrateTenantRegistry, registerInitialAdmin, listUserUnits, requireUnitMembership,
   requireCompanyAdmin, createTenantCompany, createTenantUnit, grantUnitMembership,
-  changeUnitMembership, listUnitMembers, markLegacyRegistryLink
+  changeUnitMembership, listUnitMembers, markLegacyRegistryLink, listTenantAudit
 } from './tenant-registry.js';
 
 const json=(res,status,data)=>{if(res.writableEnded)return;res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(data));};
@@ -151,6 +151,8 @@ export function createMultiTenantServer({
       return json(res,200,changeUnitMembership(registryDb,user.id,await readJson(req)));
     if(path==='/api/tenancy/memberships'&&method==='GET')
       return json(res,200,listUnitMembers(registryDb,user.id,positive(url.searchParams.get('unitId'))));
+    if(path==='/api/tenancy/audit'&&method==='GET')
+      return json(res,200,listTenantAudit(registryDb,user.id,positive(url.searchParams.get('companyId'))));
     const unit=selectUnit(req,user);
     if(path==='/api/users'&&method==='GET')return json(res,200,listUnitMembers(registryDb,user.id,unit.id));
     if(path==='/api/users'&&method==='POST')
