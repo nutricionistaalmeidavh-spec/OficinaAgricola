@@ -73,7 +73,7 @@ export function dispatchOutbox(db,runtime,limit=100,{respectBackoff=false}={}){
    return inFlight.get(db);
  }
  const job=(async()=>{
-   let count=0;
+   let count=0,afterId=0;
    while(true){
      const {delivered,attempted,lastId}=await dispatch(db,runtime,limit,{respectBackoff,afterId});
      afterId=lastId;
