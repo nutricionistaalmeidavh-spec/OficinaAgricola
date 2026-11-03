@@ -2,10 +2,10 @@
 // Somente o servidor pode criar snapshots; o renderer nunca grava livros canônicos.
 async function renderFiscal(){
   pageTitle('Fiscal','DOCUMENTOS E CONCILIAÇÃO');
-  const docs=await api('/api/fiscal');
+  const [docs,settings]=await Promise.all([api('/api/fiscal'),api('/api/fiscal/settings')]);
   const cards=docs.map(d=>{
     const origin=d.origin_type==='OS'?'OS':'Venda';
-    const actions=d.status==='RASCUNHO'
+    const actions=d.status==='RASCUNHO'&&settings.enabled
       ? '<button class="btn sm" data-fiscal-submit="'+d.id+'">Transmitir</button>'
       : d.status==='INDETERMINADO'
         ? '<button class="btn sm" data-fiscal-check="'+d.id+'">Consultar situação</button>'
@@ -16,16 +16,55 @@ async function renderFiscal(){
   }).join('');
   setContent('<div class="section-head"><div><h2>Documentos fiscais</h2>'+
     '<span class="muted">Rascunhos e protocolos vinculados à operação canônica</span></div>'+
-    '<button id="fiscalNew" class="btn primary">+ Preparar documento</button></div>'+
-    '<div class="card"><p><strong>Emissão efetiva:</strong> exige certificado/credenciamento, classificação tributária e um emissor local validado. '+
+    '<div class="action-row">'+(state.user.role==='ADMIN'?'<button id="fiscalSettings" class="btn">Configuração fiscal</button>':'')+
+    '<button id="fiscalNew" class="btn primary">+ Preparar documento</button></div></div>'+
+    '<div class="card"><p><strong>Cadastro fiscal:</strong> '+(settings.enabled?'Habilitado':'Desabilitado')+' · '+esc(settings.environment)+
+    ' · CNPJ '+esc(settings.issuer_cnpj||'não informado')+'</p><p><strong>Emissão efetiva:</strong> exige certificado/credenciamento, classificação tributária e um emissor local validado. '+
     'Um rascunho ou um envio sem confirmação não substitui NF-e ou NFS-e autorizada.</p></div>'+
     '<div class="card"><div class="card-head"><h2>Registro fiscal</h2><small>'+docs.length+' documento(s) recente(s)</small></div>'+
     '<div class="list">'+(cards||'<div class="empty">Nenhum documento fiscal preparado.</div>')+'</div></div>');
   $('#fiscalNew').onclick=()=>fiscalDraftModal();
+  if($('#fiscalSettings'))$('#fiscalSettings').onclick=()=>fiscalSettingsModal(settings);
   $$('[data-fiscal-details]').forEach(b=>b.onclick=()=>showFiscalHistory(Number(b.dataset.fiscalDetails)).catch(e=>toast(e.message,true)));
   $$('[data-fiscal-submit]').forEach(b=>b.onclick=()=>fiscalAction(Number(b.dataset.fiscalSubmit),'submit'));
   $$('[data-fiscal-check]').forEach(b=>b.onclick=()=>fiscalAction(Number(b.dataset.fiscalCheck),'reconcile'));
 }
+
+function fiscalSettingsModal(current){
+  const selected=(value,expected)=>value===expected?' selected':'';
+  const safe=value=>esc(value||'');
+  showModal('Configuração fiscal da empresa',
+    '<form class="form-stack">'+
+    '<p class="muted">Somente dados cadastrais. Nunca informe certificado digital, senha ou chave privada nesta tela.</p>'+
+    '<label>CNPJ emissor<input name="issuerCnpj" value="'+safe(current.issuer_cnpj)+'" inputmode="numeric" maxlength="18"></label>'+
+    '<div class="field-row"><label>UF<input name="issuerUf" maxlength="2" value="'+safe(current.issuer_uf)+'"></label>'+
+    '<label>Município IBGE<input name="municipalityIbge" inputmode="numeric" maxlength="7" value="'+safe(current.municipality_ibge)+'"></label></div>'+
+    '<div class="field-row"><label>Inscrição estadual<input name="stateRegistration" value="'+safe(current.state_registration)+'"></label>'+
+    '<label>Inscrição municipal<input name="municipalRegistration" value="'+safe(current.municipal_registration)+'"></label></div>'+
+    '<label>Regime tributário<select name="taxRegime">'+
+    '<option value="">Selecione</option>'+
+    ['MEI','SIMPLES','NORMAL'].map(s=>'<option value="'+s+'"'+selected(current.tax_regime,s)+'>'+s+'</option>').join('')+
+    '</select></label>'+
+    '<label>Ambiente<select name="environment">'+
+    '<option value="HOMOLOGACAO"'+selected(current.environment,'HOMOLOGACAO')+'>Homologação (sem valor fiscal)</option>'+
+    '<option value="PRODUCAO"'+selected(current.environment,'PRODUCAO')+'>Produção</option></select></label>'+
+    '<label><input type="checkbox" name="enabled"'+(current.enabled?' checked':'')+'> Habilitar transmissão após configurar emissor local</label>'+
+    '<label><input type="checkbox" name="productionConfirmed"'+(current.production_confirmed?' checked':'')+'> Confirmo a configuração de produção (não equivale a credenciamento)</label>'+
+    '<button class="btn primary" type="submit">Salvar configuração</button></form>',
+    async form=>{
+      const o=formObj(form);
+      await api('/api/fiscal/settings',{method:'PATCH',body:{
+        issuerCnpj:o.issuerCnpj,issuerUf:o.issuerUf,municipalityIbge:o.municipalityIbge,
+        stateRegistration:o.stateRegistration,municipalRegistration:o.municipalRegistration,
+        taxRegime:o.taxRegime,environment:o.environment,
+        enabled:o.enabled==='on',productionConfirmed:o.productionConfirmed==='on',
+        requestId:newCommandId()
+      }});
+      toast('Configuração fiscal salva. Documentos de homologação não têm validade fiscal.');
+      await refreshCurrentPage();
+    });
+}
+
 function fiscalDraftModal(){
   showModal('Preparar documento fiscal',
     '<form class="form-stack">'+
