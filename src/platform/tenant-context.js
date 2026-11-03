@@ -1,8 +1,5 @@
-'use strict';
-
-/** Fail-closed tenant and unit scope. Never accept a tenant identifier from an
- * untrusted request without comparing it against authenticated memberships. */
-function requireTenantContext(identity, requestedCompanyId, requestedUnitId) {
+/** A tenant is not trusted until the server verifies an active membership. */
+export function requireTenantContext(identity, requestedCompanyId, requestedUnitId) {
   if (!identity || !Array.isArray(identity.memberships)) {
     throw Object.assign(new Error('Authentication required'), { status: 401 });
   }
@@ -16,8 +13,7 @@ function requireTenantContext(identity, requestedCompanyId, requestedUnitId) {
   }
   return Object.freeze({ companyId, unitId, role: membership.role });
 }
-
-function scopedWhere(context, alias = '') {
+export function scopedWhere(context, alias = '') {
   if (!context || !context.companyId) throw new Error('Tenant context required');
   if (alias && !/^[A-Za-z_][A-Za-z0-9_]*$/.test(alias)) throw new Error('Invalid SQL alias');
   const prefix = alias ? alias + '.' : '';
@@ -26,4 +22,3 @@ function scopedWhere(context, alias = '') {
     params: context.unitId ? [context.companyId, context.unitId] : [context.companyId]
   });
 }
-module.exports = { requireTenantContext, scopedWhere };
