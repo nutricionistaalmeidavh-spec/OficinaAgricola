@@ -65,7 +65,7 @@ function requireVersion(body){
  return version;
 }
 
-function createRouter({db,storageDir}){
+function createRouter({db,storageDir,diagnosticRunner=executeDiagnosticWorker}){
   const r=new Router(); const add=(m,p,roles,h,o)=>r.add(m,p,roles,h,o);
   add('GET','/api/health',null,()=>({ok:true}),{publicRoute:true});
   add('GET','/api/setup/status',null,()=>({required:isSetupRequired(db)}),{publicRoute:true});
@@ -96,12 +96,12 @@ function createRouter({db,storageDir}){
   // A ponte física só opera no computador principal, jamais através de acesso LAN.
   add('GET','/api/diagnostics/hardware',ROLE_TECH,({req})=>{
     if(!isLocalHardwareRequest(req))throw new Error('Permissão: diagnóstico físico somente no computador principal');
-    return executeDiagnosticWorker('probe');
+    return diagnosticRunner('probe');
   });
   add('GET','/api/diagnostics/capture',ROLE_TECH,({req,url})=>{
     if(!isLocalHardwareRequest(req))throw new Error('Permissão: diagnóstico físico somente no computador principal');
     const params=Object.fromEntries(url.searchParams);
-    return executeDiagnosticWorker('capture',params);
+    return diagnosticRunner('capture',params);
   });
   add('GET','/api/machines/:id/obd-scans',ROLE_ALL,({params})=>listDiagnosticScans(db,int(params.id)));
   add('GET','/api/machines/:id/obd-scans/:scanId/pdf',ROLE_ALL,({params})=>({__binary:renderDiagnosticPdf(db,int(params.id),int(params.scanId)),mimeType:'application/pdf',filename:'Diagnostico-'+int(params.scanId)+'.pdf'}));
@@ -189,8 +189,8 @@ function serveStatic(req,res,path){
   res.writeHead(200,{'Content-Type':MIME[extname(file)]||'application/octet-stream','Cache-Control':rel==='index.html'?'no-cache':'public, max-age=3600'});res.end(readFileSync(file));return true;
 }
 
-export function createAppServer({db=openDatabase(),storageDir=process.env.STORAGE_DIR||'./storage/uploads',eventRuntime=null,fiscalProvider=null}={}){
-  migrate(db); const router=createRouter({db,storageDir});
+export function createAppServer({db=openDatabase(),storageDir=process.env.STORAGE_DIR||'./storage/uploads',eventRuntime=null,fiscalProvider=null,diagnosticRunner=executeDiagnosticWorker}={}){
+  migrate(db); const router=createRouter({db,storageDir,diagnosticRunner});
   return createServer(async(req,res)=>{
     const url=new URL(req.url||'/','http://localhost'); const route=router.match(req.method||'GET',url.pathname);
     hardenHttpResponse(res,req);
