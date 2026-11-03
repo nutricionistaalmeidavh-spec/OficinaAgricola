@@ -110,6 +110,7 @@ export function renderDiagnosticPdf(db,machineId,scanId){
   line('Armazenados: '+(JSON.parse(scan.codes_json||'[]').join(', ')||'nenhum informado'));
   line('Pendentes: '+((details.pendingCodes||[]).join(', ')||'não disponíveis'));
   line('Permanentes: '+((details.permanentCodes||[]).join(', ')||'não disponíveis'));
+  if(details.readiness)line('MIL: '+(details.readiness.mil?'ACESa':'APAGADA')+' | DTCs informados: '+details.readiness.storedDtcCount);
   if(details.vin)line('VIN informado pela ECU: '+details.vin);
   section('Sensores');
   const readings=Object.values(details.readings||{});
