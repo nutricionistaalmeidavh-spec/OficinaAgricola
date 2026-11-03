@@ -161,7 +161,14 @@ test('P1: cancelamento exige primeiro estorno de pecas e de recebimentos ativos'
     body: { note: 'Cliente reembolsado' } });
   assert.equal((await cancel()).status, 200);
   assert.equal((await s.ok(path)).status, 'CANCELADA');
-  assert.equal((await s.ok(path + '/payment')).receivedCents, 0);
+  assert.deepEqual(await s.ok(path + '/payment'),
+    { totalCents: 9000, receivedCents: 0, pendingCents: 0, status: 'CANCELADO' });
+  const summary = await s.ok('/api/finance/summary');
+  assert.equal(summary.invoicedCents, 0, 'Orcamento cancelado nao pode inflar faturamento');
+  assert.equal(summary.pendingCents, 0, 'OS cancelada nao pode seguir em contas a receber');
+  const lateReceipt = await s.request(path + '/receipts', { method: 'POST',
+    body: { amountCents: 1000, method: 'PIX', requestId: 'qa-pagamento-apos-cancelamento' } });
+  assert.equal(lateReceipt.status, 409, 'Nao aceita novo pagamento apos cancelamento');
   assert.equal(s.db.prepare('SELECT COALESCE(SUM(amount_cents),0) n FROM payment_events').get().n, 0);
   assert.equal((await s.ok('/api/admin/reconciliation')).errors.length, 0);
 });
