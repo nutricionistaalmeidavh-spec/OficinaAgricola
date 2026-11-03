@@ -25,6 +25,6 @@ $('#setupForm').addEventListener('submit',async e=>{
   finally{button.disabled=false}
 });
 $('#loginForm').addEventListener('submit',async e=>{e.preventDefault();$('#loginError').textContent='';const o=formObj(new FormData(e.target));try{const result=await api('/api/auth/login',{method:'POST',body:o});state.token=result.token;state.user=result.user;localStorage.setItem('oficina_token',state.token);showApp();await navigate('dashboard');void updatePendingCommands();void resumePendingCommands()}catch(err){$('#loginError').textContent=err.message}});
-$('#logoutBtn').onclick=async()=>{try{await api('/api/auth/logout',{method:'POST',body:{}})}catch{}logout()};$('#modalClose').onclick=requestCloseModal;$('#modal').addEventListener('click',e=>{if(e.target.id==='modal')requestCloseModal()});$('#refreshBtn').onclick=()=>navigate(state.page,{force:true});$('#nav button[data-page]').forEach(b=>b.onclick=()=>navigate(b.dataset.page));$('#moreModules').onclick=openMoreModules;
+$('#logoutBtn').onclick=async()=>{try{await api('/api/auth/logout',{method:'POST',body:{}})}catch{}logout()};$('#modalClose').onclick=requestCloseModal;$('#modal').addEventListener('click',e=>{if(e.target.id==='modal')requestCloseModal()});$('#refreshBtn').onclick=()=>navigate(state.page,{force:true});$$('#nav button[data-page]').forEach(b=>b.onclick=()=>navigate(b.dataset.page));$('#moreModules').onclick=openMoreModules;
 boot();
 
