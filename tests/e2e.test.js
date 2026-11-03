@@ -23,7 +23,7 @@ test('critical workshop flow works end-to-end through HTTP API', async (t)=>{
   const machine=await request(base,'/api/machines',{method:'POST',token,body:{customerId:customer.id,type:'Trator',brand:'John Deere',model:'6175M',hourMeter:950}});
   const tech=await request(base,'/api/technicians',{method:'POST',token,body:{name:'Carlos',specialty:'Hidráulica'}});
   let os=await request(base,'/api/work-orders',{method:'POST',token,body:{customerId:customer.id,machineId:machine.id,technicianId:tech.id,problemReported:'Vazamento hidráulico'}});
-  os=await request(base,`/api/work-orders/${os.id}`,{method:'PATCH',token,body:{diagnosis:'Vedação da bomba danificada'}});
+  os=await request(base,`/api/work-orders/${os.id}`,{method:'PATCH',token,body:{expectedVersion:os.version,diagnosis:'Vedação da bomba danificada'}});
   await request(base,`/api/work-orders/${os.id}/status`,{method:'POST',token,body:{status:'DIAGNOSTICO'}});
   await request(base,`/api/work-orders/${os.id}/quote`,{method:'PUT',token,body:{items:[{kind:'MAO_DE_OBRA',description:'Reparo hidráulico',quantity:1,unitPriceCents:20000}]}});
   await request(base,`/api/work-orders/${os.id}/quote/approve`,{method:'POST',token,body:{}});
