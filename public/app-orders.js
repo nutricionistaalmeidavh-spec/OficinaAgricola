@@ -31,7 +31,6 @@ async function renderWorkOrders({append=false}={}){
   setContent('<div class="section-head"><div><h2>Fluxo da oficina</h2><span class="muted" id="osLoadedCount">'+orders.length+' de '+osTotal+' OS em fluxo carregadas</span></div>'+
     (canCreate?'<button id="newOS" class="btn primary">+ Abrir OS</button>':'')+'</div>'+
     '<div class="kanban">'+columns+'</div>'+
-    ''+
     '<section class="card" style="margin-top:18px"><div class="section-head"><div><h2>Histórico de OS encerradas</h2><span class="muted">Entregues, canceladas e reprovadas · consulta paginada ao banco</span></div></div>'+
     '<div class="action-row" style="margin-bottom:14px;flex-wrap:wrap">'+
     '<label>Status <select id="osArchiveStatus"><option value="">Todos os encerramentos</option>'+
@@ -50,6 +49,8 @@ async function renderWorkOrders({append=false}={}){
       const loaded=osPagedRows.filter(order=>order.status===status).sort((a,b)=>b.id-a.id);
       const cursor=loaded.length?'&cursor='+encodeURIComponent(loaded[loaded.length-1].id):'';
       button.disabled=true;
+      button.textContent='Carregando OS…';
+      column?.setAttribute('aria-busy','true');
       try{
         const page=await api('/api/work-orders/page?scope=active&status='+encodeURIComponent(status)+'&limit=50'+cursor);
         if(!column?.isConnected)return;
@@ -62,8 +63,13 @@ async function renderWorkOrders({append=false}={}){
         const loadedCount=$('#osLoadedCount');
         if(loadedCount)loadedCount.textContent=osPagedRows.length+' de '+osTotal+' OS em fluxo carregadas';
         bindColumnMore();
-      }catch(error){toast(error.message,true)}
-      finally{button.disabled=false}
+      }catch(error){
+        if(column?.isConnected&&error?.name!=='AbortError'){
+          button.textContent='Tentar novamente';
+          toast('Não foi possível carregar as OS desta etapa. Tente novamente.',true);
+        }
+      }
+      finally{button.disabled=false;column?.removeAttribute('aria-busy')}
     });
   };
   bindColumnMore();
