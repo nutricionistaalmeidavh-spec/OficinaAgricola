@@ -121,7 +121,7 @@ test('P0: falha SQLite no cadastro de anexo não deixa arquivo órfão',()=>{
  const{db,os}=context();const dir=mkdtempSync(join(tmpdir(),'oficina-atomic-'));
  try{
   db.exec("CREATE TRIGGER reject_attachment BEFORE INSERT ON attachments BEGIN SELECT RAISE(ABORT,'forced-failure'); END;");
-  assert.throws(()=>saveAttachment(db,os.id,{category:'ENTRADA',mimeType:'image/jpeg',base64:Buffer.from('foto').toString('base64'),originalName:'foto.jpg',storageDir:dir,requestId:'attach-1'}),/forced-failure/);
+  assert.throws(()=>saveAttachment(db,os.id,{category:'ENTRADA',mimeType:'image/jpeg',base64:Buffer.from([0xff,0xd8,0xff,0xd9]).toString('base64'),originalName:'foto.jpg',storageDir:dir,requestId:'attach-1'}),/forced-failure/);
   assert.equal(readdirSync(dir,{recursive:true}).filter(f=>String(f).endsWith('.jpg')).length,0);
  }finally{db.close();rmSync(dir,{recursive:true,force:true})}
 });
