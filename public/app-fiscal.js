@@ -14,7 +14,7 @@ async function renderFiscal(){
       '<br><small>'+esc(d.status)+' · '+money(d.amount_cents)+'</small></div><div class="action-row">'+
       '<button class="btn sm soft" data-fiscal-details="'+d.id+'">Histórico</button>'+actions+'</div></div>';
   }).join('');
-  setContent('<div class="section-head"><div><h2>Documentos fiscais</h2>'+
+  setContent('<div class="section-head fiscal-head"><div><h2>Documentos fiscais</h2>'+
     '<span class="muted">Rascunhos e protocolos vinculados à operação canônica</span></div>'+
     '<div class="action-row">'+(state.user.role==='ADMIN'?'<button id="fiscalSettings" class="btn">Configuração fiscal</button>':'')+
     '<button id="fiscalNew" class="btn primary">+ Preparar documento</button></div></div>'+
@@ -66,31 +66,110 @@ function fiscalSettingsModal(current){
 }
 
 function fiscalDraftModal(){
+  const requestId=newCommandId();
   showModal('Preparar documento fiscal',
     '<form class="form-stack">'+
-    '<p class="muted">O documento será criado como rascunho imutável, ainda sem autorização fiscal.</p>'+
-    '<label>Origem<select name="originType"><option value="OS">Ordem de Serviço</option><option value="SALE">Venda de balcão</option></select></label>'+
-    '<label>ID interno da OS/venda<input name="originId" type="number" min="1" step="1" required></label>'+
-    '<label>Documento<select name="kind"><option value="NFE">NF-e — peças</option><option value="NFSE">NFS-e — mão de obra</option></select></label>'+
-    '<button class="btn primary" type="submit">Criar rascunho</button></form>',
+    '<p class="muted">Selecione uma OS com orçamento aprovado ou uma venda concluída. O rascunho não é uma nota autorizada.</p>'+
+    '<label>Origem<select id="fiscalOriginType" name="originType"><option value="OS">Ordem de Serviço</option><option value="SALE">Venda de balcão</option></select></label>'+
+    '<label>Buscar OS ou venda<input id="fiscalOriginSearch" type="search" autocomplete="off" placeholder="Número, cliente ou modelo" aria-controls="fiscalOriginOptions"></label>'+
+    '<div id="fiscalOriginOptions" class="fiscal-origin-options" role="group" aria-label="Resultados da busca"></div>'+
+    '<input type="hidden" name="originId" id="fiscalOriginId">'+
+    '<div id="fiscalOriginSelection" class="fiscal-origin-selection" role="status" aria-live="polite">Nenhuma operação selecionada.</div>'+
+    '<label>Documento<select id="fiscalKind" name="kind"><option value="NFE">NF-e — peças</option><option value="NFSE">NFS-e — mão de obra</option></select></label>'+
+    '<div class="fiscal-draft-preview"><strong>Prévia do documento</strong><p id="fiscalDraftPreview" class="muted">Selecione uma operação para conferir a origem. Os itens e valores fiscais serão validados pelo servidor.</p></div>'+
+    '<button id="fiscalDraftSubmit" class="btn primary" type="submit" disabled>Criar rascunho</button></form>',
     async form=>{
       const values=formObj(form);
-      const body={originType:values.originType,originId:Number(values.originId),kind:values.kind,requestId:newCommandId()};
-      await api('/api/fiscal/drafts',{method:'POST',body});
-      toast('Rascunho fiscal criado. Não é uma nota autorizada.');
+      const originId=Number(values.originId);
+      if(!Number.isSafeInteger(originId)||originId<1)throw new Error('Selecione uma OS ou venda na lista.');
+      const doc=await api('/api/fiscal/drafts',{method:'POST',body:{
+        originType:values.originType,originId,kind:values.kind,requestId
+      }});
+      if(!doc||doc.id==null)throw new Error('Criação do rascunho ainda não confirmada.');
+      toast('Rascunho fiscal #'+doc.id+' salvo. A nota ainda não foi autorizada.');
       await refreshCurrentPage();
     });
+  const type=$('#fiscalOriginType'),search=$('#fiscalOriginSearch'),options=$('#fiscalOriginOptions');
+  const selected=$('#fiscalOriginSelection'),hidden=$('#fiscalOriginId'),submit=$('#fiscalDraftSubmit');
+  const preview=$('#fiscalDraftPreview'),kind=$('#fiscalKind');
+  let sequence=0,timer=null,origin=null;
+
+  const updatePreview=()=>{
+    if(!origin){preview.textContent='Selecione uma operação para conferir a origem. Os itens e valores fiscais serão validados pelo servidor.';return}
+    preview.textContent=(kind.value==='NFE'?'NF-e para peças':'NFS-e para mão de obra')+
+      ' · '+origin.label+'. O valor fiscal será calculado pelo servidor somente com itens compatíveis.';
+  };
+  const clearSelection=()=>{
+    origin=null;hidden.value='';submit.disabled=true;selected.textContent='Nenhuma operação selecionada.';updatePreview();
+  };
+  const findOrigins=async()=>{
+    const ticket=++sequence,originType=type.value,term=search.value.trim();
+    options.textContent='Buscando operações…';
+    const rows=originType==='OS'
+      ?(await api('/api/work-orders/page?limit=50&search='+encodeURIComponent(term))).items
+      :await api('/api/sales?limit=50&status=CONCLUIDA&search='+encodeURIComponent(term));
+    if(ticket!==sequence||!options.isConnected||type.value!==originType)return;
+    const labels=rows.map(row=>{
+      const label=originType==='OS'?
+        'OS #'+row.os_number+' · '+(row.customer_name||'Cliente não identificado'):
+        'Venda #'+row.sale_number+' · '+(row.customer_name||'Consumidor');
+      const detail=originType==='OS'
+        ?[row.machine_brand,row.machine_model,row.status].filter(Boolean).join(' · ')
+        :money(row.total_cents)+' · '+row.status;
+      return {...row,label,detail};
+    });
+    options.innerHTML=labels.length?labels.map(item=>
+      '<button type="button" class="fiscal-origin-option" data-fiscal-origin="'+item.id+'">'+
+      '<strong>'+esc(item.label)+'</strong><small>'+esc(item.detail)+'</small></button>'
+    ).join(''):'<p class="muted">Nenhuma operação encontrada. Tente outro número ou nome.</p>';
+    $$('[data-fiscal-origin]',options).forEach(button=>button.onclick=()=>{
+      const item=labels.find(row=>String(row.id)===button.dataset.fiscalOrigin);
+      if(!item)return;
+      origin=item;hidden.value=String(item.id);
+      selected.textContent='Selecionado: '+item.label+' · '+item.detail;
+      submit.disabled=false;
+      $$('[data-fiscal-origin]',options).forEach(b=>b.setAttribute('aria-pressed',String(b===button)));
+      updatePreview();
+    });
+  };
+  const findSafe=()=>findOrigins().catch(error=>{if(options.isConnected){
+    options.textContent='Não foi possível carregar as operações: '+error.message+'. Altere a busca para tentar novamente.';
+  }});
+  type.onchange=()=>{search.value='';++sequence;clearTimeout(timer);clearSelection();findSafe()};
+  search.oninput=()=>{++sequence;clearTimeout(timer);clearSelection();timer=setTimeout(findSafe,220)};
+  kind.onchange=updatePreview;
+  void findSafe();
 }
+
+const fiscalBusy=new Set();
 async function fiscalAction(id,action){
+  const key=action+':'+id;
+  if(fiscalBusy.has(key))return;
+  fiscalBusy.add(key);
+  const selector=action==='submit'?'[data-fiscal-submit="'+id+'"]':'[data-fiscal-check="'+id+'"]';
+  const button=$(selector);
+  if(button){button.disabled=true;button.setAttribute('aria-busy','true');button.textContent=action==='submit'?'Transmitindo…':'Consultando…'}
   try{
     await api('/api/fiscal/'+id+'/'+action,{method:'POST',body:{requestId:newCommandId()}});
+    const doc=await api('/api/fiscal/'+id);
     await refreshCurrentPage();
+    if(['AUTORIZADA','AUTORIZADA_HOMOLOGACAO'].includes(doc.status))
+      toast('Documento fiscal #'+id+' autorizado'+(doc.status==='AUTORIZADA_HOMOLOGACAO'?' em homologação.':'.'));
+    else if(doc.status==='INDETERMINADO')
+      toast('Transmissão sem conclusão confirmada. Consulte a situação fiscal antes de outra tentativa.',true);
+    else
+      toast('Situação fiscal atualizada: '+String(doc.status).replaceAll('_',' ')+'.');
   }catch(error){
-    toast(error.message,true);
-    // Falhas de rede podem deixar status indeterminado; atualiza sem tentar reenviar às cegas.
+    toast(error?.pending
+      ?'Operação aguardando confirmação local. Não retransmita às cegas; revise as pendências.'
+      :'Não foi possível confirmar a ação fiscal: '+error.message,true);
     await refreshCurrentPage().catch(()=>{});
+  }finally{
+    fiscalBusy.delete(key);
+    if(button?.isConnected){button.disabled=false;button.removeAttribute('aria-busy');button.textContent=action==='submit'?'Transmitir':'Consultar situação'}
   }
 }
+
 async function showFiscalHistory(id){
   const [doc,events]=await Promise.all([api('/api/fiscal/'+id),api('/api/fiscal/'+id+'/events')]);
   const rows=events.map(e=>'<div class="list-item"><div><strong>'+esc(e.event_type)+'</strong><br><small>'+dt(e.created_at)+'</small></div></div>').join('');

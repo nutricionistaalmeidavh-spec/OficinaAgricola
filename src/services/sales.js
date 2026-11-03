@@ -200,13 +200,27 @@ export function getSale(db, id) {
   return sale;
 }
 
-export function listSales(db, { limit = 100 } = {}) {
+export function listSales(db, { limit = 100, search = '', status = '' } = {}) {
+  const filters = [], args = [];
+  const query = text(search);
+  if (query) {
+    filters.push('(CAST(s.sale_number AS TEXT) LIKE ? OR c.name LIKE ?)');
+    args.push('%' + query + '%', '%' + query + '%');
+  }
+  if (status) {
+    filters.push('s.status = ?');
+    args.push(text(status));
+  }
   return db.prepare(`SELECT s.*,c.name customer_name,u.name created_by_name
     FROM sales s LEFT JOIN customers c ON c.id=s.customer_id LEFT JOIN users u ON u.id=s.created_by
-    ORDER BY s.id DESC LIMIT ?`).all(Math.max(1, Math.min(500, Number(limit) || 100)));
+    ${filters.length ? 'WHERE ' + filters.join(' AND ') : ''}
+    ORDER BY s.id DESC LIMIT ?`).all(...args, Math.max(1, Math.min(500, Number(limit) || 100)));
 }
 
 export function cancelSale(db, id, { reason = '', userId = null } = {}) {
+  const cancelReason = text(reason);
+  if (cancelReason.length < 3) throw new Error('Motivo do cancelamento obrigatório (mínimo 3 caracteres)');
+  if (cancelReason.length > 500) throw new Error('Motivo do cancelamento excede 500 caracteres');
   return transaction(db, () => {
     const sale = getSale(db, id);
     if (sale.status === 'CANCELADA') throw new Error('Venda já cancelada');
@@ -227,7 +241,7 @@ export function cancelSale(db, id, { reason = '', userId = null } = {}) {
         note:`Estorno venda #${sale.sale_number}`,createdBy:userId,
       });
     }
-    db.prepare(`UPDATE sales SET status='CANCELADA',canceled_at=?,cancel_reason=? WHERE id=?`).run(t, text(reason), id);
+    db.prepare(`UPDATE sales SET status='CANCELADA',canceled_at=?,cancel_reason=? WHERE id=?`).run(t, cancelReason, id);
     if(currentCash&&sale.total_cents>0)postPaymentEvent(db,{
       sourceType:'SALE',sourceId:id,eventType:'REFUNDED',
       amountCents:sale.total_cents,method:sale.payment_method,
