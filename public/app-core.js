@@ -1,5 +1,5 @@
 const $=(s,root=document)=>root.querySelector(s); const $$=(s,root=document)=>[...root.querySelectorAll(s)];
-const state={token:localStorage.getItem('oficina_token')||'',user:null,page:'dashboard',pageReady:false,pageEpoch:0,pageController:null,modalToken:null,modalKey:null};
+const state={token:'',user:null,page:'dashboard',pageReady:false,pageEpoch:0,pageController:null,modalToken:null,modalKey:null};
 const dirtyInputs=new WeakSet();
 // ID + usuário evita reenviar comandos para outra conta quando um banco for recriado.
 const currentCommandOwner=()=>state.user?
@@ -8,7 +8,6 @@ const commandQueue=window.OficinaCommands?.createQueue({
   send:({path,method,body})=>{
     // Autorizações nunca entram no IndexedDB; cada envio usa a sessão atual.
     const headers={'Content-Type':'application/json'};
-    if(state.token)headers.Authorization='Bearer '+state.token;
     const transport=window.localRuntime?.request||fetch;
     return transport(path,{method,headers,body:JSON.stringify(body)});
   }
@@ -134,7 +133,8 @@ const money=c=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).
 const dt=v=>v?new Date(v).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'}):'—';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 async function api(path,{method='GET',body,raw=false}={}){
-  const headers={};if(state.token)headers.Authorization=`Bearer ${state.token}`;
+  const headers={};
+  if(path==='/api/auth/login')headers['X-Session-Transport']='cookie';
   if(body!==undefined)headers['Content-Type']='application/json';
   const requester=window.localRuntime?.request||fetch;
   const isRead=method==='GET',epoch=state.pageEpoch;
@@ -295,7 +295,7 @@ async function boot(){
   $('#today').textContent=new Date().toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'short'});
   try{
     const setup=await api('/api/setup/status');
-    if(setup.required){state.token='';localStorage.removeItem('oficina_token');return showSetup()}
+    if(setup.required){state.token='';return showSetup()}
   }catch{ /* The login view will display server errors if offline. */ }
   if(!state.token)return showLogin();
   try{
@@ -317,7 +317,7 @@ function showApp(){$('#loginView').classList.add('hidden');$('#appView').classLi
 function logout(){
   if(modalSession)closeModal();
   state.pageController?.abort();state.pageEpoch++;state.pageReady=false;
-  state.token='';state.user=null;localStorage.removeItem('oficina_token');
+  state.token='';state.user=null;
   void updatePendingCommands();showLogin();
 }
 
