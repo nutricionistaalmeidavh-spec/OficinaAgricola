@@ -207,6 +207,9 @@ export function listSales(db, { limit = 100 } = {}) {
 }
 
 export function cancelSale(db, id, { reason = '', userId = null } = {}) {
+  const cancelReason = text(reason);
+  if (cancelReason.length < 3) throw new Error('Motivo do cancelamento obrigatório (mínimo 3 caracteres)');
+  if (cancelReason.length > 500) throw new Error('Motivo do cancelamento excede 500 caracteres');
   return transaction(db, () => {
     const sale = getSale(db, id);
     if (sale.status === 'CANCELADA') throw new Error('Venda já cancelada');
@@ -227,7 +230,7 @@ export function cancelSale(db, id, { reason = '', userId = null } = {}) {
         note:`Estorno venda #${sale.sale_number}`,createdBy:userId,
       });
     }
-    db.prepare(`UPDATE sales SET status='CANCELADA',canceled_at=?,cancel_reason=? WHERE id=?`).run(t, text(reason), id);
+    db.prepare(`UPDATE sales SET status='CANCELADA',canceled_at=?,cancel_reason=? WHERE id=?`).run(t, cancelReason, id);
     if(currentCash&&sale.total_cents>0)postPaymentEvent(db,{
       sourceType:'SALE',sourceId:id,eventType:'REFUNDED',
       amountCents:sale.total_cents,method:sale.payment_method,
