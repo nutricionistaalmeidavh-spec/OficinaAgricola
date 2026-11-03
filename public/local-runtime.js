@@ -8,6 +8,10 @@
     el.className = `server-status ${available ? 'available' : 'unavailable'}`;
     const label = el.querySelector('span');
     if (label) label.textContent = available ? 'Servidor local disponível' : 'Servidor local indisponível';
+    const previous=el.dataset.available;
+    const current=available?'1':'0';
+    el.dataset.available=current;
+    if(previous!==current)window.dispatchEvent(new CustomEvent('oficina:server-status',{detail:{available}}));
   }
 
   async function checkServerStatus() {
