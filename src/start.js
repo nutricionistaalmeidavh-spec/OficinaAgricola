@@ -39,14 +39,16 @@ const maintenanceTimer=setInterval(maintainDatabase,60*60*1000);
 maintenanceTimer.unref?.();
 outboxTimer.unref?.();
 let lastReconciliationWarning=null;
+let reconciliationCursors={};
 function reconcile(){
  try{
-   const audit=auditInvariants(db);
+   const audit=auditInvariants(db,{batchSize:500,cursors:reconciliationCursors});
+    reconciliationCursors=audit.nextCursor;
    const signature=JSON.stringify(audit.errors);
    if(signature!==lastReconciliationWarning){
      lastReconciliationWarning=signature;
      if(!audit.ok)console.warn('[canonicidade] Divergências identificadas (somente leitura):',signature);
-     else console.info('[canonicidade] Livros de estoque/financeiro conciliados');
+     else console.info('[canonicidade] Lote de auditoria verificado');
    }
  }catch(error){console.error('[canonicidade] Falha de auditoria:',error.message)}
 }
