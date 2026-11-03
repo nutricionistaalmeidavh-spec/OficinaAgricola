@@ -12,11 +12,15 @@ export function openDatabase(path = process.env.DATABASE_PATH || './data/artisys
     path = resolved;
   }
   const db = new DatabaseSync(path);
-  db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;');
+  db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;');
   return db;
 }
 
 export function migrate(db) {
+  db.exec("CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY, applied_at TEXT NOT NULL)");
+  const version='2026-11-03-main-p0-p3';
+  if(db.prepare('SELECT 1 FROM schema_migrations WHERE version=?').get(version))return;
+  return transaction(db,()=>{
   db.exec(`
     CREATE TABLE IF NOT EXISTS company_settings (
       id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -330,6 +334,33 @@ export function migrate(db) {
     SELECT 'OS_RECEIPT',id,'REFUNDED',-amount_cents,method,NULL,reversed_at FROM receipts WHERE reversed_at IS NOT NULL;
   `);
   migrateFiscal(db);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_work_orders_status_id ON work_orders(status,id DESC);
+    CREATE INDEX IF NOT EXISTS idx_work_orders_customer ON work_orders(customer_id,id DESC);
+    CREATE INDEX IF NOT EXISTS idx_work_orders_delivery ON work_orders(status,delivered_at);
+    CREATE INDEX IF NOT EXISTS idx_work_orders_technician ON work_orders(technician_id,id DESC);
+    CREATE INDEX IF NOT EXISTS idx_customer_name ON customers(name COLLATE NOCASE,id);
+    CREATE INDEX IF NOT EXISTS idx_machines_customer_id ON machines(customer_id,id DESC);
+    CREATE INDEX IF NOT EXISTS idx_parts_active_description ON parts(active,description COLLATE NOCASE,id);
+    CREATE INDEX IF NOT EXISTS idx_work_order_status_history_os ON work_order_status_history(work_order_id,changed_at,id);
+    CREATE INDEX IF NOT EXISTS idx_work_order_parts_os ON work_order_parts(work_order_id,id);
+    CREATE INDEX IF NOT EXISTS idx_work_order_checklists_os ON work_order_checklists(work_order_id,id DESC);
+    CREATE INDEX IF NOT EXISTS idx_checklist_responses_checklist ON checklist_responses(checklist_id,position);
+    CREATE INDEX IF NOT EXISTS idx_attachments_os ON attachments(work_order_id,id DESC);
+    CREATE INDEX IF NOT EXISTS idx_receipts_os_date ON receipts(work_order_id,received_at DESC,id DESC);
+    CREATE INDEX IF NOT EXISTS idx_quote_items_quote ON quote_items(quote_id,id);
+    CREATE INDEX IF NOT EXISTS idx_inventory_work_order ON inventory_movements(work_order_id,id);
+    CREATE INDEX IF NOT EXISTS idx_payment_events_created ON payment_events(created_at);
+    CREATE INDEX IF NOT EXISTS idx_expenses_paid ON expenses(paid_at);
+    CREATE INDEX IF NOT EXISTS idx_quotes_approved_at ON quotes(approval_status,approved_at);
+    CREATE INDEX IF NOT EXISTS idx_maintenance_due ON maintenance_plans(active,next_due_date);
+    CREATE INDEX IF NOT EXISTS idx_fiscal_documents_id ON fiscal_documents(status,id DESC);
+  `);
+  const outboxCols=new Set(db.prepare("PRAGMA table_info('domain_outbox')").all().map(x=>x.name));
+  if(!outboxCols.has('next_attempt_at'))db.exec('ALTER TABLE domain_outbox ADD COLUMN next_attempt_at TEXT');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_outbox_retry ON domain_outbox(delivered_at,next_attempt_at,id)');
+  db.prepare('INSERT INTO schema_migrations(version,applied_at) VALUES(?,?)').run(version,nowIso());
+  });
 }
 
 let nextSavepoint=0;
