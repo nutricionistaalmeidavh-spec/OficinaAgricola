@@ -247,7 +247,7 @@ export function createBillingService(port,{receivePayment,getPaymentSummary,prov
   if(!row.provider_ref)fail('Cobrança não foi emitida pelo provedor',409);
   const provider=providers[row.method];
   if(!provider||typeof provider.status!=='function')fail('Provedor indisponível',409);
-  const state=await provider.status(row.provider_ref,{requestId:row.id});
+  const state=await provider.status(row.provider_ref,{requestId:row.id,workOrderId:Number(row.work_order_id)});
   if(state?.reference!==row.provider_ref||
     !Number.isSafeInteger(state?.amountCents)||state.amountCents!==Number(row.amount_cents))
    fail('Cobrança externa divergente: valor ou referência incompatíveis',409);
