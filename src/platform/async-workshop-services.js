@@ -84,8 +84,12 @@ export function createAsyncWorkshopServices(port){
     select(`INSERT INTO work_order_status_history(
        work_order_id,from_status,to_status,reason,changed_at
      ) VALUES(?,NULL,'ENTRADA','Abertura da OS',?)`,[workOrderId,at]),
-    select(`INSERT INTO domain_outbox(event_type,payload_json,created_at)
-       VALUES('OS_CRIADA',?,?)`,[JSON.stringify({workOrderId}),at])
+    select(`INSERT INTO domain_outbox(
+       event_key,event_id,event_type,payload_json,meta_json,created_at
+     ) VALUES(?,?,'OS_CRIADA',?,?,?)`,[
+       'OS_CRIADA:'+workOrderId,randomBytes(16).toString('hex'),
+       JSON.stringify({workOrderId}),JSON.stringify({source:'async-workshop'}),at
+     ])
    ];
    await atomic(port,statements);
    return getWorkOrder(workOrderId);
