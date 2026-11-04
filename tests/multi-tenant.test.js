@@ -163,6 +163,14 @@ test('HTTP isolation: company and unit records, member roles and revoked access'
   assert.equal(otherConsolidated.status,200);
   assert.equal(otherConsolidated.data.totals.finance.expensesCents,0,'other company expense must never be included');
   assert.equal((await request('GET','/api/tenancy/company-summary?companyId='+newCompany.data.id+'&from=invalid')).status,400);
+  const branchAdmin=await request('POST','/api/tenancy/memberships',{unitId:unit.data.id,username:'branchadmin',name:'Gerente filial',password:'StrongP@ss2026',role:'ADMIN'});
+  assert.equal(branchAdmin.status,201);
+  const branchLogin=await request('POST','/api/auth/login',{username:'branchadmin',password:'StrongP@ss2026'});
+  assert.equal(branchLogin.status,200);
+  assert.equal((await request('GET','/api/tenancy/company-summary?companyId='+newCompany.data.id,undefined,unit.data.id,branchLogin.data.token)).status,403,
+    'admin of one unit cannot see financial figures from sibling units');
+  assert.equal((await request('GET','/api/tenancy/audit?companyId='+newCompany.data.id,undefined,unit.data.id,branchLogin.data.token)).status,403,
+    'audit trail of other units is not implicitly granted');
   const audit=await request('GET','/api/tenancy/audit?companyId='+newCompany.data.id);
   assert.equal(audit.status,200,JSON.stringify(audit.data));
   assert.ok(audit.data.some(entry=>entry.action==='MEMBERSHIP_CHANGED'&&entry.target_user_id===member.data.id));
