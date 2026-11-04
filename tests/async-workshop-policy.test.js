@@ -7,7 +7,7 @@ test('native setup, login and migration only use the protected service boundary'
  assert.equal(serviceOnlyNativeRoute('/v1/customers'),false);
 });
 test('native financial and fiscal operations reject technician role',()=>{
- for(const path of ['/v1/reports/finance','/v1/expenses','/v1/cash/summary','/v1/sales','/v1/fiscal','/v1/fiscal/4/events'])
+ for(const path of ['/v1/reports/finance','/v1/expenses','/v1/cash/summary','/v1/expenses/1','/v1/fiscal','/v1/fiscal/4/events'])
    assert.ok(!requiredNativeRoles('GET',path).includes('TECNICO'),path);
  assert.deepEqual(requiredNativeRoles('POST','/v1/fiscal/2/submit'),['ADMIN']);
  assert.ok(!requiredNativeRoles('POST','/v1/payments').includes('ATENDIMENTO'));
@@ -18,4 +18,9 @@ test('native workshop operations are scoped to eligible roles',()=>{
  assert.ok(!requiredNativeRoles('POST','/v1/technicians').includes('TECNICO'));
  assert.deepEqual(requiredNativeRoles('PATCH','/v1/fiscal/settings'),['ADMIN']);
  assert.ok(!requiredNativeRoles('DELETE','/v1/unknown').includes('TECNICO'));
+});
+
+test('sales listing remains visible to technicians, mutation keeps office-only permission',()=>{
+ assert.ok(requiredNativeRoles('GET','/v1/sales').includes('TECNICO'));
+ assert.ok(!requiredNativeRoles('POST','/v1/sales').includes('TECNICO'));
 });
