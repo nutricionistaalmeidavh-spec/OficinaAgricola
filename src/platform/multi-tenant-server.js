@@ -12,7 +12,7 @@ import { assertSecureNetwork } from './network.js';
 import { loginHttp, validateSession, logout, hashPassword } from '../auth.js';
 import { createApprovalLink, createMaintenanceCrmTasks } from '../services/market-parity.js';
 import { financeSummary } from '../services/finance.js';
-import { sharePartCatalog } from './tenant-catalog-sharing.js';
+import { sharePartCatalog, shareCustomer } from './tenant-catalog-sharing.js';
 import { seedDefaultChecklists, recoverOrphanAttachments } from '../services/operations.js';
 import { createEventRuntime } from './event-runtime.js';
 import { dispatchOutbox } from './outbox.js';
@@ -164,6 +164,21 @@ export function createMultiTenantServer({
       return json(res,200,changeUnitMembership(registryDb,user.id,await readJson(req)));
     if(path==='/api/tenancy/memberships'&&method==='GET')
       return json(res,200,listUnitMembers(registryDb,user.id,positive(url.searchParams.get('unitId'))));
+    if(path==='/api/tenancy/shareable-customers'&&method==='GET'){
+      const source=requireUnitMembership(registryDb,user.id,positive(url.searchParams.get('unitId')));
+      if(source.role!=='ADMIN')throw httpError('Administração da unidade é necessária',403);
+      const search=String(url.searchParams.get('search')||'').trim();
+      if(search.length>80)throw httpError('Busca excede 80 caracteres',400);
+      const term='%'+search+'%';
+      const rows=unitRuntime(source.id).db.prepare(
+        'SELECT id,name FROM customers WHERE active=1 AND name LIKE ? ORDER BY id DESC LIMIT 100'
+      ).all(term);
+      return json(res,200,{customers:rows,limit:100});
+    }
+    if(path==='/api/tenancy/share-customer'&&method==='POST'){
+      const body=await readJson(req);
+      return json(res,200,shareCustomer({registryDb,unitRuntime,actorUserId:user.id,...body}));
+    }
     if(path==='/api/tenancy/shareable-parts'&&method==='GET'){
       const source=requireUnitMembership(registryDb,user.id,positive(url.searchParams.get('unitId')));
       if(source.role!=='ADMIN')throw httpError('Administração da unidade é necessária',403);
