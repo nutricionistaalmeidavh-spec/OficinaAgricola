@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {openDatabase} from '../src/db.js';
+import {openDatabase,migrate} from '../src/db.js';
+import {migrateAssistencia} from '../src/assistencia-schema.js';
 import {createD1Port} from '../src/platform/async-sql-ports.js';
 import {migrateAsyncTenantStore,asyncTenantSchema,claimAsyncTenantIdentity} from '../src/platform/async-tenant-migrations.js';
 
@@ -72,4 +73,31 @@ test('tenant database identity rejects reuse by another company or branch',async
   await assert.rejects(claimAsyncTenantIdentity(port,{companyId:3,unitId:4}),/outro tenant/);
   await assert.rejects(claimAsyncTenantIdentity(port,{companyId:2,unitId:5}),/outro tenant/);
  }finally{db.close();}
+});
+
+test('D1 native schema covers every canonical SQLite business table and column',async()=>{
+ const old=openDatabase(':memory:'),native=openDatabase(':memory:');
+ try{
+  migrate(old);migrateAssistencia(old);
+  const binding={
+   prepare(sql){return{bind(...args){return{
+    async first(){return native.prepare(sql).get(...args);},
+    async all(){return {results:native.prepare(sql).all(...args)};},
+    async run(){const r=native.prepare(sql).run(...args);return{meta:{changes:r.changes}};}
+   }}}},
+   async batch(stmts){native.exec('BEGIN IMMEDIATE');try{const results=[];
+    for(const s of stmts)results.push(await s.run());
+    native.exec('COMMIT');return results;
+   }catch(e){native.exec('ROLLBACK');throw e;}}
+  };
+  const port=createD1Port({binding});await migrateAsyncTenantStore(port);
+  const tables=db=>db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all().map(x=>x.name);
+  const missing=tables(old).filter(name=>!tables(native).includes(name));
+  assert.deepEqual(missing,[],'entire SQLite canonical table surface must exist in D1');
+  for(const table of tables(old)){
+   const names=db=>new Set(db.prepare('PRAGMA table_info("'+table+'")').all().map(c=>c.name));
+   const extra=[...names(old)].filter(column=>!names(native).has(column));
+   assert.deepEqual(extra,[],table+' has missing domain columns in D1');
+  }
+ }finally{old.close();native.close();}
 });
