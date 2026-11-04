@@ -96,3 +96,31 @@ test('async D1 quote approval and fiscal draft preserve original amounts and ide
   assert.equal((await port.all('SELECT * FROM fiscal_documents')).length,1);
  }finally{db.close();}
 });
+
+test('D1 concurrent identical payment requests remain exactly once in canonical ledger',async()=>{
+ const db=openDatabase(':memory:');
+ try{
+  const port=createD1Port({binding:localD1(db)});
+  await migrateAsyncTenantStore(port);
+  const workshop=createAsyncWorkshopServices(port);
+  const customer=await workshop.createCustomer({name:'Cliente idempotente'});
+  const vehicle=await workshop.createMachine({customerId:customer.id,type:'AUTOMOVEL'});
+  const order=await workshop.createWorkOrder({
+    customerId:customer.id,machineId:vehicle.id,problemReported:'Teste concorrência PIX'
+  });
+  const now=new Date().toISOString();
+  await port.run(`INSERT INTO quotes(
+    work_order_id,subtotal_cents,discount_cents,total_cents,approval_status,
+    approved_at,created_at,updated_at
+  ) VALUES(?,1000,0,1000,'APROVADO',?,?,?)`,[order.id,now,now,now]);
+  await port.run('UPDATE work_orders SET quote_total_cents=1000 WHERE id=?',[order.id]);
+  const command={workOrderId:order.id,amountCents:300,method:'PIX',requestId:'payment-concurrent-d1'};
+  const [first,second]=await Promise.all([
+    workshop.receivePayment(command),workshop.receivePayment(command)
+  ]);
+  assert.equal(first.id,second.id);
+  assert.equal((await port.first('SELECT COUNT(*) n FROM receipts')).n,1);
+  assert.equal((await port.first('SELECT COUNT(*) n FROM payment_events')).n,1);
+  assert.equal((await workshop.financeSummary()).receivedCents,300);
+ }finally{db.close();}
+});
