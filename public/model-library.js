@@ -4,7 +4,7 @@
   const PAGE_SIZE=24;
   const CATEGORIES={sports:'Esportivo',sedan:'Sedã',coupe:'Cupê',suv:'SUV',hatchback:'Hatch',wagon:'Perua',minivan:'Minivan',van:'Van',pickup:'Picape',utility:'Utilitário'};
   let catalogPromise=null;
-  const browse={term:'',brand:'',category:'',page:1};
+  const browse={term:'',brand:'',category:'',page:1,popularOnly:true};
 
   function normalize(value){
     return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR').trim().replace(/\s+/g,' ');
@@ -59,15 +59,23 @@
   function card(car){
     const id=escapeHtml(car.id),brand=escapeHtml(car.brand),model=escapeHtml(car.model);
     const category=escapeHtml(categoryLabel(car.category));
-    return '<article class="ml-card">'
+    const isPriority=Boolean(car._top);
+    const preview=window.OficinaModel3D?.thumbnail(car,thumbnail(car.category))||thumbnail(car.category);
+    const status=isPriority?window.OficinaModel3D.modelBadge(car):'Aguardando curadoria';
+    return '<article class="ml-card" data-model-id="'+id+'">'
       +'<div class="ml-illustration ml-theme-'+(CATEGORIES[car.category]?car.category:'other')+'">'
-      +'<span class="ml-preview-label">Ilustração da categoria</span>'+thumbnail(car.category)+'</div>'
+      +'<span class="ml-preview-label">'+(car._top?.thumbnail?'Prévia do GLB · não homologado':'Ilustração da categoria')+'</span>'+preview+'</div>'
       +'<div class="ml-card-body"><span class="ml-brand">'+brand+'</span><h3>'+model+'</h3>'
       +'<div class="ml-card-meta"><span>'+category+'</span><span>'+formatBytes(car.bytes)+'</span></div>'
-      +'<button type="button" class="btn sm ml-detail" data-model-detail="'+id+'">Ver detalhes</button>'
+      +'<span class="ml-model-status '+(car._top?.status==='blocked'?'ml-blocked':(Object.values(car._installedVariants||{}).some(Boolean)?'ml-installed':''))+'">'+escapeHtml(status)+'</span>'
+      +'<button type="button" class="btn sm ml-detail" data-model-detail="'+id+'">'+(isPriority?'Abrir biblioteca 3D':'Ver detalhes')+'</button>'
       +'</div></article>';
   }
-  function detail(car){
+  function detail(car,onInstalled){
+    if(car._top){
+      void window.OficinaModel3D.open(car,{showModal,onInstalled,isAdmin:state.user?.role==='ADMIN'});
+      return;
+    }
     const ref=String(car.credit?.sourceUrl||'');
     const safeUrl=/^https:\/\/sketchfab\.com\/3d-models\/[a-z0-9-]+$/i.test(ref)?ref:null;
     const licensed=String(car.credit?.license||'Não informada');
@@ -82,7 +90,8 @@
       +'<p class="muted">O catálogo já funciona offline. Esta imagem é ilustrativa; a instalação seletiva e a visualização do GLB real serão entregues nas próximas fases.</p></div>');
   }
   function drawPage(cars){
-    const results=filter(cars,browse);
+    const source=browse.popularOnly?cars.filter(car=>Boolean(car._top)):cars;
+    const results=filter(source,browse);
     const pages=Math.max(1,Math.ceil(results.length/PAGE_SIZE));
     browse.page=Math.min(browse.page,pages);
     const start=(browse.page-1)*PAGE_SIZE;
@@ -96,33 +105,45 @@
     document.querySelector('#ml-next').disabled=browse.page>=pages;
     grid.querySelectorAll('[data-model-detail]').forEach(button=>button.addEventListener('click',()=>{
       const car=cars.find(item=>item.id===button.dataset.modelDetail);
-      if(car)detail(car);
+      if(car)detail(car,()=>drawPage(cars));
+    }));
+    grid.querySelectorAll('img.ml-thumb').forEach(img=>img.addEventListener('error',()=>{
+      const id=img.closest('[data-model-id]')?.dataset.modelId;
+      const car=cars.find(x=>x.id===id);
+      if(!car)return;
+      const wrapper=document.createElement('span');
+      wrapper.innerHTML=thumbnail(car.category);
+      const fallback=wrapper.firstElementChild;
+      if(fallback)img.replaceWith(fallback);
     }));
   }
   async function render(){
     const catalog=await loadCatalog();
+    const top=await window.OficinaModel3D.load();
     if(typeof state!=='undefined'&&state.page!=='model-library')return;
-    const cars=catalog.cars;
+    const cars=window.OficinaModel3D.enrich(catalog.cars,top);
     const brands=[...new Set(cars.map(car=>car.brand))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
     pageTitle('Biblioteca 3D','CATÁLOGO DE VEÍCULOS');
     setContent('<section class="ml-screen" aria-label="Biblioteca de modelos de veículos">'
       +'<div class="ml-hero"><div><span class="ml-kicker">ARTISYS · ACERVO 3D</span>'
       +'<h2>Encontre o veículo certo.</h2><p>Explore a biblioteca sem ocupar espaço com modelos ainda não escolhidos.</p></div>'
-      +'<div class="ml-hero-stat"><strong>'+cars.length+'</strong><span>modelos catalogados</span></div></div>'
+      +'<div class="ml-hero-stat"><strong>'+catalog.cars.length+'</strong><span>modelos catalogados</span></div></div>'
       +'<div class="ml-filters">'
       +'<label>Buscar veículo<input type="search" id="ml-search" placeholder="Ex.: Uno, Corolla, Hilux" autocomplete="off" value="'+escapeHtml(browse.term)+'"></label>'
       +'<label>Marca<select id="ml-brand"><option value="">Todas as marcas</option>'+brands.map(brand=>'<option value="'+escapeHtml(brand)+'"'+(browse.brand===brand?' selected':'')+'>'+escapeHtml(brand)+'</option>').join('')+'</select></label>'
       +'<label>Categoria<select id="ml-category"><option value="">Todas as categorias</option>'+Object.entries(CATEGORIES).map(([key,name])=>'<option value="'+key+'"'+(browse.category===key?' selected':'')+'>'+name+'</option>').join('')+'</select></label>'
-      +'</div><div class="ml-result-bar"><strong id="ml-count" role="status" aria-live="polite"></strong>'
+      +'</div><label class="ml-priority-check"><input type="checkbox" id="ml-priority-only" '+(browse.popularOnly?'checked':'')+'> Priorizar os 20 carros mais comuns do Brasil</label>'
+      +'<div class="ml-result-bar"><strong id="ml-count" role="status" aria-live="polite"></strong>'
       +'<button id="ml-clear" type="button" class="btn sm">Limpar filtros</button></div>'
       +'<div id="ml-grid" class="ml-grid"></div>'
       +'<div class="ml-pagination"><button id="ml-prev" class="btn sm" type="button">Anterior</button>'
       +'<span id="ml-pagination" aria-live="polite"></span><button id="ml-next" class="btn sm" type="button">Próxima</button></div>'
-      +'<div class="ml-footnote"><strong>Catálogo disponível offline.</strong> Os arquivos 3D não são baixados nesta fase. As miniaturas são ilustrações genéricas; instalação seletiva e vínculo automático com veículos e OS entram nas próximas fases. Créditos e licenças aparecem em cada detalhe.</div></section>');
+      +'<div class="ml-footnote"><strong>Catálogo disponível offline.</strong> 20 veículos priorizados, com arquivos reais instalados sob demanda e armazenados no servidor da oficina. Modelos em revisão mostram a condição explicitamente; carros sem GLB fiel permanecem bloqueados. A ligação automática às OS ainda não faz parte desta entrega.</div></section>');
     const update=(key,value)=>{browse[key]=value; browse.page=1;drawPage(cars)};
     document.querySelector('#ml-search').addEventListener('input',e=>update('term',e.target.value));
     document.querySelector('#ml-brand').addEventListener('change',e=>update('brand',e.target.value));
     document.querySelector('#ml-category').addEventListener('change',e=>update('category',e.target.value));
+    document.querySelector('#ml-priority-only').addEventListener('change',e=>{browse.popularOnly=e.target.checked;browse.page=1;drawPage(cars)});
     document.querySelector('#ml-clear').addEventListener('click',()=>{
       browse.term='';browse.brand='';browse.category='';browse.page=1;
       document.querySelector('#ml-search').value='';
