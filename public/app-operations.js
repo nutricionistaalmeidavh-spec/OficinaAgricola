@@ -95,14 +95,22 @@ async function billingFinanceModal(){
    toast('Lançamento de extrato registrado');await billingFinanceModal();
   }catch(error){toast(error.message,true)}
  };
- $$('[data-match-entry]').forEach(btn=>btn.onclick=async()=>{
-  const id=prompt('ID do recebimento na OS para vincular ao lançamento:');
-  if(!id||!/^[1-9]\d*$/.test(id))return;
+ $('[data-match-entry]').forEach(btn=>btn.onclick=async()=>{
   try{
-   await api('/api/billing/statements/'+btn.dataset.matchEntry+'/match',{
-    method:'POST',body:{receiptId:Number(id)}
+   const receipts=await api('/api/billing/receipts/available?limit=100');
+   const bank=entries.find(x=>x.id===btn.dataset.matchEntry);
+   const possible=receipts.filter(x=>Number(x.amount_cents)===Number(bank?.amount_cents));
+   if(!possible.length){toast('Não há recebimentos de mesmo valor para conciliar',true);return;}
+   showModal('Conciliar com recebimento da OS',`<form class="form-stack">
+    <p>Extrato: <strong>${money(bank.amount_cents)}</strong> · ${esc(bank.booked_at)}</p>
+    <label>Selecione a OS e o recebimento
+     <select name="receiptId" required>${possible.map(r=>`<option value="${r.id}">OS #${r.os_number} · ${esc(r.customer_name)} · ${money(r.amount_cents)} (${esc(r.method)})</option>`).join('')}</select>
+    </label><button type="submit" class="btn primary">Conciliar</button></form>`,async fd=>{
+     await api('/api/billing/statements/'+btn.dataset.matchEntry+'/match',{
+      method:'POST',body:{receiptId:Number(fd.get('receiptId'))}
+     });
+     toast('Extrato conciliado sem duplicar receita');await billingFinanceModal();
    });
-   toast('Extrato conciliado sem duplicar receita');await billingFinanceModal();
   }catch(error){toast(error.message,true)}
  });
 }
