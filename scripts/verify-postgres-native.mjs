@@ -42,6 +42,21 @@ try{
  await service.logout(nativeLogin.token);
  await assert.rejects(service.validateSession(nativeLogin.token),/Sessão inválida/);
 
+ const serviceToken='pg-native-service-authorization-2026';
+ const handler=createAsyncWorkshopHandler({services:service,serviceToken});
+ const internalRead=async(session)=>handler(new Request('http://localhost/v1/reports/finance',{
+  headers:{Authorization:'Bearer '+serviceToken,...(session?{'X-Oficina-Session':session}:{})}
+ }));
+ assert.equal((await internalRead()).status,401,
+   'PG service token alone cannot authorize financial reads');
+ const clerkLogin=await service.login({username:'pg-clerk',password:'PostgresCashier#2026'});
+ assert.equal((await internalRead(clerkLogin.token)).status,403,
+   'PG cashier without finance role cannot read financial reports');
+ const freshAdmin=await service.login({username:'pg-admin',password:'PostgresScrypt#2026'});
+ assert.equal((await internalRead(freshAdmin.token)).status,200);
+ await service.logout(clerkLogin.token);await service.logout(freshAdmin.token);
+
+
  const customer=await service.createCustomer({name:'QA Native PostgreSQL'});
  assert.equal(customer.name,'QA Native PostgreSQL');
  const machine=await service.createMachine({
