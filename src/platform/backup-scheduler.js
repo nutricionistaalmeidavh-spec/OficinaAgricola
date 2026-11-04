@@ -44,12 +44,21 @@ export function runVerifiedBackupCycle({
  if(!databasePath||!uploadsPath||!backupRoot)throw new Error('Configuração de backup incompleta');
  const safeRetention=Math.max(2,Math.min(60,Number(retention)||7));
  const backups=verifiedArchiveNames(backupRoot);
- if(backups.length&&now.getTime()-backups[0].createdAt<minIntervalMs)
-   return {created:false,verified:true,backupDir:backups[0].path};
+ if(backups.length&&now.getTime()-backups[0].createdAt<minIntervalMs){
+   // Revalidar a restauração antes de afirmar que o backup recente é confiável.
+   try{
+     validateBackupRestoration(backups[0].path);
+     return {created:false,verified:true,backupDir:backups[0].path};
+   }catch{
+     // Preservar o backup suspeito para auditoria e gerar um novo snapshot.
+   }
+ }
  const result=createBackup({databasePath,uploadsPath,backupRoot,now});
  verifyBackup(result.backupDir);
  validateBackupRestoration(result.backupDir);
- const valid=verifiedArchiveNames(backupRoot);
+ const valid=verifiedArchiveNames(backupRoot).filter(entry=>{
+   try{verifyBackup(entry.path);return true;}catch{return false;}
+ });
  for(const previous of valid.slice(safeRetention))
    rmSync(previous.path,{recursive:true,force:true});
  return {created:true,verified:true,backupDir:result.backupDir};
