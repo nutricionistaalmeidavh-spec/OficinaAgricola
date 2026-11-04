@@ -39,6 +39,7 @@ jobs:
           cp "$SRC/three/examples/jsm/loaders/GLTFLoader.js" public/vendor/three/addons/loaders/GLTFLoader.js
           cp "$SRC/three/examples/jsm/controls/OrbitControls.js" public/vendor/three/addons/controls/OrbitControls.js
           cp "$SRC/three/examples/jsm/utils/BufferGeometryUtils.js" public/vendor/three/addons/utils/BufferGeometryUtils.js
+          cp "$SRC/three/examples/jsm/utils/SkeletonUtils.js" public/vendor/three/addons/utils/SkeletonUtils.js
           cp "$SRC/meshoptimizer/meshopt_decoder.mjs" public/vendor/meshopt_decoder.mjs
           cp "$SRC/three/LICENSE" public/vendor/licenses/three-LICENSE.txt
           cp "$SRC/meshoptimizer/LICENSE.md" public/vendor/licenses/meshoptimizer-LICENSE.md
@@ -59,6 +60,7 @@ jobs:
           node --check public/vendor/three/three.module.js
           node --check public/vendor/three/addons/loaders/GLTFLoader.js
           node --check public/vendor/three/addons/controls/OrbitControls.js
+          node --check public/vendor/three/addons/utils/SkeletonUtils.js
           node --check public/vendor/meshopt_decoder.mjs
           if grep -R "from 'three'" public/vendor/three/addons; then exit 1; fi
       - name: Trazer thumbnails 3D reais por commit fixo da biblioteca ArtiSys
