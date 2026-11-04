@@ -135,6 +135,9 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
    const machine=path.match(/^\/v1\/machines\/([1-9]\d*)$/);
    if(machine&&method==='PATCH')
      return json(await services.updateMachine(Number(machine[1]),await dataFrom(request)));
+   const technicianEdit=path.match(/^\/v1\/technicians\/([1-9][0-9]*)$/);
+   if(technicianEdit&&method==='PATCH')
+     return json(await services.updateTechnician(Number(technicianEdit[1]),await dataFrom(request)));
    if(path==='/v1/technicians'&&method==='GET')
      return json(await services.listTechnicians({includeInactive:true}));
    if(path==='/v1/technicians'&&method==='POST')
@@ -194,6 +197,11 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
    if(path==='/v1/fiscal/drafts'&&method==='POST')
      return json(await services.createFiscalDraft(await dataFrom(request)),201);
 
+   if(path==='/v1/schedule/page'&&method==='GET')
+     return json(await services.listSchedulePage({
+       from:u.searchParams.get('from')||undefined,to:u.searchParams.get('to')||undefined,
+       limit:u.searchParams.get('limit')||50,cursor:u.searchParams.get('cursor')
+     }));
    if(path==='/v1/schedule'&&method==='GET')
      return json(await services.listSchedule({
        from:u.searchParams.get('from')||undefined,
@@ -226,6 +234,11 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
      return json(await services.getFiscalSettings());
    if(path==='/v1/fiscal/settings'&&method==='PATCH')
      return json(await services.setFiscalSettings(await dataFrom(request)));
+   if(path==='/v1/fiscal/page'&&method==='GET')
+     return json(await services.listFiscalDocumentsPage({
+       status:u.searchParams.get('status')||'',
+       limit:u.searchParams.get('limit')||50,cursor:u.searchParams.get('cursor')
+     }));
    if(path==='/v1/fiscal'&&method==='GET')
      return json(await services.listFiscalDocuments({
        status:u.searchParams.get('status')||'',limit:u.searchParams.get('limit')||100
@@ -233,6 +246,17 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
    const fiscal=path.match(/^\/v1\/fiscal\/([1-9]\d*)$/);
    if(fiscal&&method==='GET')
      return json(await services.getFiscalDocument(Number(fiscal[1])));
+   const fiscalXml=path.match(/^\/v1\/fiscal\/([1-9][0-9]*)\/xml$/);
+   if(fiscalXml&&method==='GET'){
+     const doc=await services.getFiscalDocument(Number(fiscalXml[1]));
+     if(!['AUTORIZADA','AUTORIZADA_HOMOLOGACAO'].includes(doc.status)||
+        typeof doc.authorized_xml!=='string'||!doc.authorized_xml)
+       throw Object.assign(new Error('Documento sem XML fiscal autorizado'),{status:409});
+     return new Response(new TextEncoder().encode(doc.authorized_xml),{
+       status:200,headers:{'Content-Type':'application/xml; charset=utf-8',
+       'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}
+     });
+   }
    const fiscalEvents=path.match(/^\/v1\/fiscal\/([1-9]\d*)\/events$/);
    if(fiscalEvents&&method==='GET')
      return json(await services.getFiscalEvents(Number(fiscalEvents[1])));
@@ -255,6 +279,11 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
      return json(await services.closeCashSession(await dataFrom(request)));
    if(path==='/v1/cash/summary'&&method==='GET')
      return json(await services.cashSummary());
+   if(path==='/v1/sales/page'&&method==='GET')
+     return json(await services.listSalesPage({
+       status:u.searchParams.get('status')||'',search:u.searchParams.get('search')||'',
+       limit:u.searchParams.get('limit')||50,cursor:u.searchParams.get('cursor')
+     }));
    if(path==='/v1/sales'&&method==='GET')
      return json(await services.listSales({
        status:u.searchParams.get('status')||'',search:u.searchParams.get('search')||'',
@@ -409,6 +438,11 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
    if(reverse&&method==='POST')
      return json(await services.reverseReceipt({
        ...await dataFrom(request),workOrderId:Number(reverse[1]),receiptId:Number(reverse[2])
+     }));
+   if(path==='/v1/expenses/page'&&method==='GET')
+     return json(await services.listExpensesPage({
+       from:u.searchParams.get('from')||undefined,to:u.searchParams.get('to')||undefined,
+       limit:u.searchParams.get('limit')||50,cursor:u.searchParams.get('cursor')
      }));
    if(path==='/v1/expenses'&&method==='GET')
      return json(await services.listExpenses({
