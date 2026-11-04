@@ -16,6 +16,7 @@ async function openTenantAdmin(){
       ${managed.length?'<button type="button" class="btn" id="createTenantUnit">+ Unidade</button>':''}
       ${managed.length?'<button type="button" class="btn" id="addTenantMember">+ Vincular usuário</button>':''}
       ${managed.length?'<button type="button" class="btn" id="editTenantMember">Alterar acessos</button>':''}
+      ${managed.length?'<button type="button" class="btn" id="tenantCompanySummary">Resumo da empresa</button>':''}
     </div>
     <div class="list">${units.map(u=>'<div class="list-item"><div><strong>'+esc(u.companyName)+' / '+esc(u.name)+'</strong><br><small>'+esc(u.code)+' · '+esc(u.role)+'</small></div></div>').join('')}</div>
   </div>`);
@@ -38,6 +39,27 @@ async function openTenantAdmin(){
     await api('/api/tenancy/units',{method:'POST',body:formObj(fd)});
     toast('Unidade cadastrada');location.reload();
   });
+  const summary=$('#tenantCompanySummary');
+  if(summary)summary.onclick=()=>{
+    showModal('Resumo por empresa',`<form class="form-stack">
+      <label>Empresa<select name="companyId">${companyOptions}</select></label>
+      <button class="btn primary" type="submit">Consultar</button>
+    </form>`,async fd=>{
+      const id=Number(formObj(fd).companyId);
+      const result=await api('/api/tenancy/company-summary?companyId='+id);
+      const numbers=result.totals;
+      showModal('Operação consolidada',`<div class="form-stack">
+        <p class="muted">Somente dados operacionais da empresa selecionada. Sem consolidação fiscal ou financeira.</p>
+        <div class="grid two-col">
+          <div class="card"><strong>${numbers.customers}</strong><small> Clientes por unidade</small></div>
+          <div class="card"><strong>${numbers.workOrders}</strong><small> Ordens de serviço</small></div>
+          <div class="card"><strong>${numbers.openOrders}</strong><small> OS abertas</small></div>
+          <div class="card"><strong>${numbers.parts}</strong><small> Cadastros de peças</small></div>
+        </div>
+        ${result.units.map(unit=>'<div class="list-item"><div><strong>'+esc(unit.name)+'</strong><br><small>Clientes: '+unit.customers+' · OS: '+unit.workOrders+' · OS abertas: '+unit.openOrders+'</small></div></div>').join('')}
+      </div>`);
+    });
+  };
   const edit=$('#editTenantMember');
   if(edit)edit.onclick=async()=>{
     showModal('Alterar acesso de colaborador',`<form class="form-stack">
