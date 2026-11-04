@@ -1,5 +1,23 @@
 import {createPostgresPort,createD1Port} from './async-sql-ports.js';
 
+// Single promise-based SQL boundary for business services and the global registry.
+// D1 batches are atomic but do NOT implement interactive PostgreSQL transactions.
+export const COMMON_DATA_CONTRACT_METHODS=Object.freeze([
+ 'all','first','run','batch','transaction'
+]);
+export function assertCommonDataContract(port,{interactiveTransactions=false}={}){
+ if(!port||!['sqlite','postgres','d1'].includes(port.engine))
+   throw Error('Engine SQL não suportado no contrato comum');
+ if(typeof interactiveTransactions!=='boolean')
+   throw Error('interactiveTransactions exige opção booleana');
+ for(const name of COMMON_DATA_CONTRACT_METHODS)
+   if(typeof port[name]!=='function')
+     throw Error('Contrato SQL incompleto: método '+name+' obrigatório');
+ if(interactiveTransactions&&port.engine==='d1')
+   throw Error('D1 não implementa transações interativas; use batch atômico');
+ return port;
+}
+
 // The application-facing contract is promise-based across ALL engines.
 // A local Windows/offline customer keeps the existing SQLite DatabaseSync
 // file and migrations; opting into PG/D1 never reconfigures local clients.
