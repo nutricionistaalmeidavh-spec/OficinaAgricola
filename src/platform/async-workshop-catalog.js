@@ -1,3 +1,4 @@
+import {randomBytes} from 'node:crypto';
 // One asynchronous catalog implementation, shared by SQLite, Postgres and D1.
 // Keep IDs canonical in the database; no external service is required.
 const clean=value=>String(value??'').trim();
@@ -109,7 +110,7 @@ export function createAsyncWorkshopCatalog(port){
    const userId=input.userId==null?null:id(input.userId);
    if(userId&&!await port.first('SELECT id FROM users WHERE id=?',[userId]))
      fail('Usuário vinculado não encontrado',404);
-   const technicianId=Number(BigInt('0x'+Array.from({length:6},()=>Math.floor(Math.random()*256).toString(16).padStart(2,'0')).join('')));
+   const technicianId=randomBytes(6).readUIntBE(0,6);
    const at=new Date().toISOString();
    await port.run(`INSERT INTO technicians(
      id,name,phone,specialty,user_id,active,created_at,updated_at
