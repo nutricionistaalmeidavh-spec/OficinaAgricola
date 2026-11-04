@@ -70,6 +70,19 @@ const ROUTES=[
  'GET /api/work-orders/:id/attachments /v1/orders/:id/attachments ALL',
  'POST /api/work-orders/:id/attachments /v1/orders/:id/attachments TECH',
  'GET /api/attachments/:id/file /v1/attachments/:id/file ALL',
+ 'GET /api/billing/capabilities /v1/billing/capabilities FIN',
+ 'POST /api/billing/plans /v1/billing/plans FIN',
+ 'GET /api/billing/orders/:id/plan /v1/billing/orders/:id/plan FIN',
+ 'GET /api/billing/plans/:planId /v1/billing/plans/:planId FIN',
+ 'POST /api/billing/installments/:installmentId/activate /v1/billing/installments/:installmentId/activate FIN',
+ 'POST /api/billing/installments/:installmentId/sync /v1/billing/installments/:installmentId/sync FIN',
+ 'POST /api/billing/installments/:installmentId/manual /v1/billing/installments/:installmentId/manual FIN',
+ 'POST /api/billing/settlements /v1/billing/settlements FIN',
+ 'GET /api/billing/report /v1/billing/report FIN',
+ 'GET /api/billing/statements /v1/billing/statements FIN',
+ 'POST /api/billing/statements /v1/billing/statements FIN',
+ 'POST /api/billing/statements/:entryId/match /v1/billing/statements/:entryId/match FIN',
+ 'POST /api/billing/reminders/prepare /v1/billing/reminders/prepare FIN',
  'GET /api/payment-intents/capabilities /v1/payment-intents/capabilities FIN',
  'POST /api/payment-intents /v1/payment-intents FIN',
  'GET /api/payment-intents/:intentId /v1/payment-intents/:intentId FIN',
@@ -124,7 +137,7 @@ const definitions=ROUTES.map(line=>{
  const names=[];
  const expression=new RegExp('^'+legacy.replace(/:([A-Za-z]+)/g,(_,name)=>{
   names.push(name);
-  return name==='plate'?'([A-Z0-9-]{1,16})':name==='intentId'?'([a-f0-9]{32})':'([1-9][0-9]*)';
+  return name==='plate'?'([A-Z0-9-]{1,16})':['intentId','planId','installmentId','entryId'].includes(name)?'([a-f0-9]{32})':'([1-9][0-9]*)';
  })+'$');
  return Object.freeze({method,legacy,native,roles:ROLES[role],transform,names,expression});
 });
