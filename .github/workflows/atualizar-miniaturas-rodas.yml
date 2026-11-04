@@ -1,0 +1,66 @@
+name: Atualizar miniaturas reais de rodas Ka Fox Palio
+
+on:
+  push:
+    branches: [feat/visualizador3d-top20-20261103]
+    paths:
+      - .github/workflows/atualizar-miniaturas-rodas.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: artisys-miniaturas-rodas-top20
+  cancel-in-progress: false
+
+jobs:
+  thumbnails:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Baixar previews dos GLBs corrigidos em commit fixo da biblioteca
+        shell: bash
+        run: |
+          set -euo pipefail
+          REF=347d92f44f401d24b25562a7a236a69fe6e3f734
+          BASE="https://raw.githubusercontent.com/nutricionistaalmeidavh-spec/assetscarros3d/$REF/curadoria/miniaturas-geometria"
+          mkdir -p public/carros3d/thumbs
+          for id in fiat-palio ford-ka vw-fox; do
+            curl --fail --location --silent --show-error --retry 3 "$BASE/$id-frente.png" -o "public/carros3d/thumbs/$id.png"
+          done
+      - name: Validar PNGs reais e dimensões antes de registrar
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import struct
+          for id in ('fiat-palio','ford-ka','vw-fox'):
+              path=Path('public/carros3d/thumbs')/(id+'.png')
+              data=path.read_bytes()
+              assert len(data)>10000, id+' preview vazio'
+              assert data[:8]==b'\x89PNG\r\n\x1a\n', id+' não é PNG'
+              assert struct.unpack('>II',data[16:24])==(700,480), id+' dimensões diferentes'
+              print(id, len(data), 'bytes, PNG 700x480, GLB com rodas reparadas')
+          PY
+      - name: Registrar somente nesta branch, sem merge ou deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/carros3d/thumbs/fiat-palio.png public/carros3d/thumbs/ford-ka.png public/carros3d/thumbs/vw-fox.png
+          if git diff --cached --quiet; then
+            echo "Miniaturas já estão atualizadas"
+            exit 0
+          fi
+          git commit -m "assets(3d): usar previews reais das rodas corrigidas no Top20"
+          for attempt in 1 2 3 4; do
+            git fetch origin feat/visualizador3d-top20-20261103
+            git rebase FETCH_HEAD
+            if git push origin HEAD:feat/visualizador3d-top20-20261103; then exit 0; fi
+            sleep 3
+          done
+          exit 1
