@@ -13,6 +13,7 @@ import {createAsyncWorkshopAuth} from './async-workshop-auth.js';
 import {createAsyncWorkshopCrm} from './async-workshop-crm.js';
 import {createAsyncWorkshopAttachments} from './async-workshop-attachments.js';
 import {createAsyncLegacyViews} from './async-workshop-legacy-views.js';
+import {createPaymentCollection} from './payment-collection.js';
 
 // Async canonical service layer for PostgreSQL and D1. Each command is
 // explicitly transactional on its backend; never delegate to legacy SQLite.
@@ -34,7 +35,7 @@ async function atomic(port,queries){
  });
 }
 const select=(sql,params=[])=>({sql,params});
-export function createAsyncWorkshopServices(port,{fiscalProvider=null,objectStore=null}={}){
+export function createAsyncWorkshopServices(port,{fiscalProvider=null,objectStore=null,paymentOptions={}}={}){
  if(!['sqlite','d1','postgres'].includes(port?.engine))fail('Serviço exige adaptador SQL comum válido');
  async function createCustomer(input={}){
    const name=text(input.name);if(!name)fail('Nome do cliente obrigatório');
@@ -481,5 +482,9 @@ export function createAsyncWorkshopServices(port,{fiscalProvider=null,objectStor
    ...createAsyncWorkshopAttachments(port,{objectStore}),
    ...(port.engine==='postgres'?createPostgresQuoteApprovals(port):{})
  };
- return Object.freeze({...services,...createAsyncLegacyViews(port,services)});
+ const payments=createPaymentCollection(port,{
+  receivePayment:services.receivePayment,getPaymentSummary:services.getPaymentSummary,
+  ...paymentOptions
+ });
+ return Object.freeze({...services,...payments,...createAsyncLegacyViews(port,services)});
 }
