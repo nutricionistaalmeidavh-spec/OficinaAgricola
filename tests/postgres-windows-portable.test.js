@@ -13,7 +13,8 @@ function fixture(){
  mkdirSync(join(bundle,'bin'),{recursive:true});
  mkdirSync(join(bundle,'share'),{recursive:true});
  const files=['bin/initdb.exe','bin/pg_ctl.exe','bin/postgres.exe','bin/psql.exe',
-  'share/postgres.bki','share/locale/en@boldquot/LC_MESSAGES/gettext-runtime.mo'];
+  'share/postgres.bki','share/locale/en@boldquot/LC_MESSAGES/gettext-runtime.mo',
+  'share/timezone/Etc/GMT+0'];
  const hashes={};
  for(const file of files){
    const content=Buffer.from('test portable binary '+file);
