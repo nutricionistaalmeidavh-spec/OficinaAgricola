@@ -52,6 +52,9 @@ export function createMultiTenantServer({
 } = {}) {
   migrate(legacyDb);
   migrateAssistencia(legacyDb);
+  const legacyOtherUnitOrders=legacyDb.prepare('SELECT COUNT(*) n FROM work_orders WHERE unit_id IS NOT NULL AND unit_id<>1').get().n;
+  if(legacyOtherUnitOrders)
+    throw httpError('Banco legado já contém OS de várias unidades. Migração segura das OS e seus vínculos é obrigatória antes de ativar o modo multiempresa.',409);
   migrateTenantRegistry(registryDb,legacyDb);
   const root=resolve(tenantsRoot);
   const cache=new Map();
