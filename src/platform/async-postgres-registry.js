@@ -65,8 +65,7 @@ const DDL=[
  "CREATE INDEX IF NOT EXISTS idx_registry_memberships_unit ON tenant_memberships(unit_id,active,user_id)",
  "CREATE INDEX IF NOT EXISTS idx_registry_units_company ON tenant_units(company_id,active)"
 ];
-// PostgreSQL SQL quotes must remain standard single quotes. DDL has escaped JS
-// quotes above to keep each statement independently auditable.
+// Reviewed PostgreSQL registry DDL; applied transactionally.
 const ddl=DDL;
 const validCompanyId=value=>id(value);
 async function member(p,userId,unitId){
@@ -182,6 +181,14 @@ export function createPostgresTenantRegistry(port){
      await port.run('DELETE FROM sessions WHERE token_hash=?',[digest(token)]);
    return {ok:true};
  }
+ async function setupRequired(){
+   const row=await port.first('SELECT COUNT(*) AS n FROM users');
+   return Number(row.n)===0;
+ }
+ async function isPlatformAdmin(userId){
+   const row=await port.first('SELECT 1 AS ok FROM tenant_platform_admins p JOIN users u ON u.id=p.user_id WHERE p.user_id=? AND u.active=1',[id(userId)]);
+   return Boolean(row);
+ }
  async function listUserUnits(userId){
    return port.all(
     'SELECT u.id,u.company_id AS "companyId",u.code,u.name,u.active AS "unitActive",c.slug AS "companySlug",c.name AS "companyName",c.active AS "companyActive",m.role FROM tenant_memberships m JOIN tenant_units u ON u.id=m.unit_id JOIN tenant_companies c ON c.id=u.company_id JOIN users x ON x.id=m.user_id WHERE m.user_id=? AND x.active=1 AND m.active=1 AND u.active=1 AND c.active=1 ORDER BY c.id,u.id',
@@ -277,7 +284,7 @@ export function createPostgresTenantRegistry(port){
     [id(companyId),capped]);
  }
  return Object.freeze({
-  initialize,bootstrapAdmin,login,validateSession,logout,listUserUnits,
+  initialize,bootstrapAdmin,login,validateSession,logout,setupRequired,isPlatformAdmin,listUserUnits,
   requireUnitMembership:(userId,unitId)=>member(port,userId,unitId),
   requireCompanyAdmin:(userId,companyId)=>companyAdmin(port,userId,companyId),
   requireCompanyReportingAdmin,createCompany,createUnit,listUnitMembers,
