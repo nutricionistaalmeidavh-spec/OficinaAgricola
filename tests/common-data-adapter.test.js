@@ -16,6 +16,7 @@ test('one async adapter contract runs on existing SQLite production schema and p
   const machine=await workshop.createMachine({customerId:client.id,type:'AUTOMOVEL'});
   const os=await workshop.createWorkOrder({customerId:client.id,machineId:machine.id,problemReported:'Revisão'});
   assert.equal(os.status,'ENTRADA');
+  assert.equal(os.unit_id,1,'new SQLite orders must explicitly bind to Matriz, never NULL');
   const state=await workshop.transitionWorkOrder({workOrderId:os.id,toStatus:'DIAGNOSTICO',expectedVersion:os.version});
   assert.equal(state.status,'DIAGNOSTICO');
   const quote=await workshop.saveQuote({workOrderId:os.id,
