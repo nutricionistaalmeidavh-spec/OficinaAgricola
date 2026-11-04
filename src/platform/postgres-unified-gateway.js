@@ -94,6 +94,65 @@ export function createPostgresUnifiedGateway({
    if(!token)fail('Sessão inválida',401);
    const actor=await registry.validateSession(token);
    if(!validId(actor.id))fail('Sessão inválida',401);
+
+   if(path==='/api/tenancy/company-summary'&&method==='GET'){
+     const companyId=Number(u.searchParams.get('companyId'));
+     if(!validId(companyId))fail('Empresa inválida',400);
+     const date=(key,fallback)=>{
+       const raw=u.searchParams.get(key);
+       if(raw===null)return fallback;
+       if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(raw)||
+          !Number.isFinite(Date.parse(raw)))fail('Data '+key+' inválida: use UTC ISO 8601',400);
+       return new Date(raw).toISOString();
+     };
+     const from=date('from','1970-01-01T00:00:00.000Z');
+     const to=date('to','2999-12-31T23:59:59.999Z');
+     if(from>to)fail('Período inválido',400);
+     const members=await registry.listCompanyUnits(actor.id,companyId);
+     const perUnit=await Promise.all(members.map(async item=>{
+       const runtime=await tenantHandlerForUnit(item),port=runtime.port;
+       if(!port||!runtime.services)fail('Operações PostgreSQL indisponíveis',503);
+       const [a,b,d,e,finance]=await Promise.all([
+         port.first('SELECT COUNT(*) n FROM customers WHERE active=1'),
+         port.first('SELECT COUNT(*) n FROM work_orders'),
+         port.first("SELECT COUNT(*) n FROM work_orders WHERE status NOT IN ('ENTREGUE','CANCELADA','TRANSFERIDA')"),
+         port.first('SELECT COUNT(*) n FROM parts WHERE active=1'),
+         runtime.services.financeSummary({from,to})
+       ]);
+       return {id:item.id,code:item.code,name:item.name,
+         customers:Number(a.n),workOrders:Number(b.n),openOrders:Number(d.n),
+         parts:Number(e.n),finance};
+     }));
+     const money=['invoicedCents','receivedCents','pendingCents','expensesCents','resultCents'];
+     const totals=perUnit.reduce((sum,item)=>{
+       sum.customers+=item.customers;sum.workOrders+=item.workOrders;
+       sum.openOrders+=item.openOrders;sum.parts+=item.parts;
+       for(const key of money)sum.finance[key]+=Number(item.finance[key]??0);
+       return sum;
+     },{customers:0,workOrders:0,openOrders:0,parts:0,
+       finance:Object.fromEntries(money.map(key=>[key,0]))});
+     return json({companyId,period:{from,to},units:perUnit,totals,
+       scope:'company-only-canonical-finance'});
+   }
+   if(method==='GET'&&(path==='/api/tenancy/shareable-customers'||
+     path==='/api/tenancy/shareable-parts')){
+     const sourceId=Number(u.searchParams.get('unitId'));
+     if(!validId(sourceId))fail('Unidade inválida',400);
+     const source=await registry.requireUnitMembership(actor.id,sourceId);
+     if(source.role!=='ADMIN')fail('Administração da unidade necessária',403);
+     const search=String(u.searchParams.get('search')??'').trim();
+     if(search.length>80)fail('Busca excede 80 caracteres',400);
+     const runtime=await tenantHandlerForUnit(source);
+     if(!runtime.port)fail('Banco PostgreSQL indisponível',503);
+     const pattern='%'+search+'%';
+     if(path.endsWith('shareable-customers'))
+       return json({customers:await runtime.port.all(
+         'SELECT id,name FROM customers WHERE active=1 AND name ILIKE ? ORDER BY id DESC LIMIT 100',
+         [pattern]),limit:100});
+     return json({parts:await runtime.port.all(
+       'SELECT id,sku,description,unit,quantity FROM parts WHERE active=1 AND (sku ILIKE ? OR description ILIKE ?) ORDER BY id DESC LIMIT 100',
+       [pattern,pattern]),limit:100});
+   }
    const units=await registry.listUserUnits(actor.id);
    if(!units.length)fail('Permissão: usuário sem vínculo',403);
    const selected=request.headers.get('x-oficina-unit');
