@@ -34,7 +34,7 @@ export function createAsaasHttpTransport({
   ?'https://api-sandbox.asaas.com/v3':'https://api.asaas.com/v3';
  return async(method,path,body)=>{
   if(!['GET','POST'].includes(method)||typeof path!=='string'||
-    !/^\/(?:payments)(?:\/[A-Za-z0-9_-]+)?$/.test(path))
+    !/^\/payments(?:\/[A-Za-z0-9_-]+|\?externalReference=[A-Za-z0-9_%:.-]+)?$/.test(path))
    fail('Método/caminho Asaas não autorizado');
   const controller=new AbortController();
   const timeout=setTimeout(()=>controller.abort(),15000);
