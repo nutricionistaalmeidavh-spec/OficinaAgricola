@@ -6,6 +6,12 @@
 - Implementado: migração aditiva dos usuários legados (Matriz 1/1 preservada), painel de cadastro de empresas/unidades/vínculos, seletor, revogação, isolamento da fila offline por unidade, links públicos de aprovação vinculados à unidade e backups verificados de registro e unidades.
 - **Ainda não implementado:** motor PostgreSQL, D1, armazenamento R2/MinIO, sincronização interunidades, catálogo compartilhado e consolidação financeira global. NÃO declarar multibackend pronto para produção.
 - A main continua usando o modo legado. O modo multiempresa é opt-in e depende de revisão.
+- Resumo operacional autorizado entre unidades da mesma empresa já implementado, sem confundir contagens com consolidação fiscal/contábil.
+- Se o banco antigo tiver ordens de serviço com unit_id diferente da Matriz (1), o gateway **recusa iniciar** até executar migração específica e auditada. Nunca reatribui as OS para a Matriz silenciosamente.
+
+## Provedores configuráveis com falha explícita
+
+O runtime atual aceita exclusivamente `OFICINA_DATABASE_ENGINE=sqlite` e `OFICINA_OBJECT_STORAGE=disk` (ambos padrões). Solicitar `postgres`, `d1`, `minio` ou `r2` encerra a inicialização com erro. Esse bloqueio evita aparentar uso de serviços em nuvem enquanto grava informações no disco local. Implementar adaptadores assíncronos e validar contratos é requisito para suportar esses provedores.
 
 ## Iniciar no próprio servidor (R$ 0)
 
