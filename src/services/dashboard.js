@@ -4,9 +4,9 @@ import { financeSummary } from './finance.js';
 import {listMaintenanceAlerts} from './automotive.js';
 
 export function dashboardData(db,{now=new Date(),role='ADMIN'}={}){
-  const statuses=['ENTRADA','DIAGNOSTICO','ORCAMENTO','AGUARDANDO_APROVACAO','APROVADA','EM_SERVICO','PRONTA','ENTREGUE','CANCELADA','REPROVADA']; const counts={};
+  const statuses=['ENTRADA','DIAGNOSTICO','ORCAMENTO','AGUARDANDO_APROVACAO','APROVADA','EM_SERVICO','PRONTA','ENTREGUE','CANCELADA','REPROVADA','TRANSFERIDA']; const counts={};
   for(const status of statuses) counts[status]=Number(db.prepare('SELECT COUNT(*) n FROM work_orders WHERE status=?').get(status).n);
-  counts.ABERTAS=Number(db.prepare("SELECT COUNT(*) n FROM work_orders WHERE status NOT IN ('ENTREGUE','CANCELADA','REPROVADA')").get().n);
+  counts.ABERTAS=Number(db.prepare("SELECT COUNT(*) n FROM work_orders WHERE status NOT IN ('ENTREGUE','CANCELADA','REPROVADA','TRANSFERIDA')").get().n);
   const board={};
   const groups={
     entrada:['ENTRADA'],diagnostico:['DIAGNOSTICO','ORCAMENTO'],
