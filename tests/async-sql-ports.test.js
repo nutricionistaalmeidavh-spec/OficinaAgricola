@@ -58,3 +58,16 @@ test('Postgres BIGINT and integral NUMERIC results normalize like SQLite without
  assert.equal(row.huge,'9223372036854775807');
  assert.equal(row.name,'6800','VARCHAR values never converted');
 });
+
+test('PostgreSQL domain numeric keys normalize even when a proxy strips OID metadata',async()=>{
+ const pool={
+  async query(){return{rows:[{id:'1001',total_cents:'6800',sale_number:'42',sku:'1234',name:'0007'}],rowCount:1}},
+  async connect(){return{query:this.query.bind(this),release(){}}}
+ };
+ const row=await createPostgresPort({pool}).first('SELECT 1');
+ assert.equal(row.id,1001);
+ assert.equal(row.total_cents,6800);
+ assert.equal(row.sale_number,42);
+ assert.equal(row.sku,'1234');
+ assert.equal(row.name,'0007');
+});
