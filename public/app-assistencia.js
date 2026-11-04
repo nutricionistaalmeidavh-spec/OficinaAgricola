@@ -72,26 +72,26 @@ async function renderSales({cursor=null,loaded=[]}={}) {
 
 async function saleModal() {
   // A chave é estável em todos os reenvios desta venda (inclusive em timeout).
-  const requestId = globalThis.crypto?.randomUUID?.() || \`sale-\${Date.now()}-\${Math.random().toString(36).slice(2)}\`;
+  const requestId = globalThis.crypto?.randomUUID?.() || `sale-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   // Nunca descarregar estoque ou clientes inteiros no formulário: usa pesquisa remota.
   const [partPage, services] = await Promise.all([
     api('/api/parts/page?limit=1'), api('/api/services')
   ]);
   const serviceOptions=services.filter(s=>s.active).map(s=>({
-    id:Number(s.id), label:\`Serviço · \${s.code} — \${s.name} · \${money(s.price_cents)}\`
+    id:Number(s.id), label:`Serviço · ${s.code} — ${s.name} · ${money(s.price_cents)}`
   }));
   if (!partPage.total && !serviceOptions.length) {
     toast('Cadastre uma peça ou serviço antes da venda.', true); return;
   }
   const defaultKind=partPage.total?'P':'S';
-  showModal('Nova venda de balcão', \`<form class="form-stack">
+  showModal('Nova venda de balcão', `<form class="form-stack">
     <label>Cliente (opcional)<select name="customerId" id="saleCustomer"><option value="">Consumidor</option></select></label>
     <div class="card-head"><strong>Itens</strong><button type="button" class="btn sm soft" id="addSaleItem">+ Item</button></div>
     <div id="saleItems"></div>
     <div class="field-row"><label>Desconto (R$)<input name="discount" type="number" min="0" step="0.01" value="0"></label><label>Pagamento<select name="paymentMethod"><option>DINHEIRO</option><option>PIX</option><option>CARTAO_DEBITO</option><option>CARTAO_CREDITO</option><option>TRANSFERENCIA</option></select></label></div>
     <label>Observação<input name="note"></label>
     <button class="btn primary" type="submit">Concluir venda</button>
-  </form>\`, async fd => {
+  </form>`, async fd => {
     const items = $$('.sale-item-row').map(row => {
       const kind=$('[data-sale-kind]',row).value;
       const select=kind==='P'?$('[data-sale-part]',row):$('[data-sale-service]',row);
@@ -118,15 +118,15 @@ async function saleModal() {
   const addRow = () => {
     const row = document.createElement('div');
     row.className = 'field-row sale-item-row';
-    row.innerHTML = \`<label>Tipo<select data-sale-kind>
-      <option value="P" \${defaultKind==='P'?'selected':''}>Peça</option>
-      <option value="S" \${defaultKind==='S'?'selected':''}>Serviço</option>
+    row.innerHTML = `<label>Tipo<select data-sale-kind>
+      <option value="P" ${defaultKind==='P'?'selected':''}>Peça</option>
+      <option value="S" ${defaultKind==='S'?'selected':''}>Serviço</option>
     </select></label><label data-sale-part-label>Peça<select data-sale-part required><option value="">Pesquisar peça</option></select></label>
     <label data-sale-service-label>Serviço<select data-sale-service><option value="">Selecione serviço</option>
-      \${serviceOptions.map(s=>\`<option value="\${s.id}">\${esc(s.label)}</option>\`).join('')}
+      ${serviceOptions.map(s=>`<option value="${s.id}">${esc(s.label)}</option>`).join('')}
     </select></label>
     <label>Quantidade<input data-sale-qty type="number" min="0.01" step="0.01" value="1" required></label>
-    <button type="button" class="btn danger sm" data-remove-sale>Remover</button>\`;
+    <button type="button" class="btn danger sm" data-remove-sale>Remover</button>`;
     $('#saleItems').appendChild(row);
     const selectKind=$('[data-sale-kind]',row);
     const partSelect=$('[data-sale-part]',row);
