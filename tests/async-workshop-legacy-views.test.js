@@ -45,3 +45,21 @@ test('native legacy catalog and company settings expose existing API shapes',asy
   assert.equal(machines.items[0].id,machine.id);
  }finally{db.close();}
 });
+
+
+test('native legacy pagination always returns an items/total/nextCursor envelope',async()=>{
+ const db=openDatabase(':memory:');
+ try{
+  migrate(db);migrateAssistencia(db);
+  const s=createAsyncWorkshopServices(createCommonDataAdapter({engine:'sqlite',db}));
+  for(const method of ['listSchedulePage','listExpensesPage','listFiscalDocumentsPage','listSalesPage']){
+   const page=await s[method]({limit:3});
+   assert.ok(Array.isArray(page.items),method);
+   assert.equal(page.total,0,method);
+   assert.equal(page.nextCursor,null,method);
+  }
+  const technician=await s.createTechnician({name:'Maria'});
+  const changed=await s.updateTechnician(technician.id,{name:'Maria Aparecida'});
+  assert.equal(changed.name,'Maria Aparecida');
+ }finally{db.close();}
+});
