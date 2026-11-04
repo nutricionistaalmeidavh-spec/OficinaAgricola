@@ -170,6 +170,29 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
      return json(await services.postStockMovement(await dataFrom(request)),201);
    if(path==='/v1/payments'&&method==='POST')
      return json(await services.receivePayment(await dataFrom(request)),201);
+   const orderReceipts=path.match(/^\/v1\/orders\/([1-9]\d*)\/receipts$/);
+   if(orderReceipts&&method==='GET')
+     return json(await services.listReceipts(Number(orderReceipts[1])));
+   const orderPayment=path.match(/^\/v1\/orders\/([1-9]\d*)\/payment$/);
+   if(orderPayment&&method==='GET')
+     return json(await services.getPaymentSummary(Number(orderPayment[1])));
+   const reverse=path.match(/^\/v1\/orders\/([1-9]\d*)\/receipts\/([1-9]\d*)\/reverse$/);
+   if(reverse&&method==='POST')
+     return json(await services.reverseReceipt({
+       ...await dataFrom(request),workOrderId:Number(reverse[1]),receiptId:Number(reverse[2])
+     }));
+   if(path==='/v1/expenses'&&method==='GET')
+     return json(await services.listExpenses({
+       from:u.searchParams.get('from')||undefined,to:u.searchParams.get('to')||undefined
+     }));
+   if(path==='/v1/expenses'&&method==='POST')
+     return json(await services.createExpense(await dataFrom(request)),201);
+   const expense=path.match(/^\/v1\/expenses\/([1-9]\d*)$/);
+   if(expense&&method==='GET')
+     return json(await services.getExpense(Number(expense[1])));
+   if(expense&&method==='PATCH')
+     return json(await services.updateExpense(Number(expense[1]),await dataFrom(request)));
+
    if(path==='/v1/reports/finance'&&method==='GET')
      return json(await services.financeSummary({
        from:u.searchParams.get('from')||undefined,to:u.searchParams.get('to')||undefined
