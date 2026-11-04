@@ -15,6 +15,7 @@ on:
       - 'scripts/requirements-diagnostic-bridge.txt'
       - 'scripts/stage-fiscal-bundle.mjs'
       - 'scripts/stage-postgres-windows.mjs'
+      - 'scripts/smoke-postgres-portable.ps1'
       - 'src/platform/postgres-windows-bundle.js'
       - 'src/platform/postgres-local-instance.js'
       - 'src/platform/fiscal-bundle.js'
@@ -51,7 +52,7 @@ jobs:
       - name: Validar parser PowerShell antes da compilação nativa
         shell: pwsh
         run: |
-          foreach ($script in @('scripts/smoke-installer.ps1','scripts/build-acbr-native.ps1','scripts/build-electron.ps1','scripts/build-diagnostic-bridge.ps1')) {
+          foreach ($script in @('scripts/smoke-postgres-portable.ps1','scripts/smoke-installer.ps1','scripts/build-acbr-native.ps1','scripts/build-electron.ps1','scripts/build-diagnostic-bridge.ps1')) {
             $tokens = $null
             $errors = $null
             [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script).Path,[ref]$tokens,[ref]$errors) | Out-Null
@@ -124,3 +125,6 @@ jobs:
       - name: Run fresh install and first-login smoke
         shell: pwsh
         run: ./scripts/smoke-installer.ps1
+      - name: Smoke PostgreSQL offline pós-instalação Windows (sem terminal do cliente)
+        shell: pwsh
+        run: ./scripts/smoke-postgres-portable.ps1
