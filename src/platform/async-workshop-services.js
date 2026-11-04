@@ -275,19 +275,21 @@ export function createAsyncWorkshopServices(port){
      WHERE id=? AND version=? AND status IN ('DIAGNOSTICO','ORCAMENTO','REPROVADA')`,[
      at,order.id,order.version
    ]);
-   const upsert=select(`INSERT INTO quotes(
-     id,work_order_id,subtotal_cents,discount_cents,total_cents,
-     notes,approval_status,created_at,updated_at
-   ) VALUES(?,?,?,?,?,?,'RASCUNHO',?,?)
-   ON CONFLICT(work_order_id) DO UPDATE SET
-     subtotal_cents=excluded.subtotal_cents,
-     discount_cents=excluded.discount_cents,
-     total_cents=excluded.total_cents,notes=excluded.notes,
-     approval_status='RASCUNHO',updated_at=excluded.updated_at
-   WHERE quotes.approval_status<>'APROVADO'`,[
-     quoteId,order.id,totals.subtotalCents,totals.discountCents,
-     totals.totalCents,text(notes),at,at
-   ]);
+   const upsert=old
+     ?select(`UPDATE quotes SET
+       subtotal_cents=?,discount_cents=?,total_cents=?,
+       notes=?,approval_status='RASCUNHO',updated_at=?
+       WHERE id=? AND approval_status<>'APROVADO'`,[
+       totals.subtotalCents,totals.discountCents,totals.totalCents,
+       text(notes),at,quoteId
+     ])
+     :select(`INSERT INTO quotes(
+       id,work_order_id,subtotal_cents,discount_cents,total_cents,
+       notes,approval_status,created_at,updated_at
+     ) VALUES(?,?,?,?,?,?,'RASCUNHO',?,?)`,[
+       quoteId,order.id,totals.subtotalCents,totals.discountCents,
+       totals.totalCents,text(notes),at,at
+     ]);
    const clear=select('DELETE FROM quote_items WHERE quote_id=?',[quoteId]);
    const addLines=list.map(item=>select(`INSERT INTO quote_items(
      id,quote_id,kind,description,quantity,unit_price_cents,total_cents
