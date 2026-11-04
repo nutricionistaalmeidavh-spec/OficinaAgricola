@@ -191,7 +191,53 @@ individualmente pelo token da sessão enviado ao serviço de autenticação.
 
 As rotas operacionais usam matriz explícita de permissões; relatórios
 financeiros e escrituração fiscal não ficam acessíveis a técnicos.
-**Ainda não existe ponte de sessões globais do gateway SQLite para a API
-assíncrona**. Portanto não colocar tokens internos no navegador e não mudar
-o backend principal para PostgreSQL/D1 antes da integração de identidade,
-dos contratos da UI e dos ensaios E2E em instâncias nativas.
+**Ponte de sessões do gateway implementada na branch:** após validar a sessão
+no registro multiempresa e o vínculo ativo à unidade, o gateway obtém uma
+sessão nativa derivada criptograficamente e com validade máxima de 60 segundos.
+Nenhum token interno ou senha é transmitido ao navegador. O roteamento
+operacional usa uma lista explícita de equivalências `/api/*` → `/v1/*`.
+Rotas ainda sem paridade retornam 501 e **não** recorrem ao SQLite.
+
+**Ativação é proibida antes do cutover auditado, testes E2E e aprovação dos
+gates:** o registro global principal continua em SQLite neste modo de gateway,
+e ainda há diferenças em fluxos de documentos, diagnósticos físicos,
+aprovações públicas e recuperação coordenada.
+
+
+## Ponte opcional de backend SQL nativo por unidade — PR #32
+
+**Desligada por padrão.** Para futuro laboratório depois de migrar e
+verificar uma unidade (não usar com dados reais sem os gates), defina um
+arquivo de configuração privado `native-backends.json`:
+
+```json
+[
+  {
+    "companyId": 1,
+    "unitId": 2,
+    "endpoint": "http://127.0.0.1:3456",
+    "serviceTokenEnv": "OFICINA_NATIVE_SERVICE_TOKEN"
+  }
+]
+```
+
+No ambiente **privado**, em operação explicitamente autorizada, defina
+`TENANCY_NATIVE_BACKENDS_FILE=/caminho/privado/native-backends.json`,
+`TENANCY_NATIVE_CUTOVER_APPROVED=true` e a variável apontada em
+`serviceTokenEnv` (valor aleatório, comprimento mínimo de 32; não gravar
+no repositório). O serviço `start:postgres-core` suporta driver OSS `pg`
+e PostgreSQL self-hosted. O Worker D1 é alternativa cloud opcional.
+O proxy aceita HTTPS ou HTTP de loopback, nunca redireciona credenciais e
+não encaminha o token global ao serviço. Unidade sem mapeamento continua
+SQLite, sem mudança automática.
+
+As rotas centralizadas do registro, como autenticação global, vínculos,
+cadastro de empresas e unidades, continuam no gateway. As operações nativas
+são resolvidas por uma allowlist separada; sem correspondência ou erro da
+instância remota ocorre rejeição explícita (sem consulta oculta ao SQLite).
+Os sistemas históricos que usam `npm start` seguem com SQLite e disco
+local, sem precisar configurar essa ponte.
+
+**Este procedimento documenta o código experimental e NÃO autoriza deploy.**
+Antes de habilitar em produção, provar paridade de contratos, UI, fiscal,
+PDFs, aprovação pública e rollback com uma cópia real de dados migrados.
