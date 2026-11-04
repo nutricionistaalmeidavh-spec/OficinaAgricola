@@ -7,13 +7,12 @@ on:
       - .github/workflows/qa-top20-3d.yml
       - public/model-viewer.js
       - public/model-library3d.js
-      - src/platform/session-http.js
-      - scripts/qa-model-library3d.mjs
-      - src/platform/session-http.js
-      - public/model-viewer.js
-      - public/model-library3d.js
       - public/model-library.js
+      - public/vendor/**
+      - public/sw.js
+      - src/platform/session-http.js
       - scripts/qa-model-library3d.mjs
+      - tests/model-library3d.test.js
   workflow_dispatch:
 
 permissions:
