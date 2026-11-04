@@ -125,6 +125,8 @@ export function createAsyncWorkshopFinance(port){
      [rId,osId]);
    if(!receipt)fail('Recebimento não encontrado',404);
    if(receipt.reversed_at)fail('Recebimento já estornado',409);
+   if(await port.first("SELECT id FROM billing_installments WHERE receipt_id=? AND status='PAID'",[rId]))
+     fail('Cobrança externa exige confirmação de estorno externo antes da baixa financeira',409);
    if(await port.first("SELECT id FROM payment_intents WHERE receipt_id=? AND status='PAID'",[rId]))
      fail('Cobrança do provedor exige confirmação de estorno externo antes da baixa financeira',409);
    const cash=await port.first(`SELECT id FROM cash_sessions WHERE status='ABERTO'
