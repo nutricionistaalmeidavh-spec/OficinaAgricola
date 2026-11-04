@@ -18,7 +18,7 @@ import { auditInvariants } from '../services/reconciliation.js';
 import {
   migrateTenantRegistry, registerInitialAdmin, listUserUnits, requireUnitMembership,
   requireCompanyAdmin, createTenantCompany, createTenantUnit, grantUnitMembership,
-  changeUnitMembership, listUnitMembers, markLegacyRegistryLink, listTenantAudit
+  changeUnitMembership, listUnitMembers, markLegacyRegistryLink, listTenantAudit, requireCompanyAdmin
 } from './tenant-registry.js';
 
 const json=(res,status,data)=>{if(res.writableEnded)return;res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(data));};
@@ -161,6 +161,26 @@ export function createMultiTenantServer({
       return json(res,200,listUnitMembers(registryDb,user.id,positive(url.searchParams.get('unitId'))));
     if(path==='/api/tenancy/audit'&&method==='GET')
       return json(res,200,listTenantAudit(registryDb,user.id,positive(url.searchParams.get('companyId'))));
+    if(path==='/api/tenancy/company-summary'&&method==='GET'){
+      const companyId=positive(url.searchParams.get('companyId'));
+      requireCompanyAdmin(registryDb,user.id,companyId);
+      const allowedUnits=registryDb.prepare('SELECT id,code,name FROM tenant_units WHERE company_id=? AND active=1 ORDER BY id').all(companyId);
+      const perUnit=allowedUnits.map(u=>{
+        const {db}=unitRuntime(u.id);
+        const customerCount=db.prepare('SELECT COUNT(*) n FROM customers WHERE active=1').get().n;
+        const workOrderCount=db.prepare('SELECT COUNT(*) n FROM work_orders').get().n;
+        const openOrders=db.prepare("SELECT COUNT(*) n FROM work_orders WHERE status NOT IN ('ENTREGUE','CANCELADA')").get().n;
+        const partsCount=db.prepare('SELECT COUNT(*) n FROM parts WHERE active=1').get().n;
+        return {id:u.id,code:u.code,name:u.name,customers:customerCount,workOrders:workOrderCount,openOrders,parts:partsCount};
+      });
+      const totals=perUnit.reduce((x,u)=>({
+        customers:x.customers+u.customers,
+        workOrders:x.workOrders+u.workOrders,
+        openOrders:x.openOrders+u.openOrders,
+        parts:x.parts+u.parts
+      }),{customers:0,workOrders:0,openOrders:0,parts:0});
+      return json(res,200,{companyId,units:perUnit,totals,scope:'operative-only-no-financial-consolidation'});
+    }
     const unit=selectUnit(req,user);
     if(path==='/api/users'&&method==='GET')return json(res,200,listUnitMembers(registryDb,user.id,unit.id));
     if(path==='/api/users'&&method==='POST')
