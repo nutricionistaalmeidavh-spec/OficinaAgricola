@@ -46,6 +46,12 @@ export function postgresParameters(sql){
 function normalizedPgRows(result){
  const rows=result?.rows||[],fields=result?.fields||[];
  const numeric=new Set(fields.filter(f=>f.dataTypeID===20||f.dataTypeID===1700).map(f=>f.name));
+ // Drivers/proxies can omit pg FieldDef metadata. Only domain-declared
+ // integer money/ID columns may be decoded by name; never change arbitrary
+ // numeric-looking TEXT like SKU, CNPJ, token, plate or name.
+ for(const row of rows)for(const name of Object.keys(row))
+   if(/^(id|os_number|sale_number|version|company_id|unit_id|[a-z_]+_id|[a-z_]+_cents)$/.test(name))
+     numeric.add(name);
  if(!numeric.size)return rows;
  const lower=BigInt(Number.MIN_SAFE_INTEGER),upper=BigInt(Number.MAX_SAFE_INTEGER);
  return rows.map(row=>{
