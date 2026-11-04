@@ -91,3 +91,19 @@ test('read-only operator CLI produces sanitized digest without altering local SQ
   assert.notEqual(refused.status,0,'no implicit default customer path');
  }finally{try{db.close();}catch{}rmSync(root,{recursive:true,force:true});}
 });
+
+test('manifest recognizes runtime remote-upload idempotency table used by existing local installations',()=>{
+ const db=openDatabase(':memory:');
+ try{
+  migrate(db);migrateAssistencia(db);
+  db.exec(`CREATE TABLE tenant_remote_upload_requests(
+   work_order_id INTEGER NOT NULL REFERENCES work_orders(id),
+   request_id TEXT NOT NULL,payload_hash TEXT NOT NULL,
+   attachment_id INTEGER NOT NULL REFERENCES attachments(id),
+   PRIMARY KEY(work_order_id,request_id)
+  )`);
+  const manifest=buildCanonicalSqliteManifest(db);
+  assert.ok(manifest.tables.tenant_remote_upload_requests,
+   'runtime tables must be exported, not dropped or treated as unknown');
+ }finally{db.close();}
+});
