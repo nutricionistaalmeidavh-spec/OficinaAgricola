@@ -57,7 +57,7 @@ function csvRows(text,delimiter){
    else if(ch==='"') {quoted=false;closed=true;}
    else cell+=ch;
   }else if(ch==='"'&&cell===''&&!closed)quoted=true;
-  else if(ch===delimiter){row.push(cell);row=[]===null?[]:row;cell='';closed=false;}
+  else if(ch===delimiter){row.push(cell);cell='';closed=false;}
   else if(ch==='\n'||ch==='\r'){
    if(ch==='\r'&&text[i+1]==='\n')i++;
    row.push(cell); if(row.some(x=>x.trim()))rows.push(row);
