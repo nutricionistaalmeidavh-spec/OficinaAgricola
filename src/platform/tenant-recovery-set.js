@@ -30,7 +30,11 @@ export function verifyTenantRecoverySet({registryArchive,unitArchives,maxSkewMs=
  const archives=unitArchives.map(archive=>{
   if(typeof archive?.archivePath!=='string'||resolve(archive.archivePath)===registryPath)
    throw Error('Arquivo de unidade não pode reutilizar o registro');
-  return {...archive,...inspectArchive(archive.archivePath)};
+  const inspected=inspectArchive(archive.archivePath);
+  if(Number(inspected.manifest.tenant?.companyId)!==Number(archive.companyId)||
+     Number(inspected.manifest.tenant?.unitId)!==Number(archive.unitId))
+   throw Error('Identidade empresa/unidade do backup não corresponde ao catálogo');
+  return {...archive,...inspected};
  });
  const plan=validateRecoveryCatalog({registryUnits,registryManifest,unitArchives:archives,maxSkewMs});
  return {...plan,status:'verified-staging-only',liveDataModified:false};
