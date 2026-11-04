@@ -1,7 +1,7 @@
 import { createServer as createHttpServer } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
 import { createHash, randomBytes } from 'node:crypto';
-import { resolve, join } from 'node:path';
+import { resolve, join, dirname } from 'node:path';
 import { mkdirSync } from 'node:fs';
 import { openDatabase, migrate, nowIso, transaction } from '../db.js';
 import { migrateAssistencia } from '../assistencia-schema.js';
@@ -10,7 +10,11 @@ import { initializeAdmin, isSetupRequired } from '../setup.js';
 import { authTokenFrom, assertSameOrigin, prefersCookie, issueBrowserCookie, clearBrowserCookie, hardenHttpResponse } from './session-http.js';
 import { assertSecureNetwork } from './network.js';
 import { loginHttp, validateSession, logout, hashPassword } from '../auth.js';
-import { createApprovalLink } from '../services/market-parity.js';
+import { createApprovalLink, createMaintenanceCrmTasks } from '../services/market-parity.js';
+import { seedDefaultChecklists, recoverOrphanAttachments } from '../services/operations.js';
+import { createEventRuntime } from './event-runtime.js';
+import { dispatchOutbox } from './outbox.js';
+import { auditInvariants } from '../services/reconciliation.js';
 import {
   migrateTenantRegistry, registerInitialAdmin, listUserUnits, requireUnitMembership,
   requireCompanyAdmin, createTenantCompany, createTenantUnit, grantUnitMembership,
@@ -61,10 +65,14 @@ export function createMultiTenantServer({
     if(!isLegacy)mkdirSync(dir,{recursive:true});
     const db=isLegacy?legacyDb:openDatabase(join(dir,'oficina.sqlite'));
     if(!isLegacy){migrate(db);migrateAssistencia(db);}
+    seedDefaultChecklists(db);
     const storageDir=isLegacy?resolve(legacyStorageDir):join(dir,'uploads');
     mkdirSync(storageDir,{recursive:true});
-    const srv=unitServerFactory({db,storageDir,eventRuntime:null,tls:null});
-    const runtime={db,srv,unit,storageDir,owned:!isLegacy};
+    recoverOrphanAttachments(db,storageDir);
+    const auditPath=isLegacy?(process.env.EVENT_LOG_PATH || join(dirname(resolve(legacyDatabasePath)),'oficina-events.jsonl')):join(dir,'events.jsonl');
+    const eventRuntime=createEventRuntime({auditPath});
+    const srv=unitServerFactory({db,storageDir,eventRuntime,tls:null});
+    const runtime={db,srv,unit,storageDir,eventRuntime,owned:!isLegacy};
     cache.set(id,runtime);
     return runtime;
   }
@@ -211,6 +219,28 @@ export function createMultiTenantServer({
     }
   };
   const server=tls?createHttpsServer(tls,handler):createHttpServer(handler);
-  server.on('close',()=>{for(const runtime of cache.values())if(runtime.owned)runtime.db.close();});
+  const flush=()=>{for(const runtime of cache.values())
+    void dispatchOutbox(runtime.db,runtime.eventRuntime).catch(error=>console.error('[tenancy-outbox]',error.message));};
+  const outboxTimer=setInterval(flush,15000);outboxTimer.unref?.();
+  const maintenance=()=>{
+    for(const {id} of registryDb.prepare('SELECT id FROM tenant_units WHERE active=1').all()){
+      try{
+        const runtime=unitRuntime(id);
+        createMaintenanceCrmTasks(runtime.db,{daysAhead:7});
+        const audit=auditInvariants(runtime.db);
+        if(!audit.ok)console.warn('[tenancy-reconciliation]',id,JSON.stringify(audit.errors));
+      }catch(error){console.error('[tenancy-maintenance]',id,error.message);}
+    }
+    flush();
+  };
+  const maintenanceTimer=setInterval(maintenance,6*60*60*1000);maintenanceTimer.unref?.();
+  const initial=setImmediate(maintenance);
+  server.on('close',()=>{
+    clearInterval(outboxTimer);clearInterval(maintenanceTimer);clearImmediate(initial);
+    for(const runtime of cache.values()){
+      runtime.eventRuntime.close();
+      if(runtime.owned)runtime.db.close();
+    }
+  });
   return server;
 }
