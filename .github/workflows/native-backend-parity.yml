@@ -47,6 +47,8 @@ jobs:
           cache: npm
       - name: Install core
         run: npm ci
+      - name: Audit SQLite cutover blockers (read-only P0)
+        run: npm run db:postgres:audit
       - name: Install optional open-source PostgreSQL driver for CI only
         run: npm install --no-save --no-package-lock --ignore-scripts pg@8
       - name: Native PostgreSQL transactional regression
