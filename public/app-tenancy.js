@@ -77,5 +77,7 @@ async function openTenantAdmin(){
     toast('Vínculo salvo');location.reload();
   });
 }
-const manageTenancy=document.querySelector('#tenantManageBtn');
-if(manageTenancy)manageTenancy.onclick=()=>void openTenantAdmin().catch(error=>toast(error.message,true));
+for(const id of ['tenantManageBtn','mobileTenantManageBtn']){
+  const manageTenancy=document.getElementById(id);
+  if(manageTenancy)manageTenancy.onclick=()=>void openTenantAdmin().catch(error=>toast(error.message,true));
+}
