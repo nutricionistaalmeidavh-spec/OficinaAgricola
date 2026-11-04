@@ -1,8 +1,8 @@
 import { createServer as createHttpServer } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
 import { createHash, randomBytes } from 'node:crypto';
-import { resolve, join, dirname } from 'node:path';
-import { mkdirSync } from 'node:fs';
+import { resolve, join, dirname, sep } from 'node:path';
+import { mkdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { openDatabase, migrate, nowIso, transaction } from '../db.js';
 import { migrateAssistencia } from '../assistencia-schema.js';
 import { createAssistenciaServer } from '../server-assistencia.js';
@@ -17,6 +17,7 @@ import { transferTenantStock, retryTenantStockTransfer, listTenantStockTransfers
 import { resolveTenantFiscalProvider, validateTenantFiscalConfigs } from './tenant-fiscal.js';
 import { transferTenantWorkOrder, retryTenantWorkOrderTransfer, getTenantTransferDossier } from './tenant-os-transfer.js';
 import { seedDefaultChecklists, recoverOrphanAttachments } from '../services/operations.js';
+import { readRemoteAttachment } from './remote-attachments.js';
 import { createEventRuntime } from './event-runtime.js';
 import { dispatchOutbox } from './outbox.js';
 import { auditInvariants } from '../services/reconciliation.js';
@@ -92,7 +93,7 @@ export function createMultiTenantServer({
     // from request headers or client-controlled JSON.
     const objectStore=objectStoreForUnit?objectStoreForUnit(unit):null;
     const srv=unitServerFactory({db,storageDir,eventRuntime,tls:null,fiscalProviderOverride,objectStore});
-    const runtime={db,srv,unit,storageDir,eventRuntime,owned:!isLegacy,
+    const runtime={db,srv,unit,storageDir,objectStore,eventRuntime,owned:!isLegacy,
       fiscalConfigured:isLegacy||Boolean(scopedFiscalProvider)};
     cache.set(id,runtime);
     return runtime;
@@ -209,6 +210,41 @@ export function createMultiTenantServer({
     if(path==='/api/tenancy/share-part'&&method==='POST'){
       const body=await readJson(req);
       return json(res,200,sharePartCatalog({...body,registryDb,unitRuntime,actorUserId:user.id}));
+    }
+
+    const transferAttachment=path.match(/^\/api\/tenancy\/os-transfer\/(\d+)\/attachments\/(\d+)\/file$/);
+    if(transferAttachment&&method==='GET'){
+      const dossier=getTenantTransferDossier({
+        registryDb,unitRuntime,actorUserId:user.id,transferId:positive(transferAttachment[1])
+      });
+      const attachment=dossier.attachments.find(a=>a.id===positive(transferAttachment[2]));
+      if(!attachment)throw httpError('Anexo não pertence à OS de origem',404);
+      const source=unitRuntime(dossier.originUnitId);
+      const record=source.db.prepare('SELECT * FROM attachments WHERE id=? AND work_order_id=?')
+        .get(attachment.id,dossier.sourceWorkOrderId);
+      if(!record)throw httpError('Anexo de origem não encontrado',404);
+      let bytes;
+      if(record.relative_path.startsWith('s3:')){
+        if(!source.objectStore)throw httpError('Storage remoto de origem não configurado',503);
+        bytes=await readRemoteAttachment(record,source.objectStore);
+      }else{
+        const root=realpathSync(source.storageDir);
+        const file=realpathSync(resolve(root,record.relative_path));
+        if(!file.startsWith(root+sep))throw httpError('Caminho de anexo inválido',403);
+        const info=statSync(file);
+        if(!info.isFile()||info.size>5*1024*1024||info.size!==record.size_bytes)
+          throw httpError('Arquivo de evidência inválido',409);
+        bytes=readFileSync(file);
+      }
+      const safeName=record.original_name.replace(/[\r\n"\\]/g,'_').replace(/[^\w .()-]/g,'_').slice(0,100)||'evidencia';
+      res.writeHead(200,{
+        'Content-Type':record.mime_type,
+        'Content-Length':String(bytes.length),
+        'Content-Disposition':'attachment; filename="'+safeName+'"',
+        'Cache-Control':'private, no-store',
+        'X-Content-Type-Options':'nosniff'
+      });
+      return res.end(bytes);
     }
     const transferDossier=path.match(/^\/api\/tenancy\/os-transfer\/(\d+)\/dossier$/);
     if(transferDossier&&method==='GET'){
