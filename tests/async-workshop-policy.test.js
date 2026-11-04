@@ -9,7 +9,7 @@ test('native setup, login and migration only use the protected service boundary'
 test('native financial and fiscal operations reject technician role',()=>{
  for(const path of ['/v1/reports/finance','/v1/expenses','/v1/cash/summary','/v1/sales','/v1/fiscal','/v1/fiscal/4/events'])
    assert.ok(!requiredNativeRoles('GET',path).includes('TECNICO'),path);
- assert.deepEqual(requiredNativeRoles('POST','/v1/fiscal/2/submit'),['ADMIN']);
+ assert.deepEqual(requiredNativeRoles('POST','/v1/fiscal/2/submit'),['ADMIN','FINANCEIRO']);
  assert.ok(!requiredNativeRoles('POST','/v1/payments').includes('ATENDIMENTO'));
 });
 test('native workshop operations are scoped to eligible roles',()=>{
