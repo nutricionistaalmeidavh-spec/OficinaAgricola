@@ -1,7 +1,7 @@
 // Busca incremental: não descarrega catálogos inteiros em formulários.
 // Usa os endpoints paginados já existentes e mantém a chave canônica da entidade.
 function pagedLookupUrl(resource,{search='',customerId=null,limit=30}={}){
-  if(!['customers','machines','parts'].includes(resource))throw new Error('Recurso de busca inválido');
+  if(!['customers','machines','parts','work-orders'].includes(resource))throw new Error('Recurso de busca inválido');
   const query=new URLSearchParams({limit:String(Math.min(50,Math.max(1,limit))),search:String(search).slice(0,100)});
   if(resource==='machines'&&customerId!==null&&customerId!==''){
     if(!Number.isSafeInteger(Number(customerId))||Number(customerId)<=0)
@@ -28,6 +28,7 @@ function attachPagedLookup(select,{resource,placeholder='Pesquisar por nome...',
     const combined=[...(retained?[retained]:[]),...items.map(item=>({
       id:String(item.id),
       label: resource==='customers'?item.name:resource==='parts'?item.sku+' — '+item.description:
+        resource==='work-orders'?'OS #'+item.os_number+' · '+(item.customer_name||'Cliente'):
         [item.brand,item.model,item.type,item.license_plate].filter(Boolean).join(' ')
     }))];
     const seen=new Set();
