@@ -1,3 +1,4 @@
+import {fileURLToPath} from 'node:url';
 // Self-hosted, opt-in unified PostgreSQL gateway for P3/P4.
 // It replaces SQLite for this process only; main/legacy entry points stay
 // untouched until migration, restore and Windows E2E gates pass.
@@ -29,7 +30,7 @@ const mime={
  '.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.svg':'image/svg+xml',
  '.ico':'image/x-icon','.webp':'image/webp','.woff2':'font/woff2'
 };
-const publicRoot=resolve('public');
+const publicRoot=resolve(fileURLToPath(new URL('../public',import.meta.url)));
 const securityHeaders={
  'x-content-type-options':'nosniff','x-frame-options':'DENY',
  'referrer-policy':'no-referrer',
