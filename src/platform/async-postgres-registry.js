@@ -201,6 +201,13 @@ export function createPostgresTenantRegistry(port){
    return Boolean(row);
  }
 
+ async function getPublicUnit(unitId){
+   const n=id(unitId);
+   const row=await port.first(
+     'SELECT u.id,u.company_id AS "companyId" FROM tenant_units u JOIN tenant_companies c ON c.id=u.company_id WHERE u.id=? AND u.active=1 AND c.active=1',[n]);
+   if(!row)fail('Unidade não encontrada',404);
+   return row;
+ }
  async function getTenantStorageBinding(companyId,unitId){
    const row=await port.first(
      'SELECT b.company_id AS "companyId",b.unit_id AS "unitId",b.schema_name AS "schemaName" FROM tenant_storage_bindings b JOIN tenant_units u ON u.id=b.unit_id JOIN tenant_companies c ON c.id=b.company_id WHERE b.company_id=? AND b.unit_id=? AND u.company_id=b.company_id AND u.active=1 AND c.active=1',
@@ -325,7 +332,7 @@ export function createPostgresTenantRegistry(port){
  }
  return Object.freeze({
   initialize,bootstrapAdmin,login,validateSession,logout,setupRequired,isPlatformAdmin,listUserUnits,
-  getTenantStorageBinding,claimTenantStorageBinding,
+  getPublicUnit,getTenantStorageBinding,claimTenantStorageBinding,
   requireUnitMembership:(userId,unitId)=>member(port,userId,unitId),
   requireCompanyAdmin:(userId,companyId)=>companyAdmin(port,userId,companyId),
   requireCompanyReportingAdmin,createCompany,createUnit,listUnitMembers,
