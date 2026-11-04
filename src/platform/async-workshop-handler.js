@@ -88,6 +88,34 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
    if(path==='/v1/fiscal/drafts'&&method==='POST')
      return json(await services.createFiscalDraft(await dataFrom(request)),201);
 
+   if(path==='/v1/services'&&method==='GET')
+     return json(await services.listServices({
+       search:u.searchParams.get('search')||'',
+       includeInactive:u.searchParams.get('includeInactive')==='1'
+     }));
+   if(path==='/v1/services'&&method==='POST')
+     return json(await services.createService(await dataFrom(request)),201);
+   if(path==='/v1/cash/open'&&method==='POST')
+     return json(await services.openCashSession(await dataFrom(request)),201);
+   if(path==='/v1/cash/close'&&method==='POST')
+     return json(await services.closeCashSession(await dataFrom(request)));
+   if(path==='/v1/cash/summary'&&method==='GET')
+     return json(await services.cashSummary());
+   if(path==='/v1/sales'&&method==='GET')
+     return json(await services.listSales({
+       status:u.searchParams.get('status')||'',search:u.searchParams.get('search')||'',
+       limit:u.searchParams.get('limit')||100
+     }));
+   if(path==='/v1/sales'&&method==='POST')
+     return json(await services.createSale(await dataFrom(request)),201);
+   const sale=path.match(/^\/v1\/sales\/([1-9]\d*)$/);
+   if(sale&&method==='GET')
+     return json(await services.getSale(Number(sale[1])));
+   const saleCancel=path.match(/^\/v1\/sales\/([1-9]\d*)\/cancel$/);
+   if(saleCancel&&method==='POST')
+     return json(await services.cancelSale({
+       ...await dataFrom(request),saleId:Number(saleCancel[1])
+     }));
    if(path==='/v1/parts'&&method==='POST')
      return json(await services.createPart(await dataFrom(request)),201);
    if(path==='/v1/stock'&&method==='POST')
