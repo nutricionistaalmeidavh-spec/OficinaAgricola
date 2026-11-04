@@ -21,7 +21,7 @@ export function requiredNativeRoles(method,path){
  if(/^\/v1\/fiscal\/settings$/.test(route))return verb==='GET'?FINANCE:ADMIN;
  if(/^\/v1\/fiscal\/(?:\d+\/(?:submit|reconcile))$/.test(route))return FINANCE;
  if(/^\/v1\/(?:fiscal|reports\/finance)(?:\/|$)/.test(route))return FINANCE;
- if(/^\/v1\/(?:payments|expenses)(?:\/|$)/.test(route))return FINANCE;
+ if(/^\/v1\/(?:payments|payment-intents|expenses)(?:\/|$)/.test(route))return FINANCE;
  if(/^\/v1\/cash(?:\/|$)/.test(route))return SALES;
  if(/^\/v1\/sales\/[1-9][0-9]*\/cancel$/.test(route))return FINANCE;
  if(/^\/v1\/sales(?:\/|$)/.test(route))return SALES;

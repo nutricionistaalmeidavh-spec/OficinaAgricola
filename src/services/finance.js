@@ -61,6 +61,8 @@ export function reverseReceipt(db,workOrderId,receiptId,{note='',createdBy=null}
    const row=db.prepare('SELECT * FROM receipts WHERE id=? AND work_order_id=?').get(receiptId,workOrderId);
    if(!row)throw new Error('Recebimento não encontrado');
    if(row.reversed_at)throw new Error('Recebimento já estornado');
+   if(db.prepare("SELECT id FROM payment_intents WHERE receipt_id=? AND status='PAID'").get(receiptId))
+     throw new Error('Cobrança do provedor exige confirmação de estorno externo antes da baixa financeira');
    const cash=activeCashForMethod(db,row.method);
    const t=nowIso();
    db.prepare('UPDATE receipts SET reversed_at=?,reversal_note=? WHERE id=?').run(t,text(note),receiptId);

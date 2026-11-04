@@ -70,6 +70,10 @@ const ROUTES=[
  'GET /api/work-orders/:id/attachments /v1/orders/:id/attachments ALL',
  'POST /api/work-orders/:id/attachments /v1/orders/:id/attachments TECH',
  'GET /api/attachments/:id/file /v1/attachments/:id/file ALL',
+ 'GET /api/payment-intents/capabilities /v1/payment-intents/capabilities FIN',
+ 'POST /api/payment-intents /v1/payment-intents FIN',
+ 'GET /api/payment-intents/:intentId /v1/payment-intents/:intentId FIN',
+ 'POST /api/payment-intents/:intentId/sync /v1/payment-intents/:intentId/sync FIN',
  'GET /api/work-orders/:id/payment /v1/orders/:id/payment ALL',
  'GET /api/work-orders/:id/receipts /v1/orders/:id/receipts ALL',
  'POST /api/work-orders/:id/receipts /v1/payments FIN receipt',
@@ -120,7 +124,7 @@ const definitions=ROUTES.map(line=>{
  const names=[];
  const expression=new RegExp('^'+legacy.replace(/:([A-Za-z]+)/g,(_,name)=>{
   names.push(name);
-  return name==='plate'?'([A-Z0-9-]{1,16})':'([1-9][0-9]*)';
+  return name==='plate'?'([A-Z0-9-]{1,16})':name==='intentId'?'([a-f0-9]{32})':'([1-9][0-9]*)';
  })+'$');
  return Object.freeze({method,legacy,native,roles:ROLES[role],transform,names,expression});
 });

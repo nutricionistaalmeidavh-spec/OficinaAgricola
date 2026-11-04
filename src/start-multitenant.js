@@ -7,6 +7,7 @@ import { resolveServerConfig, listLanUrls } from './platform/network.js';
 import { startMultiTenantBackupSchedule } from './platform/tenant-backup.js';
 import { createS3BackupClient } from './platform/s3-backup.js';
 import { loadTenantFiscalConfigs } from './platform/tenant-fiscal.js';
+import {loadTenantPaymentConfigs} from './platform/tenant-payment.js';
 import {loadNativeTenantBackends} from './platform/native-backend-config.js';
 
 // Database remains canonical SQLite until PostgreSQL/D1 parity is proven.
@@ -29,6 +30,7 @@ const tls=process.env.HTTPS_CERT_FILE&&process.env.HTTPS_KEY_FILE?{
   key:readFileSync(process.env.HTTPS_KEY_FILE)
 }:null;
 const tenantFiscalConfigs=loadTenantFiscalConfigs(process.env.TENANCY_FISCAL_CONFIG_FILE);
+const tenantPaymentConfigs=loadTenantPaymentConfigs(process.env.TENANCY_PAYMENT_CONFIG_FILE);
 // No native backend is selected without an explicit, approved per-unit map.
 const nativeBackendForUnit=loadNativeTenantBackends(process.env.TENANCY_NATIVE_BACKENDS_FILE);
 const objectStoreForUnit=objectsEngine==='s3'?(unit=>createS3BackupClient({
@@ -42,7 +44,7 @@ const objectStoreForUnit=objectsEngine==='s3'?(unit=>createS3BackupClient({
 })):null;
 const server=createMultiTenantServer({
   registryDb,legacyDb,legacyDatabasePath,legacyStorageDir,tenantsRoot,tls,
-  tenantFiscalConfigs,objectStoreForUnit,nativeBackendForUnit
+  tenantFiscalConfigs,tenantPaymentConfigs,objectStoreForUnit,nativeBackendForUnit
 });
 const {host,port}=resolveServerConfig(process.env);
 // Remote copies are opt-in, while SQLite + local disk remain canonical and free.

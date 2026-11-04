@@ -9,6 +9,7 @@ import {createCommonDataAdapter} from './platform/common-data-adapter.js';
 import {createPostgresTenantRegistry} from './platform/async-postgres-registry.js';
 import {createPostgresTenantRuntimeFactory} from './platform/postgres-tenant-runtime.js';
 import {createPostgresUnifiedGateway} from './platform/postgres-unified-gateway.js';
+import {loadTenantPaymentConfigs,resolveTenantPaymentOptions} from './platform/tenant-payment.js';
 
 const registryUrl=process.env.OFICINA_POSTGRES_REGISTRY_URL;
 const operationsUrl=process.env.OFICINA_POSTGRES_OPERATIONS_URL;
@@ -57,6 +58,7 @@ async function staticAsset(url,res){
   return respond(res,200,{'content-type':mime[extname(file).toLowerCase()]},await readFile(file));
  }catch{return respond(res,404,{},'Not found');}
 }
+const tenantPaymentConfigs=loadTenantPaymentConfigs(process.env.TENANCY_PAYMENT_CONFIG_FILE);
 let tenantFactory;
 try{
  await registryPool.query('SELECT 1');
@@ -84,7 +86,8 @@ try{
    Pool,connectionString:operationsUrl,registry,serviceToken:token,
    allowProvision:process.env.OFICINA_POSTGRES_PROVISION_NEW_UNITS==='true',
    schemaPrefix:process.env.OFICINA_POSTGRES_SCHEMA_PREFIX||'oficina',
-   localStorageRoot:process.env.OFICINA_POSTGRES_STORAGE_ROOT||'./storage/postgres'
+   localStorageRoot:process.env.OFICINA_POSTGRES_STORAGE_ROOT||'./storage/postgres',
+   paymentOptionsForUnit:unit=>resolveTenantPaymentOptions(unit,tenantPaymentConfigs)
  });
  const gateway=createPostgresUnifiedGateway({
    registry,tenantHandlerForUnit:tenantFactory.handlerForUnit,

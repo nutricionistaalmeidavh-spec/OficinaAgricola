@@ -21,6 +21,8 @@ import {executeDiagnosticWorker,isLocalHardwareRequest} from './platform/diagnos
 import { createPart, listParts, listPartsPage,  updatePart, addInventoryMovement, consumePart, reverseWorkOrderPart, listWorkOrderParts, lowStockParts } from './services/inventory.js';
 import { createScheduleEvent, listSchedule, listSchedulePage,  updateScheduleEvent, createChecklistTemplate, getChecklistTemplate, listChecklistTemplates, createWorkOrderChecklist, listWorkOrderChecklists, saveAttachment, listAttachments } from './services/operations.js';
 import { saveRemoteAttachment, readRemoteAttachment } from './platform/remote-attachments.js';
+import {createCommonDataAdapter} from './platform/common-data-adapter.js';
+import {createPaymentCollection} from './platform/payment-collection.js';
 import { addReceipt, reverseReceipt, listReceipts, getPaymentSummary, createExpense, updateExpense, listExpenses, listExpensesPage,  financeSummary } from './services/finance.js';
 import { dashboardData } from './services/dashboard.js';
 import { getOperationalReport } from './services/reports.js';
@@ -227,14 +229,39 @@ function serveStatic(req,res,path){
   res.writeHead(200,{'Content-Type':MIME[extname(file)]||'application/octet-stream','Cache-Control':rel==='index.html'?'no-cache':'public, max-age=3600'});res.end(readFileSync(file));return true;
 }
 
-export function createAppServer({db=openDatabase(),storageDir=process.env.STORAGE_DIR||'./storage/uploads',eventRuntime=null,fiscalProvider=null,objectStore=null,diagnosticRunner=executeDiagnosticWorker}={}){
+export function createAppServer({db=openDatabase(),storageDir=process.env.STORAGE_DIR||'./storage/uploads',eventRuntime=null,fiscalProvider=null,objectStore=null,diagnosticRunner=executeDiagnosticWorker,paymentOptions=null}={}){
   migrate(db); const router=createRouter({db,storageDir,objectStore,diagnosticRunner});
+  const paymentIntents=createPaymentCollection(createCommonDataAdapter({engine:'sqlite',db}),{
+    receivePayment:input=>addReceipt(db,input.workOrderId,input),
+    getPaymentSummary:workOrderId=>getPaymentSummary(db,workOrderId),
+    ...(paymentOptions??{})
+  });
   return createServer(async(req,res)=>{
     const url=new URL(req.url||'/','http://localhost'); const route=router.match(req.method||'GET',url.pathname);
     hardenHttpResponse(res,req);
     try{
       assertSecureNetwork(req);
       assertSameOrigin(req);
+      if(url.pathname==='/api/payment-intents/capabilities'||
+         url.pathname==='/api/payment-intents'||
+         /^\/api\/payment-intents\/[a-f0-9]{32}(?:\/sync)?$/.test(url.pathname)){
+        const user=validateSession(db,tokenFrom(req));roleGuard(user,ROLE_FIN);
+        if(req.method==='GET'&&url.pathname==='/api/payment-intents/capabilities')
+          return json(res,200,paymentIntents.getCapabilities());
+        if(req.method==='POST'&&url.pathname==='/api/payment-intents'){
+          const data=await readJson(req,16384);
+          return json(res,201,await paymentIntents.createIntent({
+            ...data,requestId:data.requestId??req.headers['idempotency-key']
+          }));
+        }
+        const view=url.pathname.match(/^\/api\/payment-intents\/([a-f0-9]{32})$/);
+        if(view&&req.method==='GET')
+          return json(res,200,await paymentIntents.getIntent(view[1]));
+        const sync=url.pathname.match(/^\/api\/payment-intents\/([a-f0-9]{32})\/sync$/);
+        if(sync&&req.method==='POST')
+          return json(res,200,await paymentIntents.syncIntent(sync[1]));
+        return json(res,405,{error:'Método não permitido'});
+      }
       // S3 is async: upload before committing metadata, but never await while
       // inside a synchronous SQLite transaction. Local/disk mode is unchanged.
       const attachmentUpload=objectStore&&req.method==='POST'
