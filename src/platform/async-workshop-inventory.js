@@ -107,19 +107,25 @@ export function createAsyncWorkshopInventory(port){
    const part=await getPart(partId);
    const price=unitPriceCents??Number(part.sale_price_cents),itemId=nextId(),movementId=nextId(),stamp=at();
    const stock=stmt(`UPDATE parts SET quantity=quantity-?,updated_at=?
-     WHERE id=? AND active=1 AND quantity>=?`,[quantity,stamp,partId,quantity-0.00000001]);
+     WHERE id=? AND active=1 AND quantity>=?
+       AND EXISTS(SELECT 1 FROM work_orders WHERE id=?
+         AND status IN ('APROVADA','EM_SERVICO'))`,[
+     quantity,stamp,partId,quantity-0.00000001,workOrderId
+   ]);
    const movement=stmt(`INSERT INTO inventory_movements(
      id,part_id,type,quantity_delta,work_order_id,note,created_at,source_type,source_item_id
-   ) VALUES(?,?,'CONSUMO_OS',?,?,?,?,?,?)`,[
+   ) ${port.engine==='d1'?"SELECT ?,?,'CONSUMO_OS',?,?,?,?,?,? WHERE changes()=1":"VALUES(?,?,'CONSUMO_OS',?,?,?,?,?,?)"}`,[
      movementId,partId,-quantity,workOrderId,note,stamp,'OS_PART',itemId
    ]);
    const consume=stmt(`INSERT INTO work_order_parts(
      id,work_order_id,part_id,quantity,unit_price_cents,movement_id
-   ) VALUES(?,?,?,?,?,?)`,[itemId,workOrderId,partId,quantity,price,movementId]);
+   ) ${port.engine==='d1'?'SELECT ?,?,?,?,?,? WHERE changes()=1':'VALUES(?,?,?,?,?,?)'}`,[
+     itemId,workOrderId,partId,quantity,price,movementId
+   ]);
    const queries=[stock,movement,consume];
    if(request.request)queries.push(stmt(`INSERT INTO command_idempotency(
      scope,request_id,payload_hash,result_json,created_at
-   ) VALUES(?,?,?,?,?)`,[
+   ) ${port.engine==='d1'?'SELECT ?,?,?,?,? WHERE changes()=1':'VALUES(?,?,?,?,?)'}`,[
      scope,request.request,request.hash,JSON.stringify({id:itemId}),stamp
    ]));
    try{
