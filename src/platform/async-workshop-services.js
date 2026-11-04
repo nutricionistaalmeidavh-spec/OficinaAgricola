@@ -11,6 +11,7 @@ import {createAsyncWorkshopAutomotive} from './async-workshop-automotive.js';
 import {createAsyncWorkshopAuth} from './async-workshop-auth.js';
 import {createAsyncWorkshopCrm} from './async-workshop-crm.js';
 import {createAsyncWorkshopAttachments} from './async-workshop-attachments.js';
+import {createAsyncLegacyViews} from './async-workshop-legacy-views.js';
 
 // Async canonical service layer for PostgreSQL and D1. Each command is
 // explicitly transactional on its backend; never delegate to legacy SQLite.
@@ -462,7 +463,7 @@ export function createAsyncWorkshopServices(port,{fiscalProvider=null,objectStor
    await atomic(port,[insert,event]);
    return port.first('SELECT * FROM fiscal_documents WHERE id=?',[documentId]);
  }
- return Object.freeze({
+ const services={
    createCustomer,createMachine,createWorkOrder,getWorkOrder,
    createPart,postStockMovement,receivePayment,financeSummary,
    transitionWorkOrder,saveQuote,approveQuote,createFiscalDraft,
@@ -477,5 +478,6 @@ export function createAsyncWorkshopServices(port,{fiscalProvider=null,objectStor
    ...createAsyncWorkshopAuth(port),
    ...createAsyncWorkshopCrm(port),
    ...createAsyncWorkshopAttachments(port,{objectStore})
- });
+ };
+ return Object.freeze({...services,...createAsyncLegacyViews(port,services)});
 }
