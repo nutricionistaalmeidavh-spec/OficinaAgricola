@@ -1,4 +1,4 @@
-import {loadTenantReminderSenders} from './platform/tenant-reminder-smtp.js';
+import {fileURLToPath} from 'node:url';
 // Self-hosted, opt-in unified PostgreSQL gateway for P3/P4.
 // It replaces SQLite for this process only; main/legacy entry points stay
 // untouched until migration, restore and Windows E2E gates pass.
@@ -11,6 +11,7 @@ import {createPostgresTenantRegistry} from './platform/async-postgres-registry.j
 import {createPostgresTenantRuntimeFactory} from './platform/postgres-tenant-runtime.js';
 import {createPostgresUnifiedGateway} from './platform/postgres-unified-gateway.js';
 import {loadTenantPaymentConfigs,resolveTenantPaymentOptions} from './platform/tenant-payment.js';
+import {loadTenantReminderSenders} from './platform/tenant-reminder-smtp.js';
 
 const registryUrl=process.env.OFICINA_POSTGRES_REGISTRY_URL;
 const operationsUrl=process.env.OFICINA_POSTGRES_OPERATIONS_URL;
@@ -31,7 +32,7 @@ const mime={
  '.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.svg':'image/svg+xml',
  '.ico':'image/x-icon','.webp':'image/webp','.woff2':'font/woff2'
 };
-const publicRoot=resolve('public');
+const publicRoot=resolve(fileURLToPath(new URL('../public',import.meta.url)));
 const securityHeaders={
  'x-content-type-options':'nosniff','x-frame-options':'DENY',
  'referrer-policy':'no-referrer',
@@ -67,7 +68,21 @@ try{
  const registry=createPostgresTenantRegistry(createCommonDataAdapter({
    engine:'postgres',pool:registryPool
  }));
- const fresh=process.env.OFICINA_REGISTRY_NEW_INSTALL==='true';
+ const explicitlyNew=process.env.OFICINA_REGISTRY_NEW_INSTALL==='true';
+ const managedLocal=process.env.OFICINA_POSTGRES_MANAGED_LOCAL==='true';
+ let fresh=explicitlyNew;
+ if(managedLocal){
+   // A missing registry table in an existing local cluster is DATA LOSS,
+   // not a new installation. Preserve the first-run form across restarts.
+   const marker=await registryPool.query("SELECT to_regclass('public.tenant_registry_bootstrap') AS name");
+   if(!marker.rows[0]?.name&&!explicitlyNew)
+     throw Error('Registry PostgreSQL desapareceu; restauração auditada obrigatória');
+   if(marker.rows[0]?.name){
+     const rows=await registryPool.query('SELECT pending FROM tenant_registry_bootstrap WHERE id=1');
+     if(!rows.rows.length)throw Error('Marcador de bootstrap desapareceu; restauração obrigatória');
+     fresh=Number(rows.rows[0].pending)===1;
+   }
+ }
  await registry.initialize({allowBootstrap:fresh});
  const token=randomBytes(48).toString('base64url');
  tenantFactory=createPostgresTenantRuntimeFactory({
