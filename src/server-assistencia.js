@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import {publicErrorMessage} from './platform/public-errors.js';
 import {createServer as createHttpsServer} from 'node:https';
 import { openDatabase, migrate, transaction } from './db.js';
 import { validateSession } from './auth.js';
@@ -21,6 +22,7 @@ import {
   getSale,
   listCashSessions,
   listSales,
+  listSalesPage,
   listServices,
   openCashSession,
   updateService,
@@ -105,6 +107,12 @@ function handleAssistenciaApi({ req, res, url, db, body }) {
     return respond(200, updateService(db, positiveId(match[1]), body));
   }
 
+  if (path === '/api/sales/page' && method === 'GET') {
+    requireUser(db, req, SALES_ROLES);
+    return respond(200, listSalesPage(db, { limit: url.searchParams.get('limit') || 50,
+      cursor: url.searchParams.get('cursor'), search: url.searchParams.get('search') || '',
+      status: url.searchParams.get('status') || '' }));
+  }
   if (path === '/api/sales' && method === 'GET') {
     requireUser(db, req, SALES_ROLES);
     return respond(200, listSales(db, { limit: url.searchParams.get('limit') || 100, search: url.searchParams.get('search') || '', status: url.searchParams.get('status') || '' }));
@@ -187,10 +195,10 @@ export function createAssistenciaServer({
       }):invoke();
       json(res,answer.status,answer.data);
       if(mutation&&answer.status>=200&&answer.status<300&&eventRuntime)
-        void dispatchOutbox(db,eventRuntime).catch(e=>console.error('[outbox]',e.message));
+        void dispatchOutbox(db,eventRuntime,100,{respectBackoff:true}).catch(e=>console.error('[outbox]',e.message));
     } catch (error) {
       console.error('[assistencia]', req.method, url.pathname, error.message);
-      json(res, errorStatus(error), { error: error.message || 'Erro interno' });
+      json(res, errorStatus(error), { error: publicErrorMessage(error) });
     }
   };
   return tls?createHttpsServer(tls,handler):createServer(handler);

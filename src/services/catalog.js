@@ -1,3 +1,4 @@
+import {selectPage} from '../platform/pagination.js';
 import { nowIso } from '../db.js';
 
 const text = (v) => v == null ? '' : String(v).trim();
@@ -118,4 +119,20 @@ export function updateTechnician(db,id,input){
   db.prepare('UPDATE technicians SET name=?,phone=?,specialty=?,user_id=?,active=?,updated_at=? WHERE id=?').run(
     input.name===undefined?old.name:requireName(input.name,'Nome do técnico'),input.phone===undefined?old.phone:text(input.phone),input.specialty===undefined?old.specialty:text(input.specialty),userId,boolInt(input.active,old.active),nowIso(),id);
   return getTechnician(db,id);
+}
+
+export function listCustomersPage(db,{includeInactive=false,search='',limit=50,cursor=null}={}){
+  const where=[],args=[];
+  if(!includeInactive)where.push('c.active=1');
+  if(search){const q='%'+text(search)+'%';where.push('(c.name LIKE ? OR c.document LIKE ? OR c.phone LIKE ?)');args.push(q,q,q);}
+  return selectPage(db,{from:'FROM customers c',select:'c.*',where,args,
+    sort:'c.name COLLATE NOCASE',id:'c.id',direction:'ASC',cursor,limit,scope:'customers'});
+}
+export function listMachinesPage(db,{customerId,includeInactive=false,search='',limit=50,cursor=null}={}){
+  const where=[],args=[];
+  if(!includeInactive)where.push('m.active=1');
+  if(customerId){where.push('m.customer_id=?');args.push(customerId);}
+  if(search){const q='%'+text(search)+'%';where.push('(m.type LIKE ? OR m.brand LIKE ? OR m.model LIKE ? OR m.serial_number LIKE ? OR m.license_plate LIKE ? OR m.vin LIKE ? OR m.renavam LIKE ? OR m.engine LIKE ? OR c.name LIKE ?)');args.push(...Array(9).fill(q));}
+  return selectPage(db,{from:'FROM machines m JOIN customers c ON c.id=m.customer_id',
+    select:'m.*,c.name customer_name',where,args,sort:'m.id',id:'m.id',cursor,limit,scope:'machines'});
 }

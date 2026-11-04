@@ -1,8 +1,20 @@
 // Interface fiscal: o rascunho NÃO é uma nota autorizada.
 // Somente o servidor pode criar snapshots; o renderer nunca grava livros canônicos.
-async function renderFiscal(){
+function fiscalSnapshot(doc){try{return JSON.parse(doc.snapshot_json||'{}')}catch{return {}}}
+function fiscalOriginTitle(doc){
+ const number=fiscalSnapshot(doc).originNumber;
+ const name=doc.origin_type==='OS'?'OS':'Venda';
+ return number!=null?name+' #'+String(number):name+' vinculada';
+}
+function fiscalDisplayTitle(doc){
+ const kind=doc.kind==='NFE'?'NF-e':'NFS-e';
+ if(doc.fiscal_number)return kind+' nº '+doc.fiscal_number+(doc.fiscal_series?' · série '+doc.fiscal_series:'');
+ return kind+' · '+(doc.status==='RASCUNHO'?'Rascunho':String(doc.status||'Em processamento').replaceAll('_',' '));
+}
+
+async function renderFiscal({cursor=null,loaded=[]}={}){
   pageTitle('Fiscal','DOCUMENTOS E CONCILIAÇÃO');
-  const [docs,settings]=await Promise.all([api('/api/fiscal'),api('/api/fiscal/settings')]);
+  const [page,settings]=await Promise.all([api('/api/fiscal/page?limit=50'+(cursor?'&cursor='+encodeURIComponent(cursor):'')),api('/api/fiscal/settings')]);const docs=loaded.concat(page.items);
   const cards=docs.map(d=>{
     const origin=d.origin_type==='OS'?'OS':'Venda';
     const actions=d.status==='RASCUNHO'&&settings.enabled
@@ -10,12 +22,12 @@ async function renderFiscal(){
       : d.status==='INDETERMINADO'
         ? '<button class="btn sm" data-fiscal-check="'+d.id+'">Consultar situação</button>'
         : '';
-    return '<div class="list-item"><div><strong>'+esc(d.kind)+' #'+d.id+'</strong> · '+origin+' #'+d.origin_id+
+    return '<div class="list-item"><div><strong>'+esc(fiscalDisplayTitle(d))+'</strong> · '+esc(fiscalOriginTitle(d))+
       '<br><small>'+esc(d.status)+' · '+money(d.amount_cents)+'</small></div><div class="action-row">'+
       '<button class="btn sm soft" data-fiscal-details="'+d.id+'">Histórico</button>'+actions+'</div></div>';
   }).join('');
   setContent('<div class="section-head fiscal-head"><div><h2>Documentos fiscais</h2>'+
-    '<span class="muted">Rascunhos e protocolos vinculados à operação canônica</span></div>'+
+    '<span class="muted">Rascunhos, notas e protocolos das ordens de serviço e vendas</span></div>'+
     '<div class="action-row">'+(state.user.role==='ADMIN'?'<button id="fiscalSettings" class="btn">Configuração fiscal</button>':'')+
     '<button id="fiscalNew" class="btn primary">+ Preparar documento</button></div></div>'+
     '<div class="card"><p><strong>Cadastro fiscal:</strong> '+(settings.enabled?'Habilitado':'Desabilitado')+' · '+esc(settings.environment)+
@@ -28,6 +40,7 @@ async function renderFiscal(){
   $$('[data-fiscal-details]').forEach(b=>b.onclick=()=>showFiscalHistory(Number(b.dataset.fiscalDetails)).catch(e=>toast(e.message,true)));
   $$('[data-fiscal-submit]').forEach(b=>b.onclick=()=>fiscalAction(Number(b.dataset.fiscalSubmit),'submit'));
   $$('[data-fiscal-check]').forEach(b=>b.onclick=()=>fiscalAction(Number(b.dataset.fiscalCheck),'reconcile'));
+   showPagedLoadMore({cursor:page.nextCursor,loaded:docs.length,total:page.total,onMore:()=>renderFiscal({cursor:page.nextCursor,loaded:docs})});
 }
 
 function fiscalSettingsModal(current){
@@ -86,7 +99,7 @@ function fiscalDraftModal(){
         originType:values.originType,originId,kind:values.kind,requestId
       }});
       if(!doc||doc.id==null)throw new Error('Criação do rascunho ainda não confirmada.');
-      toast('Rascunho fiscal #'+doc.id+' salvo. A nota ainda não foi autorizada.');
+      toast('Rascunho fiscal salvo. A nota ainda não foi autorizada.');
       await refreshCurrentPage();
     });
   const type=$('#fiscalOriginType'),search=$('#fiscalOriginSearch'),options=$('#fiscalOriginOptions');
@@ -133,7 +146,7 @@ function fiscalDraftModal(){
     });
   };
   const findSafe=()=>findOrigins().catch(error=>{if(options.isConnected){
-    options.textContent='Não foi possível carregar as operações: '+error.message+'. Altere a busca para tentar novamente.';
+    options.textContent='Não foi possível carregar as operações: '+friendlyUiMessage(error.message)+'. Altere a busca para tentar novamente.';
   }});
   type.onchange=()=>{search.value='';++sequence;clearTimeout(timer);clearSelection();findSafe()};
   search.oninput=()=>{++sequence;clearTimeout(timer);clearSelection();timer=setTimeout(findSafe,220)};
@@ -154,7 +167,7 @@ async function fiscalAction(id,action){
     const doc=await api('/api/fiscal/'+id);
     await refreshCurrentPage();
     if(['AUTORIZADA','AUTORIZADA_HOMOLOGACAO'].includes(doc.status))
-      toast('Documento fiscal #'+id+' autorizado'+(doc.status==='AUTORIZADA_HOMOLOGACAO'?' em homologação.':'.'));
+      toast('Documento fiscal autorizado'+(doc.status==='AUTORIZADA_HOMOLOGACAO'?' em homologação.':'.'));
     else if(doc.status==='INDETERMINADO')
       toast('Transmissão sem conclusão confirmada. Consulte a situação fiscal antes de outra tentativa.',true);
     else
@@ -173,15 +186,15 @@ async function fiscalAction(id,action){
 async function showFiscalHistory(id){
   const [doc,events]=await Promise.all([api('/api/fiscal/'+id),api('/api/fiscal/'+id+'/events')]);
   const rows=events.map(e=>'<div class="list-item"><div><strong>'+esc(e.event_type)+'</strong><br><small>'+dt(e.created_at)+'</small></div></div>').join('');
-  showModal('Documento fiscal #'+doc.id,
+  showModal(fiscalDisplayTitle(doc),
     '<div class="detail-grid"><div class="detail-block"><h3>Status</h3>'+esc(doc.status)+'</div>'+
     '<div class="detail-block"><h3>Total</h3>'+money(doc.amount_cents)+'</div></div>'+
-    '<p><strong>Origem:</strong> '+esc(doc.origin_type)+' #'+doc.origin_id+'</p>'+
+    '<p><strong>Origem:</strong> '+esc(fiscalOriginTitle(doc))+'</p>'+
     (doc.access_key?'<p><strong>Chave:</strong> '+esc(doc.access_key)+'</p>':'')+
     (doc.protocol?'<p><strong>Protocolo:</strong> '+esc(doc.protocol)+'</p>':'')+
     (doc.fiscal_number?'<p><strong>Número/série:</strong> '+esc(doc.fiscal_number)+' / '+esc(doc.fiscal_series||'—')+'</p>':'')+
     (['AUTORIZADA','AUTORIZADA_HOMOLOGACAO'].includes(doc.status)?'<button id="downloadFiscalXml" class="btn">Baixar XML</button>':'')+
-    (doc.last_error?'<p class="error">'+esc(doc.last_error)+'</p>':'')+
+    (doc.last_error?'<p class="error">Não foi possível concluir a transmissão. Consulte a configuração fiscal e o suporte.</p>':'')+
     '<h3>Eventos</h3><div class="list">'+(rows||'<div class="empty">Nenhum evento.</div>')+'</div>');
   if($('#downloadFiscalXml'))$('#downloadFiscalXml').onclick=async()=>{
     try{

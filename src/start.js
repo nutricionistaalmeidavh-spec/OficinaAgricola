@@ -1,3 +1,4 @@
+import {cleanupOperationalData} from './platform/data-maintenance.js';
 import { resolveDatabasePath, resolveStoragePath } from './platform/data-location.js';
 import {readFileSync} from 'node:fs';
 import {dirname,join} from 'node:path';
@@ -19,9 +20,7 @@ process.env.EVENT_LOG_PATH ||= './data/oficina-events.jsonl';
 process.env.PORT ||= '3344';
 
 const db = openDatabase();
-// A legacy process must never bypass the multiempresa registry, even when the
-// original SQLite database has valid old sessions. Migrate back from a verified
-// backup before downgrading the runtime.
+// Never bypass the multiempresa membership registry with a legacy server.
 if(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='tenant_registry_link'").get()){
   db.close();
   throw new Error('Banco vinculado ao modo multiempresa: use npm run start:multi. Modo legado bloqueado para não ignorar permissões.');
@@ -31,23 +30,35 @@ migrateAssistencia(db);
 seed(db);
 recoverOrphanAttachments(db,process.env.STORAGE_DIR);
 const eventRuntime = createEventRuntime({ auditPath: process.env.EVENT_LOG_PATH });
-const flushEvents=()=>void dispatchOutbox(db,eventRuntime).catch(error=>
+const flushEvents=()=>void dispatchOutbox(db,eventRuntime,100,{respectBackoff:true}).catch(error=>
   console.error('[outbox]',error.message));
 const outboxTimer=setInterval(flushEvents,15000);
+function maintainDatabase(){
+ try{
+   const result=cleanupOperationalData(db,{deliveredRetentionDays:Number(process.env.OUTBOX_RETENTION_DAYS||0)});
+   db.exec('PRAGMA optimize');
+   if(result.sessions||result.deliveredEvents)console.info('[database] Registros operacionais expirados:',result);
+ }catch(error){console.error('[database] Manutenção:',error.message);}
+}
+maintainDatabase();
+const maintenanceTimer=setInterval(maintainDatabase,60*60*1000);
+maintenanceTimer.unref?.();
 outboxTimer.unref?.();
 let lastReconciliationWarning=null;
+let reconciliationCursors={};
 function reconcile(){
  try{
-   const audit=auditInvariants(db);
+   const audit=auditInvariants(db,{batchSize:500,cursors:reconciliationCursors});
+    reconciliationCursors=audit.nextCursor;
    const signature=JSON.stringify(audit.errors);
    if(signature!==lastReconciliationWarning){
      lastReconciliationWarning=signature;
      if(!audit.ok)console.warn('[canonicidade] Divergências identificadas (somente leitura):',signature);
-     else console.info('[canonicidade] Livros de estoque/financeiro conciliados');
+     else console.info('[canonicidade] Lote de auditoria verificado');
    }
  }catch(error){console.error('[canonicidade] Falha de auditoria:',error.message)}
 }
-const reconciliationTimer=setInterval(reconcile,60000);
+const reconciliationTimer=setInterval(reconcile,15*60*1000);
 reconciliationTimer.unref?.();
 function syncPreventiveReminders(){
  try{const result=createMaintenanceCrmTasks(db,{daysAhead:7});if(result.created)console.info('[crm] Lembretes preventivos gerados:',result.created)}
@@ -78,6 +89,7 @@ server.listen(port, host, () => {
 
 const shutdown = () => {
   clearInterval(outboxTimer);
+  clearInterval(maintenanceTimer);
   clearInterval(reconciliationTimer);
   clearInterval(preventiveTimer);
   stopBackupSchedule();

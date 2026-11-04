@@ -159,20 +159,37 @@ export function listMaintenancePlans(db,machineId){
   machine(db,machineId);
   return db.prepare('SELECT * FROM maintenance_plans WHERE machine_id=? AND active=1 ORDER BY id DESC').all(machineId);
 }
-export function listMaintenanceAlerts(db,{today=new Date().toISOString().slice(0,10),daysAhead=30,kmAhead=1000,hoursAhead=50}={}){
-  const day=date(today,'Data de referência',{optional:false});
-  const days=distance(daysAhead,'Antecedência em dias'),km=distance(kmAhead,'Antecedência em km'),hours=distance(hoursAhead,'Antecedência em horas');
-  const cutoff=addDays(day,days);
-  return db.prepare('SELECT p.*,m.brand,m.model,m.license_plate,m.odometer_km,m.hour_meter,c.name customer_name FROM maintenance_plans p JOIN machines m ON m.id=p.machine_id JOIN customers c ON c.id=m.customer_id WHERE p.active=1 AND m.active=1 ORDER BY p.id').all()
-    .map(p=>{
-      const overdue=(p.next_due_date&&p.next_due_date<day)||
-        (p.next_due_km!=null&&p.odometer_km!=null&&p.odometer_km>=p.next_due_km)||
-        (p.next_due_hours!=null&&p.hour_meter!=null&&p.hour_meter>=p.next_due_hours);
-      const soon=(p.next_due_date&&p.next_due_date<=cutoff)||
-        (p.next_due_km!=null&&p.odometer_km!=null&&p.odometer_km+km>=p.next_due_km)||
-        (p.next_due_hours!=null&&p.hour_meter!=null&&p.hour_meter+hours>=p.next_due_hours);
-      return {...p,status:overdue?'ATRASADO':soon?'PROXIMO':'EM_DIA'};
-    }).filter(p=>p.status!=='EM_DIA').sort((a,b)=>(a.status==='ATRASADO'?0:1)-(b.status==='ATRASADO'?0:1));
+export function listMaintenanceAlerts(db,{today=new Date().toISOString().slice(0,10),daysAhead=30,kmAhead=1000,hoursAhead=50,limit=null}={}){
+ const day=date(today,'Data de referência',{optional:false});
+ const days=distance(daysAhead,'Antecedência em dias'),km=distance(kmAhead,'Antecedência em km'),hours=distance(hoursAhead,'Antecedência em horas');
+ const cutoff=addDays(day,days);
+ const from='FROM maintenance_plans p JOIN machines m ON m.id=p.machine_id JOIN customers c ON c.id=m.customer_id';
+ const select='SELECT p.*,m.brand,m.model,m.license_plate,m.odometer_km,m.hour_meter,c.name customer_name';
+ const annotate=p=>{
+  const overdue=(p.next_due_date&&p.next_due_date<day)||
+    (p.next_due_km!=null&&p.odometer_km!=null&&p.odometer_km>=p.next_due_km)||
+    (p.next_due_hours!=null&&p.hour_meter!=null&&p.hour_meter>=p.next_due_hours);
+  const soon=(p.next_due_date&&p.next_due_date<=cutoff)||
+    (p.next_due_km!=null&&p.odometer_km!=null&&p.odometer_km+km>=p.next_due_km)||
+    (p.next_due_hours!=null&&p.hour_meter!=null&&p.hour_meter+hours>=p.next_due_hours);
+  return {...p,status:overdue?'ATRASADO':soon?'PROXIMO':'EM_DIA'};
+ };
+ if(limit!=null){
+  const size=Math.max(1,Math.min(100,Number(limit)||8));
+  return db.prepare(select+' '+from+`
+   WHERE p.active=1 AND m.active=1 AND (
+     (p.next_due_date IS NOT NULL AND p.next_due_date<=?) OR
+     (p.next_due_km IS NOT NULL AND m.odometer_km IS NOT NULL AND m.odometer_km+?>=p.next_due_km) OR
+     (p.next_due_hours IS NOT NULL AND m.hour_meter IS NOT NULL AND m.hour_meter+?>=p.next_due_hours)
+   )
+   ORDER BY CASE WHEN
+      (p.next_due_date IS NOT NULL AND p.next_due_date<?) OR
+      (p.next_due_km IS NOT NULL AND m.odometer_km IS NOT NULL AND m.odometer_km>=p.next_due_km) OR
+      (p.next_due_hours IS NOT NULL AND m.hour_meter IS NOT NULL AND m.hour_meter>=p.next_due_hours)
+     THEN 0 ELSE 1 END,p.id LIMIT ?`).all(cutoff,km,hours,day,size).map(annotate);
+ }
+ return db.prepare(select+' '+from+' WHERE p.active=1 AND m.active=1 ORDER BY p.id').all()
+  .map(annotate).filter(p=>p.status!=='EM_DIA').sort((x,y)=>(x.status==='ATRASADO'?0:1)-(y.status==='ATRASADO'?0:1));
 }
 export function completeMaintenancePlan(db,id,input){
   return transaction(db,()=>{

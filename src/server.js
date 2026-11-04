@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import {publicErrorMessage} from './platform/public-errors.js';
 import { readFileSync, existsSync, statSync } from 'node:fs';
 import { join, resolve, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,18 +12,18 @@ import {getCompanySettings,updateCompanySettings,listStaffUsers,createStaffUser,
 import { loginHttp, logout, validateSession } from './auth.js';
 import {authTokenFrom,assertSameOrigin,prefersCookie,issueBrowserCookie,clearBrowserCookie,hardenHttpResponse} from './platform/session-http.js';
 import {assertSecureNetwork} from './platform/network.js';
-import { createCustomer, listCustomers, updateCustomer, getCustomer, createMachine, listMachines, updateMachine, getMachine, createTechnician, listTechnicians, updateTechnician } from './services/catalog.js';
+import { createCustomer, listCustomers, listCustomersPage,  updateCustomer, getCustomer, createMachine, listMachines, listMachinesPage,  updateMachine, getMachine, createTechnician, listTechnicians, updateTechnician } from './services/catalog.js';
 import { createWorkOrder, listWorkOrders, listWorkOrdersPage, getWorkOrder, updateWorkOrder, transitionWorkOrder, getWorkOrderHistory, machineHistory } from './services/work-orders.js';
 import { saveQuote, getQuote, submitQuote, approveQuote, rejectQuote } from './services/quotes.js';
 import { renderDocument, renderPdfDocument, renderDiagnosticPdf } from './documents.js';
 import {listDiagnosticAdapters} from './services/diagnostics.js';
 import {executeDiagnosticWorker,isLocalHardwareRequest} from './platform/diagnostic-hardware.js';
-import { createPart, listParts, updatePart, addInventoryMovement, consumePart, reverseWorkOrderPart, listWorkOrderParts, lowStockParts } from './services/inventory.js';
-import { createScheduleEvent, listSchedule, updateScheduleEvent, createChecklistTemplate, getChecklistTemplate, listChecklistTemplates, createWorkOrderChecklist, listWorkOrderChecklists, saveAttachment, listAttachments } from './services/operations.js';
-import { addReceipt, reverseReceipt, listReceipts, getPaymentSummary, createExpense, updateExpense, listExpenses, financeSummary } from './services/finance.js';
+import { createPart, listParts, listPartsPage,  updatePart, addInventoryMovement, consumePart, reverseWorkOrderPart, listWorkOrderParts, lowStockParts } from './services/inventory.js';
+import { createScheduleEvent, listSchedule, listSchedulePage,  updateScheduleEvent, createChecklistTemplate, getChecklistTemplate, listChecklistTemplates, createWorkOrderChecklist, listWorkOrderChecklists, saveAttachment, listAttachments } from './services/operations.js';
+import { addReceipt, reverseReceipt, listReceipts, getPaymentSummary, createExpense, updateExpense, listExpenses, listExpensesPage,  financeSummary } from './services/finance.js';
 import { dashboardData } from './services/dashboard.js';
 import { getOperationalReport } from './services/reports.js';
-import { createFiscalDraft, getFiscalDocument, listFiscalDocuments, listFiscalEvents, submitFiscalDocument, reconcileFiscalDocument } from './services/fiscal.js';
+import { createFiscalDraft, getFiscalDocument, listFiscalDocuments, listFiscalDocumentsPage, listFiscalEvents,  submitFiscalDocument, reconcileFiscalDocument } from './services/fiscal.js';
 import { getFiscalSettings, setFiscalSettings } from './services/fiscal-settings.js';
 import { seed } from './seed.js';
 import {listServiceRecords,createServiceRecord} from './services/vehicle-maintenance.js';
@@ -81,10 +82,12 @@ function createRouter({db,storageDir,diagnosticRunner=executeDiagnosticWorker}){
   add('POST','/api/users',['ADMIN'],({body})=>createStaffUser(db,body));
   add('PATCH','/api/users/:id',['ADMIN'],({params,body})=>updateStaffUser(db,int(params.id),body));
 
+  add('GET','/api/customers/page',ROLE_ALL,({url})=>listCustomersPage(db,{includeInactive:url.searchParams.get('includeInactive')==='1',search:url.searchParams.get('search')||'',limit:url.searchParams.get('limit')||50,cursor:url.searchParams.get('cursor')}));
   add('GET','/api/customers',ROLE_ALL,({url})=>listCustomers(db,{includeInactive:url.searchParams.get('includeInactive')==='1',search:url.searchParams.get('search')||''}));
   add('POST','/api/customers',ROLE_OFFICE,({body})=>createCustomer(db,body));
   add('GET','/api/customers/:id',ROLE_ALL,({params})=>getCustomer(db,int(params.id)));
   add('PATCH','/api/customers/:id',ROLE_OFFICE,({params,body})=>updateCustomer(db,int(params.id),body));
+  add('GET','/api/machines/page',ROLE_ALL,({url})=>listMachinesPage(db,{customerId:url.searchParams.get('customerId')?int(url.searchParams.get('customerId')):undefined,includeInactive:url.searchParams.get('includeInactive')==='1',search:url.searchParams.get('search')||'',limit:url.searchParams.get('limit')||50,cursor:url.searchParams.get('cursor')}));
   add('GET','/api/machines',ROLE_ALL,({url})=>listMachines(db,{customerId:url.searchParams.get('customerId')?int(url.searchParams.get('customerId')):undefined,includeInactive:url.searchParams.get('includeInactive')==='1',search:url.searchParams.get('search')||''}));
   add('POST','/api/machines',ROLE_OFFICE,({body})=>createMachine(db,body));
   add('GET','/api/machines/:id',ROLE_ALL,({params})=>getMachine(db,int(params.id)));
@@ -133,6 +136,7 @@ function createRouter({db,storageDir,diagnosticRunner=executeDiagnosticWorker}){
   add('GET','/api/work-orders/:id/documents/:kind/pdf',ROLE_ALL,({params})=>{const id=int(params.id),os=getWorkOrder(db,id);return {__binary:renderPdfDocument(db,id,params.kind),mimeType:'application/pdf',filename:`OS-${os.os_number}.pdf`}});
   add('GET','/api/work-orders/:id/documents/:kind',ROLE_ALL,({params})=>({__html:renderDocument(db,int(params.id),params.kind)}));
 
+  add('GET','/api/parts/page',ROLE_ALL,({url})=>listPartsPage(db,{includeInactive:url.searchParams.get('includeInactive')==='1',search:url.searchParams.get('search')||'',limit:url.searchParams.get('limit')||50,cursor:url.searchParams.get('cursor')}));
   add('GET','/api/parts',ROLE_ALL,({url})=>listParts(db,{includeInactive:url.searchParams.get('includeInactive')==='1',search:url.searchParams.get('search')||''}));
   add('POST','/api/parts',ROLE_OFFICE,({body})=>createPart(db,body));
   add('GET','/api/parts/:id/fitments',ROLE_ALL,({params})=>listPartFitments(db,int(params.id)));
@@ -145,6 +149,7 @@ function createRouter({db,storageDir,diagnosticRunner=executeDiagnosticWorker}){
   add('POST','/api/work-orders/:id/parts',ROLE_TECH,({params,body,user})=>consumePart(db,int(params.id),int(body.partId),{...body,createdBy:user.id,userRole:user.role}));
   add('POST','/api/work-orders/:id/parts/:itemId/reverse',ROLE_TECH,({params,body,user})=>reverseWorkOrderPart(db,int(params.itemId),{note:body.note,createdBy:user.id,workOrderId:int(params.id)}));
 
+  add('GET','/api/schedule/page',ROLE_ALL,({url})=>listSchedulePage(db,{from:url.searchParams.get('from')||undefined,to:url.searchParams.get('to')||undefined,limit:url.searchParams.get('limit')||50,cursor:url.searchParams.get('cursor')}));
   add('GET','/api/schedule',ROLE_ALL,({url})=>listSchedule(db,{from:url.searchParams.get('from')||undefined,to:url.searchParams.get('to')||undefined}));
   add('POST','/api/schedule',ROLE_TECH,({body})=>createScheduleEvent(db,body));
   add('PATCH','/api/schedule/:id',ROLE_TECH,({params,body})=>updateScheduleEvent(db,int(params.id),body));
@@ -161,11 +166,13 @@ function createRouter({db,storageDir,diagnosticRunner=executeDiagnosticWorker}){
   add('GET','/api/work-orders/:id/receipts',ROLE_ALL,({params})=>listReceipts(db,int(params.id)));
   add('POST','/api/work-orders/:id/receipts',ROLE_FIN,({params,body,user})=>addReceipt(db,int(params.id),{...body,createdBy:user.id}));
   add('POST','/api/work-orders/:id/receipts/:receiptId/reverse',ROLE_FIN,({params,body})=>reverseReceipt(db,int(params.id),int(params.receiptId),body));
+  add('GET','/api/expenses/page',ROLE_FIN,({url})=>listExpensesPage(db,{from:url.searchParams.get('from')||undefined,to:url.searchParams.get('to')||undefined,limit:url.searchParams.get('limit')||50,cursor:url.searchParams.get('cursor')}));
   add('GET','/api/expenses',ROLE_FIN,({url})=>listExpenses(db,{from:url.searchParams.get('from')||undefined,to:url.searchParams.get('to')||undefined}));
   add('POST','/api/expenses',ROLE_FIN,({body})=>createExpense(db,body));
   add('PATCH','/api/expenses/:id',ROLE_FIN,({params,body})=>updateExpense(db,int(params.id),body));
   add('GET','/api/finance/summary',ROLE_FIN,({url})=>financeSummary(db,{from:url.searchParams.get('from')||undefined,to:url.searchParams.get('to')||undefined}));
   add('GET','/api/reports',ROLE_ALL,({url,user})=>getOperationalReport(db,{from:url.searchParams.get('from')||undefined,to:url.searchParams.get('to')||undefined,includeFinance:ROLE_FIN.includes(user.role)}));
+  add('GET','/api/fiscal/page',ROLE_FIN,({url})=>listFiscalDocumentsPage(db,{status:url.searchParams.get('status')||'',limit:url.searchParams.get('limit')||50,cursor:url.searchParams.get('cursor')}));
   add('GET','/api/fiscal',ROLE_FIN,({url})=>listFiscalDocuments(db,{status:url.searchParams.get('status')||'',limit:url.searchParams.get('limit')||100}));
   add('GET','/api/fiscal/settings',ROLE_FIN,()=>getFiscalSettings(db));
   add('PATCH','/api/fiscal/settings',['ADMIN'],({body})=>setFiscalSettings(db,body));
@@ -255,7 +262,7 @@ export function createAppServer({db=openDatabase(),storageDir=process.env.STORAG
         }):await invoke();
         if(res.writableEnded)return;
         if(req.method==='POST'&&url.pathname==='/api/auth/logout')clearBrowserCookie(res,req);
-        if(isMutation&&eventRuntime)void dispatchOutbox(db,eventRuntime).catch(e=>console.error('[outbox]',e.message));
+        if(isMutation&&eventRuntime)void dispatchOutbox(db,eventRuntime,100,{respectBackoff:true}).catch(e=>console.error('[outbox]',e.message));
         if(data&&Object.hasOwn(data,'__html'))return html(res,200,data.__html);
         if(data&&Object.hasOwn(data,'__binary')){
           res.writeHead(200,{'Content-Type':data.mimeType||'application/octet-stream','Content-Disposition':`inline; filename=\"${String(data.filename||'anexo').replace(/[\"\r\n]/g,'')}\"`,'Cache-Control':'private, max-age=300'});
@@ -266,7 +273,7 @@ export function createAppServer({db=openDatabase(),storageDir=process.env.STORAG
       if((req.method==='GET'||req.method==='HEAD')&&serveStatic(req,res,url.pathname))return;
       if(req.method==='GET'&&!url.pathname.startsWith('/api/')){if(serveStatic(req,res,'/'))return}
       json(res,404,{error:'Rota não encontrada'});
-    }catch(error){console.error('[request]',req.method,url.pathname.startsWith('/api/public/approval/')?'/api/public/approval/[redacted]':url.pathname,error.message);json(res,statusFor(error),{error:error.message||'Erro interno'})}
+    }catch(error){console.error('[request]',req.method,url.pathname.startsWith('/api/public/approval/')?'/api/public/approval/[redacted]':url.pathname,error.message);json(res,statusFor(error),{error:publicErrorMessage(error)})}
   });
 }
 
