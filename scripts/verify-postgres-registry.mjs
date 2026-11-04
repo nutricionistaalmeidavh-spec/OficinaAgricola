@@ -20,6 +20,8 @@ try{
    await registry.initialize({allowBootstrap:true});
    const first=await registry.bootstrapAdmin(adminCredentials);
    assert.equal(first.role,'ADMIN');
+   const marker=await pool.query('SELECT pending FROM tenant_registry_bootstrap WHERE id=1');
+   assert.equal(marker.rows[0].pending,0,'bootstrap token must be consumed permanently');
    await assert.rejects(registry.bootstrapAdmin(adminCredentials),/administrador|bootstrap|existe/i);
  });
  await test('sessões globais usam hash e respeitam logout e expiração',async()=>{
@@ -58,6 +60,11 @@ try{
    const records=await registry.listAudit(tech.id,company.id);
    assert.ok(records.some(x=>x.action==='MEMBERSHIP_CHANGED'));
    await assert.rejects(registry.createUnit(tech.id,{companyId:1,code:'FRAUDE',name:'Outro Tenant'}),/Permissão/i);
+ });
+ await test('registry não pode iniciar sobre um banco operacional por engano',async()=>{
+   await pool.query('CREATE TABLE async_tenant_identity(id INTEGER PRIMARY KEY)');
+   await assert.rejects(registry.initialize({allowBootstrap:true}),/banco operacional/i);
+   await pool.query('DROP TABLE async_tenant_identity');
  });
  await test('conflitos de código são atômicos e não criam filiais duplicadas',async()=>{
    const session=await registry.login({username:'adminprimario',password:adminCredentials.password});
