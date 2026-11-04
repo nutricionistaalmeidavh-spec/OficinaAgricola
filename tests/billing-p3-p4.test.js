@@ -11,14 +11,15 @@ async function setup(extra={}){
  migrate(db);migrateAssistencia(db);
  const port=createCommonDataAdapter({engine:'sqlite',db});
  const core=createAsyncWorkshopServices(port);
- const customer=await core.createCustomer({name:'Oficina P3'});
+ const customer=await core.createCustomer({name:'Oficina P3',email:'cliente@example.test'});
  const machine=await core.createMachine({customerId:customer.id,type:'CARRO'});
  const created=await core.createWorkOrder({customerId:customer.id,machineId:machine.id,problemReported:'Motor'});
  await core.transitionWorkOrder({workOrderId:created.id,toStatus:'DIAGNOSTICO',expectedVersion:created.version});
  await core.saveQuote({workOrderId:created.id,items:[{kind:'MAO_DE_OBRA',description:'Reparo',quantity:1,unitPriceCents:10001}]});
  await core.approveQuote({workOrderId:created.id});
  return {db,core,order:created,billing:createBillingService(port,{
-  receivePayment:core.receivePayment,getPaymentSummary:core.getPaymentSummary,...extra
+  receivePayment:core.receivePayment,getPaymentSummary:core.getPaymentSummary,
+  reversePayment:core.reverseReceipt,...extra
  })};
 }
 test('P3 divide centavos sem perda, calendário mensal respeita último dia',()=>{
@@ -197,4 +198,66 @@ test('porta PostgreSQL nativa pode usar transação sem batch; D1 exige batch at
  assert.throws(()=>createBillingService({...fake,engine:'d1'},{
   receivePayment:async()=>({id:1}),getPaymentSummary:async()=>({pendingCents:100})
  }),/Porta SQL canônica/);
+});
+
+test('P4 importa CSV/OFX em lote com idempotência, sem lançar receita',async()=>{
+ const {db,billing}=await setup();
+ try{
+  const csv='Data;Valor;Descrição;ID\n04/11/2026;100,01;PIX cliente;external-1\n05/11/2026;-1,99;Tarifa;external-2';
+  const first=await billing.importStatementFile({format:'CSV',bankAccount:'matriz',
+   content:csv});
+  assert.equal(first.imported,2);
+  const second=await billing.importStatementFile({format:'CSV',bankAccount:'matriz',
+   content:csv});
+  assert.equal(second.repeated,2);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM billing_bank_entries').get().n,2);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM receipts').get().n,0);
+  const ofx='<OFX><STMTTRN><DTPOSTED>20261104<TRNAMT>7.50<FITID>ofx-1<MEMO>PIX</STMTTRN></OFX>';
+  assert.equal((await billing.importStatementFile({format:'OFX',bankAccount:'matriz',
+   content:ofx})).imported,1);
+ }finally{db.close();}
+});
+
+test('P4 envia lembrete só uma vez via adaptador opt-in e registra entrega',async()=>{
+ const delivered=[];
+ const {db,billing,order}=await setup({reminderSender:async payload=>{delivered.push(payload);}});
+ try{
+  await billing.createPlan({workOrderId:order.id,amountCents:10001,count:1,
+   firstDueDate:'2026-11-05',method:'MANUAL',requestId:'reminders-run-1'});
+  assert.equal((await billing.dispatchReminders({asOf:'2026-11-04',daysAhead:3})).sent,1);
+  assert.equal((await billing.dispatchReminders({asOf:'2026-11-04',daysAhead:3})).sent,0);
+  assert.equal(delivered.length,1);
+  assert.equal(delivered[0].to,'cliente@example.test');
+  assert.equal(db.prepare("SELECT status FROM billing_reminder_delivery").get().status,'SENT');
+ }finally{db.close();}
+});
+
+test('P4 confirma estorno externo pelo provedor antes de estornar o ledger uma única vez',async()=>{
+ let refunded=false,requests=0;
+ const provider={
+  create:async()=>({reference:'charge-12',paymentUrl:'https://payments.example.test/1'}),
+  status:async()=>({reference:'charge-12',status:'PAID',amountCents:10001}),
+  refund:async()=>{requests++;return {reference:'refund-12'};},
+  refundStatus:async()=>({reference:'refund-12',chargeReference:'charge-12',
+   status:refunded?'REFUNDED':'PENDING',amountCents:10001})
+ };
+ const {db,core,billing,order}=await setup({providers:{PAYMENT_LINK:provider}});
+ try{
+  const plan=await billing.createPlan({workOrderId:order.id,amountCents:10001,count:1,
+   firstDueDate:'2026-11-05',method:'PAYMENT_LINK',requestId:'ref-plan-1'});
+  await billing.activateInstallment(plan.installments[0].id);
+  const paid=await billing.syncInstallment(plan.installments[0].id);
+  const refund=await billing.requestExternalRefund(paid.id,{requestId:'refund-request-1'});
+  assert.equal(refund.status,'PENDING');
+  assert.equal((await billing.requestExternalRefund(paid.id,{requestId:'refund-request-1'})).id,refund.id);
+  assert.equal(requests,1);
+  assert.equal((await billing.syncExternalRefund(refund.id)).status,'PENDING');
+  assert.equal((await core.getPaymentSummary(order.id)).receivedCents,10001);
+  refunded=true;
+  assert.equal((await billing.syncExternalRefund(refund.id)).status,'APPLIED');
+  assert.equal((await billing.syncExternalRefund(refund.id)).status,'APPLIED');
+  assert.equal((await core.getPaymentSummary(order.id)).receivedCents,0);
+  assert.equal((await billing.getInstallment(paid.id)).status,'FAILED');
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM payment_events WHERE event_type='REFUNDED'").get().n,1);
+ }finally{db.close();}
 });
