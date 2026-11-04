@@ -41,8 +41,8 @@ export function getWorkOrder(db,id){
 }
 export function listWorkOrders(db,{status,scope,search='',limit=200,offset=0}={}){
   const clauses=[]; const params=[];
-  if(scope==='closed')clauses.push("wo.status IN ('ENTREGUE','CANCELADA','REPROVADA')");
-  if(scope==='active')clauses.push("wo.status NOT IN ('ENTREGUE','CANCELADA','REPROVADA')");
+  if(scope==='closed')clauses.push("wo.status IN ('ENTREGUE','CANCELADA','REPROVADA','TRANSFERIDA')");
+  if(scope==='active')clauses.push("wo.status NOT IN ('ENTREGUE','CANCELADA','REPROVADA','TRANSFERIDA')");
   if(status){clauses.push('wo.status=?');params.push(status)}
   if(search){const q=`%${text(search)}%`;clauses.push('(CAST(wo.os_number AS TEXT) LIKE ? OR c.name LIKE ? OR m.model LIKE ? OR wo.problem_reported LIKE ?)');params.push(q,q,q,q)}
   params.push(Math.min(Math.max(Number(limit)||200,1),1000));
@@ -58,8 +58,8 @@ export function listWorkOrdersPage(db,{status='',scope='',search='',cursor=null,
   const next=cursor==null||cursor===''?null:Number(cursor);
   if(next!==null&&(!Number.isSafeInteger(next)||next<=0))throw new Error('Cursor inválido');
   const q=String(search||'').trim(),where=[],args=[];
-  if(scope==='closed')where.push("wo.status IN ('ENTREGUE','CANCELADA','REPROVADA')");
-  if(scope==='active')where.push("wo.status NOT IN ('ENTREGUE','CANCELADA','REPROVADA')");
+  if(scope==='closed')where.push("wo.status IN ('ENTREGUE','CANCELADA','REPROVADA','TRANSFERIDA')");
+  if(scope==='active')where.push("wo.status NOT IN ('ENTREGUE','CANCELADA','REPROVADA','TRANSFERIDA')");
   if(status){where.push('wo.status=?');args.push(status)}
   if(q){where.push('(CAST(wo.os_number AS TEXT) LIKE ? OR c.name LIKE ? OR m.model LIKE ? OR wo.problem_reported LIKE ?)');const like='%'+q+'%';args.push(like,like,like,like)}
   const base=' FROM work_orders wo JOIN customers c ON c.id=wo.customer_id JOIN machines m ON m.id=wo.machine_id LEFT JOIN technicians t ON t.id=wo.technician_id';
@@ -75,6 +75,7 @@ export function listWorkOrdersPage(db,{status='',scope='',search='',cursor=null,
 
 export function updateWorkOrder(db,id,input,{changedBy=null}={}){
   const old=getWorkOrder(db,id);
+  if(old.status==='TRANSFERIDA')throw new Error('OS transferida para outra unidade: edição bloqueada na origem');
   if(input.expectedVersion!==undefined&&Number(input.expectedVersion)!==Number(old.version))throw new Error('Conflito de versão: OS foi atualizada por outro usuário');
   const customerId=input.customerId===undefined?old.customer_id:Number(input.customerId);
   const machineId=input.machineId===undefined?old.machine_id:Number(input.machineId);
