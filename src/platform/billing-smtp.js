@@ -36,6 +36,7 @@ function replyReader(socket){
  socket.on('error',error=>{failure=error;if(waiting){const done=waiting;waiting=null;done({error});}});
  socket.on('close',()=>{failure??=Error('SMTP conexão encerrada');if(waiting){const done=waiting;waiting=null;done({error:failure});}});
  return async(expected,command)=>{
+  if(failure&&!queued.length)throw failure;
   if(command!=null)socket.write(command+'\r\n');
   const result=queued.length?queued.shift():await new Promise(resolve=>{waiting=resolve;});
   if(result.error)throw result.error;
