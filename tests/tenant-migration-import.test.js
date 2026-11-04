@@ -7,6 +7,7 @@ import {migrateAsyncTenantStore,assertAsyncTenantIdentity} from '../src/platform
 import {createCommonDataAdapter} from '../src/platform/common-data-adapter.js';
 import {createAsyncWorkshopServices} from '../src/platform/async-workshop-services.js';
 import {importCanonicalSqliteTenant} from '../src/platform/tenant-migration-import.js';
+import {markLegacyRegistryLink} from '../src/platform/tenant-registry.js';
 
 function testD1(db){
  const binding={
@@ -25,7 +26,7 @@ function testD1(db){
 test('opt-in SQLite-to-D1 import migrates every table, verifies hashes, and claims tenant only after success',async()=>{
  const source=openDatabase(':memory:'),target=openDatabase(':memory:');
  try{
-  migrate(source);migrateAssistencia(source);
+  migrate(source);migrateAssistencia(source);markLegacyRegistryLink(source);
   const ws=createAsyncWorkshopServices(createCommonDataAdapter({engine:'sqlite',db:source}));
   const customer=await ws.createCustomer({name:'Cliente antigo'});
   const machine=await ws.createMachine({customerId:customer.id,type:'AUTOMOVEL',
