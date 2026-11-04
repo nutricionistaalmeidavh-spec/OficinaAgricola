@@ -253,7 +253,8 @@ async function billingPlanModal(workOrderId,pendingCents){
    displayBillingPlan(plan,workOrderId);
  });
 }
-function displayBillingPlan(plan,workOrderId){
+async function displayBillingPlan(plan,workOrderId){
+  const caps=await api('/api/billing/capabilities');
  const methods={BOLETO:'Boleto',PAYMENT_LINK:'Link',MANUAL:'Manual'};
  showModal('Parcelamento — OS #'+workOrderId,`<div class="form-stack">
   <p><strong>${money(plan.amount_cents)}</strong> · ${plan.installment_count} parcela(s) · ${esc(methods[plan.method]||plan.method)}</p>
