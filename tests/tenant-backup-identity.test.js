@@ -11,11 +11,15 @@ import {runMultiTenantBackupCycle} from '../src/platform/tenant-backup.js';
 
 test('multiempresa backup stamps source company/unit and never reuses an unlabeled legacy archive',t=>{
  const root=mkdtempSync(join(tmpdir(),'oficina-stamped-backup-'));
- t.after(()=>rmSync(root,{recursive:true,force:true}));
  const legacyPath=join(root,'legacy.sqlite'),registryPath=join(root,'registry.sqlite');
  const tenantsRoot=join(root,'tenants'),backupRoot=join(root,'backups');
  const legacy=openDatabase(legacyPath),registry=openDatabase(registryPath);
- t.after(()=>{try{legacy.close();}catch{}try{registry.close();}catch{}});
+ // Always close SQLite handles BEFORE removing files on Windows.
+ t.after(()=>{
+  try{legacy.close();}catch{}
+  try{registry.close();}catch{}
+  rmSync(root,{recursive:true,force:true,maxRetries:8,retryDelay:200});
+ });
  migrate(legacy);migrateAssistencia(legacy);migrateTenantRegistry(registry,legacy);
  registry.prepare('INSERT INTO tenant_units(company_id,code,name,created_at) VALUES(1,?,?,?)')
   .run('FILIAL','Filial','2026-11-04T13:00:00.000Z');
