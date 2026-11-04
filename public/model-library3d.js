@@ -54,7 +54,7 @@
     const target=car._top;
     if(!target)return;
     const variants=Object.keys(target.variants||{});
-    const first=variants.includes('restored')?'restored':'original';
+    const first=variants.includes('repaired')?'repaired':variants.includes('restored')?'restored':'original';
     const blocked=target.status==='blocked';
     const source=safeLink(target.credit?.sourceUrl);
     const credits=target.credit?
@@ -62,6 +62,7 @@
       ' · <strong>Licença:</strong> '+escapeHtml(target.credit.license||'Não informada')+'</p>':'';
     const notes=[...(target.notes||[])];
     if(target.variants?.restored)notes.push('Versão restaurada experimental; não corrige necessariamente rodas ou outras malhas ausentes');
+    if(target.variants?.repaired)notes.push('Rodas reconstruídas proceduralmente (experimental): não são peças originais do fabricante. O modelo permanece em curadoria visual.');
     notes.push('Modelo ainda não homologado para identificação de geração e inspeção de peças');
     const warning=notes.map(note=>'<li>'+escapeHtml(note)+'</li>').join('');
     const stage=blocked?'<div class="ml-not-available">'+escapeHtml(target.blockReason||'Modelo não identificado no acervo')+'</div>':
@@ -73,11 +74,11 @@
         '<div class="ml-viewer-actions">',
         '<label class="ml-variant-label">Versão<select id="ml-variant">',
         variants.map(v=>'<option value="'+v+'"'+(v===first?' selected':'')+'>'+(
-          v==='restored'?'Materiais restaurados (experimental)':'Original')+'</option>').join(''),
+          v==='repaired'?'Rodas reconstruídas (experimental)':v==='restored'?'Materiais restaurados (experimental)':'Original')+'</option>').join(''),
         '</select></label>',
         '<button type="button" class="btn" id="ml-view-start">Abrir visualização 3D</button>',
         (isAdmin?'<button type="button" class="btn" id="ml-install">Baixar modelo</button><label class="btn ml-import-btn">Importar GLB local<input type="file" id="ml-import-file" accept=".glb,model/gltf-binary"></label>':''),
-        (variants.includes('restored')?'<label class="ml-color-label">Cor (prévia)<input type="color" id="ml-paint" value="#467D8C" aria-label="Alterar cor da carroceria apenas na visualização"></label>':''),
+        (variants.includes('restored')||variants.includes('repaired')?'<label class="ml-color-label">Cor (prévia)<input type="color" id="ml-paint" value="#467D8C" aria-label="Alterar cor da carroceria apenas na visualização"></label>':''),
         '</div><div id="ml-viewer-message" role="status" aria-live="polite" class="ml-viewer-message"></div>'
       ].join(''))
       +'<div class="ml-viewer-notes"><h4>Curadoria e licenças</h4><ul>'+warning+'</ul>'
