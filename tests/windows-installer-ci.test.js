@@ -11,8 +11,11 @@ test('Windows clean installer smoke is gated on PR with no auto publish',()=>{
  assert.match(flow,/scripts\/smoke-installer\.ps1/);
  assert.doesNotMatch(flow,/create-release|release-upload|publish always/);
  const smoke=readFileSync('scripts/smoke-installer.ps1','utf8');
- assert.match(smoke,/api\/setup\/status/);
- assert.match(smoke,/api\/setup\/initialize/);
+ const postgres=readFileSync('scripts/smoke-postgres-portable.ps1','utf8');
+ assert.match(flow,/scripts\/smoke-postgres-portable\.ps1/);
+ assert.match(postgres,/api\/setup\/status/);
+ assert.match(postgres,/api\/setup\/initialize/);
+ assert.match(postgres,/engine -eq 'postgres'/);
  assert.match(smoke,/Get-FileHash/);
 });
 
@@ -35,7 +38,8 @@ test('Windows fiscal bundle é obrigatório no NSIS e validado em instalação l
  assert.match(smoke,/--probe/);
  assert.match(smoke,/ACBrNFe64\.dll/);
  assert.match(smoke,/ACBrNFSe64\.dll/);
- assert.match(smoke,/config\\ACBrLibNFe\.ini/);
+ const fiscal=readFileSync('src/platform/fiscal-bundle.js','utf8');
+ assert.match(fiscal,/ACBrLibNFe\.ini/);
  assert.match(electron,/configureBundledFiscal/);
  assert.match(electron,/app\.isPackaged/);
  assert.match(nativeBuild,/svn.*export/i);
@@ -47,12 +51,15 @@ test('Windows fiscal bundle é obrigatório no NSIS e validado em instalação l
 test('Smoke NSIS executa bloco fiscal íntegro antes de iniciar app (sem trecho duplicado)',()=>{
  const smoke=readFileSync('scripts/smoke-installer.ps1','utf8');
  const count=fragment=>smoke.split(fragment).length-1;
- assert.equal(count("$hostUrl = 'http://127.0.0.1:3344'"),1);
- assert.equal(count('$appProcess = $null'),1);
+ assert.equal(count("$hostUrl = 'http://127.0.0.1:3344'"),0);
+ assert.equal(count('$appProcess = $null'),0);
  assert.equal(count('Pacote ACBr adulterado'),1);
  const iter=smoke.indexOf('foreach ($file in $manifest.files.PSObject.Properties) {');
  const worker=smoke.indexOf("$worker = Join-Path $fiscalDir 'acbrlib-worker.exe'");
- const host=smoke.indexOf("$hostUrl = 'http://127.0.0.1:3344'");
- assert.ok(iter>=0 && worker>iter && host>worker);
- assert.ok(smoke.indexOf('PASS: worker standalone')<host);
+ const finish=smoke.indexOf('PASS: NSIS instalado');
+ assert.ok(iter>=0 && worker>iter && finish>worker);
+ assert.ok(smoke.indexOf('PASS: worker standalone')<finish);
+ const pg=readFileSync('scripts/smoke-postgres-portable.ps1','utf8');
+ assert.match(pg,/Start-Officina/);
+ assert.match(pg,/Get-FileHash \$secret/);
 });
