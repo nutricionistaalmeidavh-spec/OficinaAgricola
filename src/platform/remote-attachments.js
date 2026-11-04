@@ -21,10 +21,14 @@ function decodeAttachment(input){
   if(!ext)fail('Tipo de arquivo não permitido');
   const base64=String(input?.base64||'');
   // Reject silent Buffer.from(base64) truncation on invalid text.
-  if(!base64||base64.length>Math.ceil(5*1024*1024/3)*4+8||
-     !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(base64))
-    fail('Anexo vazio, inválido ou excede limite');
+  // Validation must be O(n): repeated nested regex groups overflow the JS
+  // stack on multi-megabyte uploads. Check encoded size before parsing.
+  const maxEncoded=Math.ceil(5*1024*1024/3)*4;
+  if(!base64||base64.length>maxEncoded)fail('Arquivo excede o limite permitido');
+  if(base64.length%4!==0||!/^[A-Za-z0-9+/]*={0,2}$/.test(base64))
+    fail('Anexo base64 inválido');
   const raw=Buffer.from(base64,'base64');
+  if(raw.toString('base64')!==base64)fail('Anexo base64 inválido');
   if(!raw.length)fail('Arquivo vazio');
   if(raw.length>5*1024*1024)fail('Arquivo excede o limite permitido');
   return {raw,ext};
