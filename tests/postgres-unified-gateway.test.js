@@ -95,7 +95,7 @@ test('native gateway maps browser /api routes to PostgreSQL tenant services with
 test('backend errors, missing tenant, unapproved role, missing route fail closed',async()=>{
  const gateway=createPostgresUnifiedGateway({registry,serviceToken,
    tenantHandlerForUnit:async()=>async()=>Response.json({ok:true})});
- assert.equal((await gateway(request('/api/dashboard'))).status,409);
+ assert.equal((await gateway(request('/api/dashboard',{headers:{authorization:'Bearer '+token}}))).status,409);
  assert.equal((await gateway(request('/api/dashboard',{headers:{authorization:'Bearer '+token,'x-oficina-unit':'999'}}))).status,403);
  assert.equal((await gateway(request('/api/customers',{method:'POST',headers:{authorization:'Bearer '+token,'x-oficina-unit':'3'},body:{name:'Forbidden'}}))).status,403);
  assert.equal((await gateway(request('/api/unmapped',{headers:{authorization:'Bearer '+token,'x-oficina-unit':'2'}}))).status,501);
