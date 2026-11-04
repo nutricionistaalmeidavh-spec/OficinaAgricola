@@ -32,7 +32,10 @@ function ensureIntegrity(db){
 function selectedTables(db){
  const names=new Set(db.prepare(`SELECT name FROM sqlite_master
    WHERE type='table' AND name NOT LIKE 'sqlite_%'`).all().map(r=>r.name));
- const missing=[...names].filter(name=>!canonicalSet.has(name));
+ // Registry linkage is control-plane metadata, not operational customer data.
+ // The destination claims its tenant identity separately after hash verification.
+ const skippedMetadata=new Set(['tenant_registry_link']);
+ const missing=[...names].filter(name=>!canonicalSet.has(name)&&!skippedMetadata.has(name));
  if(missing.length)
    throw Error('Tabelas não suportadas pelo esquema comum: '+missing.join(', '));
  return canonicalNames.filter(name=>names.has(name));
