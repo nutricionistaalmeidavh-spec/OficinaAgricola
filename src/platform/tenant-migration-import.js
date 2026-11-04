@@ -61,7 +61,7 @@ async function requirePristineTarget(port,manifest){
  const identity=await port.first('SELECT * FROM async_tenant_identity WHERE id=1');
  if(identity)fail('Banco destino já inicializado para uma empresa/unidade; não sobrescrever');
  const expectedTables=asyncTenantSchema('d1')
-   .map(sql=>/^CREATE TABLE IF NOT EXISTS\\s+([A-Za-z_][A-Za-z0-9_]*)/.exec(sql)?.[1])
+   .map(sql=>/^CREATE TABLE IF NOT EXISTS\s+([A-Za-z_][A-Za-z0-9_]*)/.exec(sql)?.[1])
    .filter(table=>table&&!['async_schema_migrations','async_tenant_identity'].includes(table));
  for(const table of expectedTables){
    const row=await port.first('SELECT COUNT(*) n FROM '+quote(table));
