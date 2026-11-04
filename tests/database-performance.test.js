@@ -65,6 +65,7 @@ test('P0: vendas, despesas, documentos e agenda têm páginas e limite máximo',
       listFiscalDocumentsPage(db,{limit:7}),listSchedulePage(db,{limit:7})
     ]){assert.equal(page.total,105);assert.equal(page.items.length,7);assert.ok(page.nextCursor);}
     assert.equal(listSalesPage(db,{limit:100000}).items.length,100);
+    assert.equal(typeof listFiscalDocumentsPage(db,{limit:1}).items[0].snapshot_json,'string');
   }finally{db.close();}
 });
 

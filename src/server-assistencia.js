@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import {publicErrorMessage} from './platform/public-errors.js';
 import {createServer as createHttpsServer} from 'node:https';
 import { openDatabase, migrate, transaction } from './db.js';
 import { validateSession } from './auth.js';
@@ -197,7 +198,7 @@ export function createAssistenciaServer({
         void dispatchOutbox(db,eventRuntime,100,{respectBackoff:true}).catch(e=>console.error('[outbox]',e.message));
     } catch (error) {
       console.error('[assistencia]', req.method, url.pathname, error.message);
-      json(res, errorStatus(error), { error: error.message || 'Erro interno' });
+      json(res, errorStatus(error), { error: publicErrorMessage(error) });
     }
   };
   return tls?createHttpsServer(tls,handler):createServer(handler);

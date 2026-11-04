@@ -24,19 +24,19 @@ async function machineHistoryModal(id){
  <h3>Planos de manutenção</h3><div class="list">${plansHtml}</div>
  <h3>Diagnósticos OBD-II</h3><div class="list">${scansHtml}</div>
  <h3>Peças com aplicação cadastrada</h3><p class="muted">Aplicação informada pela oficina; confira catálogo do fabricante antes da montagem.</p><div class="list">${fitmentHtml}</div>`);
- if(canRecord)$('#newReview').onclick=()=>maintenanceModal(id,'REVISAO');
- if(canRecord)$('#newWarranty').onclick=()=>maintenanceModal(id,'GARANTIA');
+ if(canRecord)$('#newReview').onclick=()=>maintenanceModal(id,'REVISAO',h);
+ if(canRecord)$('#newWarranty').onclick=()=>maintenanceModal(id,'GARANTIA',h);
  if(canRecord)$('#newMaintenancePlan').onclick=()=>maintenancePlanModal(id,m);
  if(canDiag)$('#newObdScan').onclick=()=>diagnosticCaptureModal(id);
- $$('[data-complete-plan]').forEach(b=>b.onclick=()=>completeMaintenancePlanModal(Number(b.dataset.completePlan),id,m));
+ $$('[data-complete-plan]').forEach(b=>b.onclick=()=>completeMaintenancePlanModal(Number(b.dataset.completePlan),id,m,h));
  $$('[data-diagnostic-id]').forEach(b=>b.onclick=()=>diagnosticDetailModal(id,scans.find(s=>String(s.id)===b.dataset.diagnosticId)));
  $$('[data-download-diagnostic]').forEach(b=>b.onclick=async()=>{try{await diagnosticDownload(id,Number(b.dataset.downloadDiagnostic))}catch(e){toast(e.message,true)}});
 }
-function maintenanceModal(machineId,kind){const requestId=newCommandId();
+function maintenanceModal(machineId,kind,orders=[]){const requestId=newCommandId();
  const review=kind==='REVISAO';
  showModal(review?'Registrar revisão':'Registrar garantia',`<form class="form-stack">
    ${review?'<label>Data da revisão<input name="performedAt" type="date" required></label><label>Próxima revisão<input name="nextDueDate" type="date"></label><label>Próxima revisão (km)<input name="nextDueKm" type="number" min="0"></label>':'<label>Garantia válida até<input name="warrantyUntil" type="date" required></label>'}
-   <label>OS vinculada (opcional)<input name="workOrderId" type="number" min="1"></label>
+   ${workOrderSelector(orders)}
    <label>Detalhes<textarea name="notes" maxlength="2000"></textarea></label>
    <button type="submit" class="btn primary">Registrar</button></form>`,async fd=>{
      const o=formObj(fd);
@@ -72,13 +72,13 @@ function maintenancePlanModal(machineId,m){
     toast('Plano registrado');await machineHistoryModal(machineId);
   });
 }
-function completeMaintenancePlanModal(planId,machineId,m){
+function completeMaintenancePlanModal(planId,machineId,m,orders=[]){
   const requestId=newCommandId();
   showModal('Registrar manutenção executada','<form class="form-stack">'+
     '<label>Data<input name="performedAt" type="date" required value="'+new Date().toISOString().slice(0,10)+'"></label>'+
     '<div class="field-row"><label>Km atual<input type="number" name="odometerKm" min="0" value="'+esc(m.odometer_km??'')+'"></label>'+
     '<label>Horímetro<input type="number" name="hourMeter" min="0" value="'+esc(m.hour_meter??0)+'"></label></div>'+
-    '<label>OS correspondente (opcional)<input type="number" name="workOrderId" min="1"></label>'+
+    workOrderSelector(orders,{label:'OS correspondente (opcional)'})+
     '<button type="submit" class="btn primary">Concluir e recalcular próxima revisão</button></form>',async fd=>{
       const o=formObj(fd);
       for(const k of ['odometerKm','hourMeter','workOrderId']){
@@ -88,12 +88,13 @@ function completeMaintenancePlanModal(planId,machineId,m){
       toast('Revisão registrada; próxima manutenção recalculada');await machineHistoryModal(machineId);
     });
 }
-function obdScanModal(machineId){
+async function obdScanModal(machineId){
+  const orders=await api('/api/machines/'+machineId+'/history');
   showModal('Diagnóstico OBD-II (somente leitura)', '<div class="form-stack">'+
     '<p>Conecte o adaptador ELM327 USB/serial ao veículo e ligue a ignição. Leitura do serviço 03 (DTCs armazenados); não apaga falhas nem altera a ECU.</p>'+
     '<label>Velocidade serial<select id="obdBaud"><option value="38400">38400 (padrão ELM327)</option><option value="9600">9600</option><option value="115200">115200</option></select></label>'+
-    '<label>OS correspondente (opcional)<input id="obdWorkOrder" type="number" min="1"></label>'+
-    '<p class="muted">Disponível em navegador Chromium compatível em localhost/HTTPS ou Electron com permissão de porta. Exige hardware físico; não usa serviço pago.</p>'+
+    workOrderSelector(orders,{id:'obdWorkOrder',label:'OS correspondente (opcional)'})+
+    '<details><summary>Requisitos técnicos da conexão</summary><p class="muted">Disponível em navegador Chromium compatível em localhost/HTTPS ou Electron com permissão de porta. Exige hardware físico; não usa serviço pago.</p></details>'+
     '<div id="obdProgress" role="status"></div><button type="button" id="obdRead" class="btn primary">Conectar adaptador e ler códigos</button></div>');
   $('#obdRead').onclick=async()=>{
     const button=$('#obdRead'),progress=$('#obdProgress');button.disabled=true;
@@ -107,6 +108,6 @@ function obdScanModal(machineId){
       const codes=JSON.parse(saved.codes_json);
       toast(codes.length?'Códigos registrados: '+codes.join(', '):'Leitura registrada: sem DTCs');
       await machineHistoryModal(machineId);
-    }catch(error){progress.textContent=error.message;button.disabled=false;toast(error.message,true)}
+    }catch(error){progress.textContent=friendlyUiMessage(error.message);button.disabled=false;toast(error.message,true)}
   };
 }
