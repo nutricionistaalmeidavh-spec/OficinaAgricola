@@ -56,6 +56,13 @@ test('S3-compatible MinIO backup mirrors signed objects and verifies each remote
   assert.ok(headersSeen.every(x=>x.authorization?.startsWith('AWS4-HMAC-SHA256 ')&&x.date&&/^[a-f0-9]{64}$/.test(x.hash)));
   assert.ok(headersSeen.every(x=>!x.path.includes('test-secret')));
   assert.ok(headersSeen.filter(x=>x.method==='PUT').every(x=>Number.isSafeInteger(Number(x.length))),'S3 PUT must send a fixed Content-Length');
+  const uploadedBefore=headersSeen.filter(x=>x.method==='PUT').length;
+  const mirroredAgain=await mirrorVerifiedTenantBackups({
+    records:[{backupDir:archive.backupDir,created:false,verified:true}],backupRoot,client
+  });
+  assert.equal(mirroredAgain.length,1);
+  assert.equal(headersSeen.filter(x=>x.method==='PUT').length,uploadedBefore,
+    'periodic backup checks should not re-upload identical objects');
 });
 test('S3 backups reject insecure public endpoints and missing credentials',()=>{
   const settings={bucket:'office',region:'us-east-1',accessKeyId:'x',secretAccessKey:'y'};
