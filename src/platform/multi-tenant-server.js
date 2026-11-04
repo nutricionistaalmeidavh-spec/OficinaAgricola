@@ -11,6 +11,7 @@ import { authTokenFrom, assertSameOrigin, prefersCookie, issueBrowserCookie, cle
 import { assertSecureNetwork } from './network.js';
 import { loginHttp, validateSession, logout, hashPassword } from '../auth.js';
 import { createApprovalLink, createMaintenanceCrmTasks } from '../services/market-parity.js';
+import { financeSummary } from '../services/finance.js';
 import { seedDefaultChecklists, recoverOrphanAttachments } from '../services/operations.js';
 import { createEventRuntime } from './event-runtime.js';
 import { dispatchOutbox } from './outbox.js';
@@ -167,6 +168,17 @@ export function createMultiTenantServer({
     if(path==='/api/tenancy/company-summary'&&method==='GET'){
       const companyId=positive(url.searchParams.get('companyId'));
       requireCompanyAdmin(registryDb,user.id,companyId);
+      const parseDate=(key,fallback)=>{
+        const value=url.searchParams.get(key);
+        if(value===null)return fallback;
+        const d=new Date(value);
+        if(!/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,3})?Z$/.test(value)||!Number.isFinite(d.getTime())||d.toISOString()!==new Date(value).toISOString())
+          throw httpError('Data '+key+' inválida: use ISO 8601 UTC',400);
+        return d.toISOString();
+      };
+      const from=parseDate('from','1970-01-01T00:00:00.000Z');
+      const to=parseDate('to','2999-12-31T23:59:59.999Z');
+      if(from>to)throw httpError('Período inválido: from após to',400);
       const allowedUnits=registryDb.prepare('SELECT id,code,name FROM tenant_units WHERE company_id=? AND active=1 ORDER BY id').all(companyId);
       const perUnit=allowedUnits.map(u=>{
         const {db}=unitRuntime(u.id);
@@ -174,15 +186,18 @@ export function createMultiTenantServer({
         const workOrderCount=db.prepare('SELECT COUNT(*) n FROM work_orders').get().n;
         const openOrders=db.prepare("SELECT COUNT(*) n FROM work_orders WHERE status NOT IN ('ENTREGUE','CANCELADA')").get().n;
         const partsCount=db.prepare('SELECT COUNT(*) n FROM parts WHERE active=1').get().n;
-        return {id:u.id,code:u.code,name:u.name,customers:customerCount,workOrders:workOrderCount,openOrders,parts:partsCount};
+        // Reuse canonical finance rules per physical unit: paid/returned events
+        // and paid expenses only, with no direct cross-company SQL joins.
+        const finance=financeSummary(db,{from,to});
+        return {id:u.id,code:u.code,name:u.name,customers:customerCount,workOrders:workOrderCount,openOrders,parts:partsCount,finance};
       });
-      const totals=perUnit.reduce((x,u)=>({
-        customers:x.customers+u.customers,
-        workOrders:x.workOrders+u.workOrders,
-        openOrders:x.openOrders+u.openOrders,
-        parts:x.parts+u.parts
-      }),{customers:0,workOrders:0,openOrders:0,parts:0});
-      return json(res,200,{companyId,units:perUnit,totals,scope:'operative-only-no-financial-consolidation'});
+      const money=['invoicedCents','receivedCents','pendingCents','expensesCents','resultCents'];
+      const totals=perUnit.reduce((x,u)=>{
+        x.customers+=u.customers;x.workOrders+=u.workOrders;x.openOrders+=u.openOrders;x.parts+=u.parts;
+        for(const key of money)x.finance[key]+=u.finance[key];
+        return x;
+      },{customers:0,workOrders:0,openOrders:0,parts:0,finance:Object.fromEntries(money.map(key=>[key,0]))});
+      return json(res,200,{companyId,period:{from,to},units:perUnit,totals,scope:'company-only-canonical-finance'});
     }
     const unit=selectUnit(req,user);
     if(path==='/api/users'&&method==='GET')return json(res,200,listUnitMembers(registryDb,user.id,unit.id));
