@@ -164,6 +164,12 @@ O comando valida SHA-256/manifestos, SQLite quick_check, chaves estrangeiras,
 identidade empresa/unidade do catálogo, completude do registro e coerência
 temporal dos snapshots (até 15 minutos por padrão), sem sobrescrever
 arquivos ativos. Um conjunto incompleto, duplicado ou defasado é recusado.
+O manifesto dos **novos** snapshots de filial recebe `tenant.companyId` e
+`tenant.unitId` a partir do registro confiável. A conferência recusa arquivos
+sem identificação (backups antigos) ou com outra empresa/unidade, mesmo que
+os IDs fornecidos no JSON pareçam corretos. Backups históricos continuam
+intactos e exigem procedimento manual específico; não são adotados ou
+reatribuídos silenciosamente.
 
 **Importante:** snapshots tomados em momentos próximos não são uma transação
 atômica entre múltiplos bancos. Para recuperação consistente, produza um
