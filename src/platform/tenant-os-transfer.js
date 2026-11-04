@@ -27,9 +27,13 @@ function ensureRegistry(db){
   request_id TEXT NOT NULL,
   status TEXT NOT NULL CHECK(status IN ('PENDING','COMPLETED')),
   created_at TEXT NOT NULL,completed_at TEXT,
+  source_version INTEGER,
   UNIQUE(source_unit_id,source_work_order_id),
   UNIQUE(source_unit_id,request_id)
  )`);
+ const columns=new Set(db.prepare("PRAGMA table_info('tenant_order_transfers')").all().map(c=>c.name));
+ if(!columns.has('source_version'))
+   db.exec('ALTER TABLE tenant_order_transfers ADD COLUMN source_version INTEGER');
 }
 function ensureDestination(db){
  db.exec(`CREATE TABLE IF NOT EXISTS tenant_received_work_orders(
@@ -44,20 +48,11 @@ function ensureDestination(db){
 function preflight(db,workOrderId){
  const row=db.prepare('SELECT * FROM work_orders WHERE id=?').get(id(workOrderId));
  if(!row)fail('Ordem de serviço não encontrada',404);
- if(!['ENTRADA','DIAGNOSTICO'].includes(row.status))
-   fail('Somente OS em ENTRADA ou DIAGNOSTICO podem ser transferidas sem quebrar histórico financeiro',409);
- const tables=[
-  ['quotes','work_order_id'],['work_order_parts','work_order_id'],
-  ['receipts','work_order_id'],['expenses','work_order_id'],
-  ['attachments','work_order_id'],['work_order_checklists','work_order_id'],
-  ['schedule_events','work_order_id'],['vehicle_maintenance_records','work_order_id']
- ];
- for(const [table,column] of tables){
-  if(db.prepare('SELECT 1 FROM '+table+' WHERE '+column+'=? LIMIT 1').get(row.id))
-   fail('A OS possui vínculos financeiros, de serviço ou anexos; transferência integral exige reconciliação específica',409);
- }
- if(db.prepare("SELECT 1 FROM fiscal_documents WHERE origin_type='OS' AND origin_id=? LIMIT 1").get(row.id))
-  fail('A OS possui documento fiscal e não pode ser transferida por cópia',409);
+ // Financial ledgers, stock movements, fiscal documents and attachments
+ // remain legally authoritative in the source company/unit. The receiving
+ // unit gets an operational continuation with a linked, auditable dossier.
+ if(['ENTREGUE','CANCELADA','TRANSFERIDA'].includes(row.status))
+   fail('OS encerrada não pode iniciar nova transferência',409);
  return row;
 }
 function checkBasis(legalBasis,recordReference){
@@ -145,10 +140,24 @@ function replay({registryDb,unitRuntime,actorUserId,transfer,created}){
    if(previous)targetId=previous.local_work_order_id;
    else targetId=copyOperationalRecord(sourceDb,targetDb,preflight(sourceDb,source.id),transfer);
  }
- if(source.status!=='CANCELADA'){
-   preflight(sourceDb,source.id);
-   transitionWorkOrder(sourceDb,source.id,'CANCELADA',{
-     reason:'Transferência interna para unidade '+transfer.target_unit_id+'; OS destino #'+targetId
+ if(source.status!=='TRANSFERIDA'&&source.status!=='CANCELADA'){
+   transaction(sourceDb,()=>{
+     const current=preflight(sourceDb,source.id);
+     if(transfer.source_version!=null&&Number(current.version)!==Number(transfer.source_version))
+       fail('OS alterada após início da transferência; reconciliação manual necessária',409);
+     const timestamp=nowIso();
+     const change=sourceDb.prepare(`UPDATE work_orders SET status='TRANSFERIDA',
+       version=version+1,updated_at=? WHERE id=? AND version=? AND status=?`)
+       .run(timestamp,current.id,current.version,current.status);
+     if(change.changes!==1)fail('OS alterada concorrentemente durante transferência',409);
+     // NEVER run the cancellation transition: that hides outstanding
+     // receivables and may reverse canonical financial semantics.
+     sourceDb.prepare(`INSERT INTO work_order_status_history(
+       work_order_id,from_status,to_status,reason,changed_by,changed_at
+     ) VALUES(? ,?,'TRANSFERIDA',?,NULL,?)`).run(
+       current.id,current.status,
+       'Continuidade na unidade '+transfer.target_unit_id+', OS #'+targetId+'. Histórico financeiro/fiscal preservado na origem.',timestamp
+     );
    });
  }
  finish(registryDb,transfer,targetId,actorUserId);
@@ -170,13 +179,13 @@ export function transferTenantWorkOrder({
      fail('OS já possui outra solicitação de transferência',409);
    return replay({registryDb,unitRuntime,actorUserId,transfer,created:false});
  }
- preflight(unitRuntime(source.id).db,osId);
+ const sourceOrder=preflight(unitRuntime(source.id).db,osId);
  transfer=transaction(registryDb,()=>{
    const inserted=registryDb.prepare(`INSERT INTO tenant_order_transfers(
      company_id,source_unit_id,target_unit_id,source_work_order_id,legal_basis,
-     record_reference,request_id,status,created_at
-   ) VALUES(?,?,?,?,?,?,?,'PENDING',?)`).run(
-     source.companyId,source.id,target.id,osId,legalBasis,recordReference.trim(),request,nowIso()
+     record_reference,request_id,status,created_at,source_version
+   ) VALUES(?,?,?,?,?,?,?,'PENDING',?,?)`).run(
+     source.companyId,source.id,target.id,osId,legalBasis,recordReference.trim(),request,nowIso(),sourceOrder.version
    );
    return registryDb.prepare('SELECT * FROM tenant_order_transfers WHERE id=?').get(Number(inserted.lastInsertRowid));
  });
@@ -188,4 +197,57 @@ export function retryTenantWorkOrderTransfer({registryDb,unitRuntime,actorUserId
  if(!transfer)fail('Transferência de OS não encontrada',404);
  authorize(registryDb,actorUserId,transfer.source_unit_id,transfer.target_unit_id);
  return replay({registryDb,unitRuntime,actorUserId,transfer,created:false});
+}
+
+
+/**
+ * Read-only dossier: the source unit remains the ONLY owner of existing
+ * receipts, cash, inventory movements, approved quotes and fiscal XML.
+ * Never duplicate a fiscal invoice or a payment to another unit's ledger.
+ * Require the actor to administer BOTH units for purpose-bound access.
+ */
+export function getTenantTransferDossier({registryDb,unitRuntime,actorUserId,transferId}){
+ ensureRegistry(registryDb);
+ const transfer=registryDb.prepare('SELECT * FROM tenant_order_transfers WHERE id=?')
+   .get(id(transferId));
+ if(!transfer)fail('Transferência não encontrada',404);
+ authorize(registryDb,actorUserId,transfer.source_unit_id,transfer.target_unit_id);
+ const db=unitRuntime(transfer.source_unit_id).db,osId=transfer.source_work_order_id;
+ const sourceOrder=db.prepare('SELECT * FROM work_orders WHERE id=?').get(osId);
+ if(!sourceOrder)fail('OS origem não encontrada',404);
+ const quote=db.prepare('SELECT * FROM quotes WHERE work_order_id=?').get(osId)||null;
+ const quoteItems=quote?db.prepare('SELECT * FROM quote_items WHERE quote_id=? ORDER BY id').all(quote.id):[];
+ const receipts=db.prepare('SELECT * FROM receipts WHERE work_order_id=? ORDER BY id').all(osId);
+ const paymentEvents=db.prepare(`SELECT p.* FROM payment_events p
+   JOIN receipts r ON p.source_type='OS_RECEIPT' AND p.source_id=r.id
+   WHERE r.work_order_id=? ORDER BY p.id`).all(osId);
+ const stockConsumptions=db.prepare(`SELECT wp.*,p.sku,p.description
+   FROM work_order_parts wp JOIN parts p ON p.id=wp.part_id
+   WHERE wp.work_order_id=? ORDER BY wp.id`).all(osId);
+ const stockMovements=db.prepare(`SELECT * FROM inventory_movements
+   WHERE work_order_id=? ORDER BY id`).all(osId);
+ const expenses=db.prepare('SELECT * FROM expenses WHERE work_order_id=? ORDER BY id').all(osId);
+ const fiscalDocuments=db.prepare(`SELECT id,kind,origin_type,origin_id,status,
+   environment,amount_cents,request_id,access_key,protocol,fiscal_number,
+   fiscal_series,created_at,authorized_at FROM fiscal_documents
+   WHERE origin_type='OS' AND origin_id=? ORDER BY id`).all(osId);
+ const attachments=db.prepare(`SELECT id,work_order_id,category,caption,
+   mime_type,original_name,size_bytes,created_at FROM attachments
+   WHERE work_order_id=? ORDER BY id`).all(osId);
+ const checklistRows=db.prepare('SELECT * FROM work_order_checklists WHERE work_order_id=? ORDER BY id').all(osId);
+ const checklists=checklistRows.map(row=>({...row,responses:db.prepare(
+   'SELECT * FROM checklist_responses WHERE checklist_id=? ORDER BY position').all(row.id)}));
+ const schedule=db.prepare('SELECT * FROM schedule_events WHERE work_order_id=? ORDER BY id').all(osId);
+ const maintenance=db.prepare('SELECT * FROM vehicle_maintenance_records WHERE work_order_id=? ORDER BY id').all(osId);
+ const statusHistory=db.prepare('SELECT * FROM work_order_status_history WHERE work_order_id=? ORDER BY id').all(osId);
+ const changeHistory=db.prepare('SELECT * FROM work_order_change_history WHERE work_order_id=? ORDER BY id').all(osId);
+ return {
+   transferId:transfer.id,status:transfer.status,companyId:transfer.company_id,
+   originUnitId:transfer.source_unit_id,targetUnitId:transfer.target_unit_id,
+   sourceWorkOrderId:osId,targetWorkOrderId:transfer.target_work_order_id,
+   legalBasis:transfer.legal_basis,recordReference:transfer.record_reference,
+   authoritativeLedgers:'ORIGIN',
+   sourceOrder,quote,quoteItems,receipts,paymentEvents,stockConsumptions,stockMovements,
+   expenses,fiscalDocuments,attachments,checklists,schedule,maintenance,statusHistory,changeHistory
+ };
 }
