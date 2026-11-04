@@ -22,6 +22,9 @@
     "db:health": "node scripts/db-health.mjs",
     "start:multi": "node src/start-multitenant.js",
     "dev:multi": "node --watch src/start-multitenant.js",
-    "start:postgres-core": "node src/start-postgres-core.js"
+    "start:postgres-core": "node src/start-postgres-core.js",
+    "db:postgres:audit": "node scripts/audit-postgres-readiness.mjs --summary",
+    "start:postgres-registry": "node src/start-postgres-registry.js",
+    "db:postgres:verify-registry": "node scripts/verify-postgres-registry.mjs"
   }
 }
