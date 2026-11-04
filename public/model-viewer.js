@@ -2,6 +2,27 @@
 // Importações dinâmicas somente quando o usuário abre um modelo instalado.
 let active=null;
 
+export function verifyRepairedWheels(scene){
+  const legacy=new Set();
+  const reused=new Set();
+  const procedural=new Set();
+  scene.traverse(node=>{
+    const name=String(node.name||'');
+    const old=/^ARTISYS_NEW_WHEEL_(FL|FR|RL|RR)$/.exec(name);
+    const current=/^ArtiSys_Wheel_0([1-4])_(Reused|Procedural)$/.exec(name);
+    if(!old&&!current)return;
+    let hasMesh=false;
+    node.traverse(child=>{if(child.isMesh)hasMesh=true});
+    if(!hasMesh)return;
+    if(old)legacy.add(old[1]);
+    else if(current[2]==='Reused')reused.add(current[1]);
+    else procedural.add(current[1]);
+  });
+  if(legacy.size===4||reused.size===4||procedural.size===4)return 4;
+  throw new Error('Modelo de rodas reconstruídas incompleto: requer 4 rodas com malha visível');
+}
+
+
 function paintable(id,mesh){
   const material=String(mesh.material?.name||'').toLowerCase();
   const chain=[];let node=mesh;
@@ -86,11 +107,7 @@ export async function mountViewer({id,variant='original',element,statusElement})
     gltf=await new Promise((resolve,reject)=>loader.parse(buffer,'',resolve,reject));
     if(disposed||!element.isConnected){cleanup();return null}
     if(variant==='repaired'){
-      const expected=new Set(['ARTISYS_NEW_WHEEL_FL','ARTISYS_NEW_WHEEL_FR','ARTISYS_NEW_WHEEL_RL','ARTISYS_NEW_WHEEL_RR']);
-      const found=new Set();
-      gltf.scene.traverse(node=>{if(expected.has(node.name)){let hasMesh=false;node.traverse(child=>{if(child.isMesh)hasMesh=true});if(hasMesh)found.add(node.name)}});
-      if(found.size!==4)throw new Error('Modelo de rodas reconstruídas incompleto: '+found.size+' de 4 rodas');
-      element.dataset.generatedWheels=String(found.size);
+      element.dataset.generatedWheels=String(verifyRepairedWheels(gltf.scene));
     }else{
       delete element.dataset.generatedWheels;
     }
