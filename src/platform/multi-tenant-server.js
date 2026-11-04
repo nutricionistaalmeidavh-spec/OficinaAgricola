@@ -178,7 +178,7 @@ export function createMultiTenantServer({
     }
     if(path==='/api/tenancy/share-customer'&&method==='POST'){
       const body=await readJson(req);
-      return json(res,200,shareCustomer({registryDb,unitRuntime,actorUserId:user.id,...body}));
+      return json(res,200,shareCustomer({...body,registryDb,unitRuntime,actorUserId:user.id}));
     }
     if(path==='/api/tenancy/shareable-parts'&&method==='GET'){
       const source=requireUnitMembership(registryDb,user.id,positive(url.searchParams.get('unitId')));
@@ -193,16 +193,16 @@ export function createMultiTenantServer({
     }
     if(path==='/api/tenancy/share-part'&&method==='POST'){
       const body=await readJson(req);
-      return json(res,200,sharePartCatalog({registryDb,unitRuntime,actorUserId:user.id,...body}));
+      return json(res,200,sharePartCatalog({...body,registryDb,unitRuntime,actorUserId:user.id}));
     }
     if(path==='/api/tenancy/stock-transfer'&&method==='POST'){
       const body=await readJson(req);
-      const result=transferTenantStock({registryDb,unitRuntime,actorUserId:user.id,...body});
+      const result=transferTenantStock({...body,registryDb,unitRuntime,actorUserId:user.id});
       return json(res,result.status==='PENDING'?202:200,result);
     }
     if(path==='/api/tenancy/stock-transfer/retry'&&method==='POST'){
       const body=await readJson(req);
-      const result=retryTenantStockTransfer({registryDb,unitRuntime,actorUserId:user.id,...body});
+      const result=retryTenantStockTransfer({...body,registryDb,unitRuntime,actorUserId:user.id});
       return json(res,result.status==='PENDING'?202:200,result);
     }
     if(path==='/api/tenancy/stock-transfers'&&method==='GET'){
