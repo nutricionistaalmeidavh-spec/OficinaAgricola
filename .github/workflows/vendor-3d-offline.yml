@@ -88,7 +88,7 @@ jobs:
           test -s public/vendor/three/addons/controls/OrbitControls.js
           test -s public/vendor/licenses/three-LICENSE.txt
           test -s public/vendor/licenses/meshoptimizer-LICENSE.md
-          node --test tests/model-library3d.test.js
+          node --test tests/model-library3d.test.js tests/model-library-p0.test.js
       - name: Commitar assets vendorizados somente na branch isolada
         shell: bash
         run: |
