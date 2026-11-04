@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { createPostgresPort } from '../src/platform/async-sql-ports.js';
 import { createAsyncWorkshopServices } from '../src/platform/async-workshop-services.js';
+import { createAsyncWorkshopHandler } from '../src/platform/async-workshop-handler.js';
 import { migrateAsyncTenantStore } from '../src/platform/async-tenant-migrations.js';
 import {openDatabase,migrate} from '../src/db.js';
 import {migrateAssistencia} from '../src/assistencia-schema.js';
