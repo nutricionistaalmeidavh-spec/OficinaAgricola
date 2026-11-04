@@ -75,7 +75,7 @@ export function createPostgresTenantRuntimeFactory({
           root:localStorageRoot,companyId:unit.companyId,unitId:unit.id
         }):null;
      const paymentOptions=typeof paymentOptionsForUnit==='function'
-       ?paymentOptionsForUnit(unit):{};
+       ?paymentOptionsForUnit(unit,port):{};
      const services=createAsyncWorkshopServices(port,{objectStore,paymentOptions});
      const nativeHandler=createAsyncWorkshopHandler({
        services,
