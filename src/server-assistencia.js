@@ -164,6 +164,7 @@ export function createAssistenciaServer({
   eventRuntime = null,
   tls = null,
   fiscalProviderOverride = undefined,
+  objectStore = null,
 } = {}) {
   migrate(db);
   migrateAssistencia(db);
@@ -177,7 +178,7 @@ export function createAssistenciaServer({
       throw new Error('Configure apenas um motor fiscal local: ACBrLib ou sidecar');
     fiscalProvider=acbrFiscalProvider||localFiscalProvider;
   }
-  const baseServer = createAppServer({ db, storageDir, eventRuntime, fiscalProvider });
+  const baseServer = createAppServer({ db, storageDir, eventRuntime, fiscalProvider, objectStore });
 
   const handler=async (req,res) => {
     const url = new URL(req.url || '/', 'http://localhost');
