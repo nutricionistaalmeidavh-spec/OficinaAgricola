@@ -25,6 +25,21 @@ test('legacy users and data are adopted without altering the original database',
   }finally{registry.close();legacy.close();}
 });
 
+test('refuses unsafe conversion of legacy OS assigned to a second shop unit', () => {
+  const original=openDatabase(':memory:'),registry=openDatabase(':memory:');
+  try{
+    migrate(original);
+    original.prepare("INSERT INTO shop_units(code,name,created_at) VALUES('FILIAL','Filial','2026-11-03T00:00:00Z')").run();
+    const id=createUser(original,{username:'manager',password:'StrongP@ss2026',role:'ADMIN',name:'Gerente'});
+    const customer=createCustomer(original,{name:'Cliente filial'});
+    const vehicle=original.prepare("INSERT INTO machines(customer_id,type,created_at,updated_at) VALUES(?,'AUTOMOVEL','2026-11-03','2026-11-03')").run(customer.id).lastInsertRowid;
+    original.prepare("INSERT INTO work_orders(os_number,customer_id,machine_id,entered_at,problem_reported,snapshot_customer,snapshot_machine,unit_id,created_at,updated_at) VALUES(1,?,?,'2026-11-03','Falha','{}','{}',2,'2026-11-03','2026-11-03')").run(customer.id,vehicle);
+    assert.throws(()=>createMultiTenantServer({legacyDb:original,registryDb:registry}),/Migração segura das OS/);
+    assert.equal(original.prepare('SELECT COUNT(*) n FROM work_orders').get().n,1,'legacy OS must not be modified');
+    assert.equal(original.prepare('SELECT id FROM users WHERE id=?').get(id).id,id);
+  }finally{original.close();registry.close();}
+});
+
 test('HTTP isolation: company and unit records, member roles and revoked access', async t => {
   const root=mkdtempSync(join(tmpdir(),'oficina-tenants-'));
   const legacy=openDatabase(join(root,'original.sqlite'));
