@@ -122,6 +122,21 @@ test('HTTP isolation: company and unit records, member roles and revoked access'
   assert.equal(repeat.status,200);
   assert.equal(repeat.data.targetPartId,shared.data.targetPartId,'retries do not duplicate catalog entries');
   assert.equal(repeat.data.created,false);
+  // Customer sharing is opt-in and purpose-bound, with a legal basis reference.
+  const shareCustomerBody={sourceUnitId:second,targetUnitId:unit.data.id,customerId:bAgain.data[0].id,legalBasis:'CONTRATO',recordReference:'OS-COMPARTILHADA-2026-001'};
+  assert.equal((await request('POST','/api/tenancy/share-customer',{...shareCustomerBody,recordReference:''})).status,400,'evidence reference required');
+  assert.equal((await request('POST','/api/tenancy/share-customer',{...shareCustomerBody,targetUnitId:1})).status,403,'company boundaries cannot be crossed');
+  const copiedCustomer=await request('POST','/api/tenancy/share-customer',shareCustomerBody);
+  assert.equal(copiedCustomer.status,200,JSON.stringify(copiedCustomer.data));
+  assert.equal(copiedCustomer.data.created,true);
+  const customerCopy=await request('GET','/api/customers',undefined,unit.data.id);
+  assert.equal(customerCopy.data.length,1);
+  assert.equal(customerCopy.data[0].name,'Cliente da empresa B');
+  assert.equal(customerCopy.data[0].notes,'','free-form private notes must never be shared');
+  const sameCustomer=await request('POST','/api/tenancy/share-customer',shareCustomerBody);
+  assert.equal(sameCustomer.status,200);
+  assert.equal(sameCustomer.data.created,false);
+  assert.equal(sameCustomer.data.targetCustomerId,copiedCustomer.data.targetCustomerId);
   const member=await request('POST','/api/tenancy/memberships',{unitId:unit.data.id,username:'technician',name:'Técnico Filial',password:'StrongP@ss2026',role:'TECNICO'});
   assert.equal(member.status,201,JSON.stringify(member.data));
   const staff=await request('POST','/api/auth/login',{username:'technician',password:'StrongP@ss2026'});
