@@ -1,0 +1,564 @@
+{
+  "schema_version": 1,
+  "repository": "nutricionistaalmeidavh-spec/assetscarros3d",
+  "description": "Top 20 da frota brasileira para visualização 3D seletiva no ArtiSys Oficina. Não equivale a aprovação comercial das malhas.",
+  "generated_on": "2026-11-03",
+  "models": [
+    {
+      "rank": 1,
+      "id": "volkswagen-gol",
+      "brand": "Volkswagen",
+      "model": "Gol",
+      "category": "hatchback",
+      "status": "blocked",
+      "blockReason": "GLB foi identificado como Golf Mk1, e não Gol brasileiro",
+      "variants": {},
+      "notes": [
+        "Fonte é Volkswagen Golf Mk1, NÃO Gol brasileiro. Não aprovar"
+      ],
+      "review_status": "PENDENTE_REVISAO_VISUAL",
+      "credit": null,
+      "thumbnail": null
+    },
+    {
+      "rank": 2,
+      "id": "fiat-uno",
+      "brand": "Fiat",
+      "model": "Uno",
+      "category": "hatchback",
+      "status": "available",
+      "blockReason": null,
+      "variants": {
+        "original": {
+          "ref": "3eb0f1afac277d81bca7b7f643de81915ea76965",
+          "path": "assets/fiat-uno.glb",
+          "sha256": "fdbcb7f46e0f8677e9fc29cf60cc4067ec0a94b726c1749e47e7c640fd6614a0",
+          "bytes": 290120
+        },
+        "restored": {
+          "ref": "8fd10593b8804618478dc5d9dc6cb739196c18d5",
+          "path": "curadoria/restaurados/fiat-uno-restaurado.glb",
+          "sha256": "035c2779dc698ccc90b8db0ae63dda1a9e0648ddb799e17033b1367d656a8d1f",
+          "bytes": null,
+          "experimental": true
+        }
+      },
+      "notes": [],
+      "review_status": "PENDENTE_REVISAO_VISUAL",
+      "credit": {
+        "author": "subishi",
+        "authorUrl": "https://sketchfab.com/subishi",
+        "license": "CC Attribution",
+        "sourceName": "fiat uno - Turbo ie 1995",
+        "sourceUrl": "https://sketchfab.com/3d-models/f5e38b26c0af4ef2ab2f4c4b2e5aad5c"
+      },
+      "thumbnail": "/carros3d/thumbs/fiat-uno.png"
+    },
+    {
+      "rank": 3,
+      "id": "fiat-palio",
+      "brand": "Fiat",
+      "model": "Palio",
+      "category": "hatchback",
+      "status": "available",
+      "blockReason": null,
+      "variants": {
+        "original": {
+          "ref": "3eb0f1afac277d81bca7b7f643de81915ea76965",
+          "path": "assets/fiat-palio.glb",
+          "sha256": "30532acbac6333eecb2adc7e043769435bfb3a266376938b3b7129a613efe0c0",
+          "bytes": 317144
+        },
+        "restored": {
+          "ref": "8fd10593b8804618478dc5d9dc6cb739196c18d5",
+          "path": "curadoria/restaurados/fiat-palio-restaurado.glb",
+          "sha256": "b5c655e1ab897c70c18bacf9b7ba956781f75c05eb7a936e66fb3c186ae07756",
+          "bytes": null,
+          "experimental": true
+        }
+      },
+      "notes": [],
+      "review_status": "PENDENTE_REVISAO_VISUAL",
+      "credit": {
+        "author": "Fall0X",
+        "authorUrl": "https://sketchfab.com/Fall0X",
+        "license": "CC Attribution",
+        "sourceName": "Fiat Palio 1997",
+        "sourceUrl": "https://sketchfab.com/3d-models/8a3e71d4b4234110b59b09ef663e9448"
+      },
+      "thumbnail": "/carros3d/thumbs/fiat-palio.png"
+    },
+    {
+      "rank": 4,
+      "id": "fiat-strada",
+      "brand": "Fiat",
+      "model": "Strada",
+      "category": "pickup",
+      "status": "available",
+      "blockReason": null,
+      "variants": {
+        "original": {
+          "ref": "3eb0f1afac277d81bca7b7f643de81915ea76965",
+          "path": "assets/fiat-strada.glb",
+          "sha256": "9648d97421ebfe4284a6814679af278952933fdedb2fc36d42a3d7a8bb6145f8",
+          "bytes": 4147080
+        }
+      },
+      "notes": [
+        "GLB da competição LowPolyCarChallenge; estilizado, revisar fidelidade"
+      ],
+      "review_status": "PENDENTE_REVISAO_VISUAL",
+      "credit": {
+        "author": "Philipp Busse",
+        "authorUrl": "https://sketchfab.com/WoTiger",
+        "license": "CC Attribution",
+        "sourceName": "Fiat Strada - #LowPolyCarChallenge",
+        "sourceUrl": "https://sketchfab.com/3d-models/d18048a6f7f04dad84a704aea1c02c5b"
+      },
+      "thumbnail": "/carros3d/thumbs/fiat-strada.png"
+    },
+    {
+      "rank": 5,
+      "id": "chevrolet-corsa",
+      "brand": "Chevrolet",
+      "model": "Corsa",
+      "category": "sedan",
+      "status": "available",
+      "blockReason": null,
+      "variants": {
+        "original": {
+          "ref": "3eb0f1afac277d81bca7b7f643de81915ea76965",
+          "path": "assets/chevrolet-corsa.glb",
+          "sha256": "cc4fafaf5160566b3e2c07250ee7ed499568fed4caebb09f303d088ce171679f",
+          "bytes": 375484
+        },
+        "restored": {
+          "ref": "8fd10593b8804618478dc5d9dc6cb739196c18d5",
+          "path": "curadoria/restaurados/chevrolet-corsa-restaurado.glb",
+          "sha256": "c8d0b662f338d6462ed99158bd363ab6d6104fbe6ce020b1fd5e3f25db59a71b",
+          "bytes": null,
+          "experimental": true
+        }
+      },
+      "notes": [
+        "Fonte corresponde especificamente ao Corsa Sedan; não tratar como hatch"
+      ],
+      "review_status": "PENDENTE_REVISAO_VISUAL",
+      "credit": {
+        "author": "FidwixGamer",
+        "authorUrl": "https://sketchfab.com/fidwixgamer",
+        "license": "CC Attribution",
+        "sourceName": "Chevrolet Corsa Sedan 2010 FidwixGamer",
+        "sourceUrl": "https://sketchfab.com/3d-models/f1b5b562ca874643b98dc81645091ceb"
+      },
+      "thumbnail": "/carros3d/thumbs/chevrolet-corsa.png"
+    },
+    {
+      "rank": 6,
+      "id": "vw-fusca",
+      "brand": "Volkswagen",
+      "model": "Fusca",
+      "category": "coupe",
+      "status": "available",
+      "blockReason": null,
+      "variants": {
+        "original": {
+          "ref": "3eb0f1afac277d81bca7b7f643de81915ea76965",
+          "path": "assets/vw-fusca.glb",
+          "sha256": "33bd4f716bc59e77a3b685faeddf26f8a9b28db07e633fb3887766f17b67757c",
+          "bytes": 15898052
+        }
+      },
+      "notes": [
+        "Fonte Beetle/The Bug; checar geração e direitos"
+      ],
+      "review_status": "PENDENTE_REVISAO_VISUAL",
+      "credit": {
+        "author": "DRIVER-FIRE",
+        "authorUrl": "https://sketchfab.com/DRIVER-FIRE",
+        "license": "CC Attribution",
+        "sourceName": "volkswagen beetle \"The Bug\"",
+        "sourceUrl": "https://sketchfab.com/3d-models/ad6a2f85f9ef4da0a3ac3a022177b3fe"
+      },
+      "thumbnail": "/carros3d/thumbs/vw-fusca.png"
+    },
+    {
+      "rank": 7,
+      "id": "ford-fiesta",
+      "brand": "Ford",
+      "model": "Fiesta",
+      "category": "hatchback",
+      "status": "available",
+      "blockReason": null,
+      "variants": {
+        "original": {
+          "ref": "3eb0f1afac277d81bca7b7f643de81915ea76965",
+          "path": "assets/ford-fiesta.glb",
+          "sha256": "c2bf5f20ad7a0437dcc0fa42be6b8b408a32b7f1716fd76f9dbdca9a3af41d36",
+          "bytes": 1378468
+        }
+      },
+      "notes": [
+        "Fonte Fiesta Mk5; verificar correspondência com mercado brasileiro"
+      ],
+      "review_status": "PENDENTE_REVISAO_VISUAL",
+      "credit": {
+        "author": "🇷🇴シRuletăシ🇷🇴",
+        "authorUrl": "https://sketchfab.com/nebunu.de.ruleta",
+        "license": "CC Attribution",
+        "sourceName": "Ford Fiesta Mk5",
+        "sourceUrl": "https://sketchfab.com/3d-models/f3a9d5d1fc9142d297f8d3c4d9b91431"
+      },
+      "thumbnail": "/carros3d/thumbs/ford-fiesta.png"
+    },
+    {
+      "rank": 8,
+      "id": "chevrolet-onix",
+      "brand": "Chevrolet",
+      "model": "Onix",
+      "category": "hatchback",
+      "status": "available",
+      "blockReason": null,
+      "variants": {
+        "original": {
+          "ref": "3eb0f1afac277d81bca7b7f643de81915ea76965",
+          "path": "assets/chevrolet-onix.glb",
+          "sha256": "8faed44393614842117e5bbab1b2510252a86dd8fb756066e97e4d550a001086",
+          "bytes": 1290676
+        }
+      },
+      "notes": [],
+      "review_status": "PENDENTE_REVISAO_VISUAL",
+      "credit": {
+        "author": "uzb_rx7",
+        "authorUrl": "https://sketchfab.com/uzbek_supra",
+        "license": "CC Attribution",
+        "sourceName": "chevrolet onix",
+        "sourceUrl": "https://sketchfab.com/3d-models/bfd798c2695847b28ab681d42abc7056"
+      },
+      "thumbnail": "/carros3d/thumbs/chevrolet-onix.png"
+    },
+    {
+      "rank": 9,
+      "id": "chevrolet-celta",
+      "brand": "Chevrolet",
+      "model": "Celta",
+      "category": "hatchback",
+      "status": "available",
+      "blockReason": null,
+      "variants": {
+        "original": {
+          "ref": "3eb0f1afac277d81bca7b7f643de81915ea76965",
+          "path": "assets/chevrolet-celta.glb",
+          "sha256": "560a3dd3b7dcc7040b1a3b2bf072cb0dd3af4b4517590f5803593240402b1ab5",
+          "bytes": 554780
+        }
+      },
+      "notes": [
+        "Fonte low-poly; avaliar fidelidade para inspeção"
+      ],
+      "review_status": "PENDENTE_REVISAO_VISUAL",
+      "credit": {
+        "author": "RATODDY",
+        "authorUrl": "https://sketchfab.com/kallaty459",
+        "license": "CC Attribution",
+        "sourceName": "low poly celta",
+        "sourceUrl": "https://sketchfab.com/3d-models/e6ed28ade18247b6957010933ce518e0"
+      },
+      "thumbnail": "/carros3d/thumbs/chevrolet-celta.png"
+    },
+    {
+      "rank": 10,
+      "id": "ford-ka",
+      "brand": "Ford",
+      "model": "Ka",
+      "category": "hatchback",
+      "status": "available",
+      "blockReason": null,
+      "variants": {
+        "original": {
+          "ref": "3eb0f1afac277d81bca7b7f643de81915ea76965",
+          "path": "assets/ford-ka.glb",
+          "sha256": "214ef1bf1c1884ebd0e1cfca6606a56f034f39cb3af61f035110c01c8aa8f698",
+          "bytes": 347592
+        },
+        "restored": {
+          "ref": "8fd10593b8804618478dc5d9dc6cb739196c18d5",
+          "path": "curadoria/restaurados/ford-ka-restaurado.glb",
+          "sha256": "c6858d095910854d5db9547865bcd3d486d7855e4807649a8a08f05da252969e",
+          "bytes": null,
+          "experimental": true
+        }
+      },
+      "notes": [],
+      "review_status": "PENDENTE_REVISAO_VISUAL",
+      "credit": {
+        "author": "Merc_TV",
+        "authorUrl": "https://sketchfab.com/szymonpasterczyk",
+        "license": "CC Attribution",
+        "sourceName": "Ford Ka MK2 2008-2016",
+        "sourceUrl": "https://sketchfab.com/3d-models/d2b74e929d9745ea9d151f8e2b195b17"
+      },
+      "thumbnail": "/carros3d/thumbs/ford-ka.png"
+    },
+    {
+      "rank": 11,
+      "id": "vw-saveiro",
+      "brand": "Volkswagen",
+      "model": "Saveiro",
+      "category": "pickup",
+      "status": "available",
+      "blockReason": null,
+      "variants": {
+        "original": {
+          "ref": "3eb0f1afac277d81bca7b7f643de81915ea76965",
+          "path": "assets/vw-saveiro.glb",
+          "sha256": "5b1df14d1cab53dfc78cfa62b5c99f9d6acd76bb3f7a53428b260d75bc7ad4af",
+          "bytes": 875280
+        }
+      },
+      "notes": [],
+      "review_status": "PENDENTE_REVISAO_VISUAL",
+      "credit": {
+        "author": "bimboit34",
+        "authorUrl": "https://sketchfab.com/bimboit34",
+        "license": "CC Attribution",
+        "sourceName": "Volkswagen Saveiro Cross",
+        "sourceUrl": "https://sketchfab.com/3d-models/4e71630d18e34ef09ef1abf4371859f2"
+      },
+      "thumbnail": "/carros3d/thumbs/vw-saveiro.png"
+    },
+    {
+      "rank": 12,
+      "id": "vw-fox",
+      "brand": "Volkswagen",
+      "model": "Fox",
+      "category": "hatchback",
+      "status": "available",
+      "blockReason": null,
+      "variants": {
+        "original": {
+          "ref": "3eb0f1afac277d81bca7b7f643de81915ea76965",
+          "path": "assets/vw-fox.glb",
+          "sha256": "c93164849e7c294a3790ff1bd663f1e549971ac30e3efdca104e90bcf300c3eb",
+          "bytes": 438476
+        },
+        "restored": {
+          "ref": "8fd10593b8804618478dc5d9dc6cb739196c18d5",
+          "path": "curadoria/restaurados/vw-fox-restaurado.glb",
+          "sha256": "5cb33c2a2ef90c68bd7d1aafb4d1caeafa0c831eae038314c07752963bce1baf",
+          "bytes": null,
+          "experimental": true
+        }
+      },
+      "notes": [],
+      "review_status": "PENDENTE_REVISAO_VISUAL",
+      "credit": {
+        "author": "Merc_TV",
+        "authorUrl": "https://sketchfab.com/szymonpasterczyk",
+        "license": "CC Attribution",
+        "sourceName": "Volkswagen Fox 3-Door 2003-2021",
+        "sourceUrl": "https://sketchfab.com/3d-models/23298d52315f4275b3b58231c41e660f"
+      },
+      "thumbnail": "/carros3d/thumbs/vw-fox.png"
+    },
+    {
+      "rank": 13,
+      "id": "fiat-siena",
+      "brand": "Fiat",
+      "model": "Siena",
+      "category": "hatchback",
+      "status": "blocked",
+      "blockReason": "Modelo fiel não encontrado no acervo, aguardando curadoria",
+      "variants": {},
+      "notes": [
+        "AUSENTE_NO_ACERVO"
+      ],
+      "review_status": "PENDENTE_REVISAO_VISUAL",
+      "credit": null,
+      "thumbnail": null
+    },
+    {
+      "rank": 14,
+      "id": "vw-voyage",
+      "brand": "Volkswagen",
+      "model": "Voyage",
+      "category": "sedan",
+      "status": "available",
+      "blockReason": null,
+      "variants": {
+        "original": {
+          "ref": "3eb0f1afac277d81bca7b7f643de81915ea76965",
+          "path": "assets/vw-voyage.glb",
+          "sha256": "1e4913af7a593044cedae7b94dc7f32645119b1f0ebead92dac579c8e458bb93",
+          "bytes": 5053656
+        }
+      },
+      "notes": [],
+      "review_status": "PENDENTE_REVISAO_VISUAL",
+      "credit": {
+        "author": "lael.eugenio",
+        "authorUrl": "https://sketchfab.com/lael.eugenio",
+        "license": "CC Attribution",
+        "sourceName": "Voyage GL 1.8",
+        "sourceUrl": "https://sketchfab.com/3d-models/d5527fb1aff24ba0bc785370ffb14fba"
+      },
+      "thumbnail": "/carros3d/thumbs/vw-voyage.png"
+    },
+    {
+      "rank": 15,
+      "id": "toyota-corolla",
+      "brand": "Toyota",
+      "model": "Corolla",
+      "category": "sedan",
+      "status": "available",
+      "blockReason": null,
+      "variants": {
+        "original": {
+          "ref": "3eb0f1afac277d81bca7b7f643de81915ea76965",
+          "path": "assets/toyota-corolla.glb",
+          "sha256": "c1563ab62fc8855fbc5f2bd5e7a5296f72ca8992ada0b441cbf48c95fda70cc1",
+          "bytes": 375872
+        }
+      },
+      "notes": [
+        "Fonte é Corolla KE80 antigo, NÃO Corolla moderno. Revisar geração"
+      ],
+      "review_status": "PENDENTE_REVISAO_VISUAL",
+      "credit": {
+        "author": "PHAC",
+        "authorUrl": "https://sketchfab.com/phac",
+        "license": "CC Attribution",
+        "sourceName": "Toyota Corolla (KE80)",
+        "sourceUrl": "https://sketchfab.com/3d-models/2b30faa611e64177a94a69098d27d1fb"
+      },
+      "thumbnail": null
+    },
+    {
+      "rank": 16,
+      "id": "hyundai-hb20",
+      "brand": "Hyundai",
+      "model": "HB20",
+      "category": "hatchback",
+      "status": "available",
+      "blockReason": null,
+      "variants": {
+        "original": {
+          "ref": "3eb0f1afac277d81bca7b7f643de81915ea76965",
+          "path": "assets/hyundai-hb20.glb",
+          "sha256": "7e4218b46e6c7d9216325acfc70f3f42a34bf582baaa5a46008598fb72315c58",
+          "bytes": 1588040
+        }
+      },
+      "notes": [],
+      "review_status": "PENDENTE_REVISAO_VISUAL",
+      "credit": {
+        "author": "Nieve5677",
+        "authorUrl": "https://sketchfab.com/niev",
+        "license": "CC Attribution",
+        "sourceName": "Hyundai HB20",
+        "sourceUrl": "https://sketchfab.com/3d-models/30ae986eac7b4e7d8d4980d41c189735"
+      },
+      "thumbnail": null
+    },
+    {
+      "rank": 17,
+      "id": "vw-polo",
+      "brand": "Volkswagen",
+      "model": "Polo",
+      "category": "hatchback",
+      "status": "available",
+      "blockReason": null,
+      "variants": {
+        "original": {
+          "ref": "3eb0f1afac277d81bca7b7f643de81915ea76965",
+          "path": "assets/vw-polo.glb",
+          "sha256": "b884f9d42fbfd3b5518828407a43f231300a618f5330768c09a883c442b6a0ea",
+          "bytes": 6745676
+        }
+      },
+      "notes": [
+        "Fonte Polo 2016; não equivale à geração mais atual"
+      ],
+      "review_status": "PENDENTE_REVISAO_VISUAL",
+      "credit": {
+        "author": "BHP3D",
+        "authorUrl": "https://sketchfab.com/BHP3D",
+        "license": "CC Attribution",
+        "sourceName": "2016 Volkswagen Polo",
+        "sourceUrl": "https://sketchfab.com/3d-models/bab77902c638427bb85e68b6762a481f"
+      },
+      "thumbnail": null
+    },
+    {
+      "rank": 18,
+      "id": "chevrolet-classic",
+      "brand": "Chevrolet",
+      "model": "Classic",
+      "category": "hatchback",
+      "status": "blocked",
+      "blockReason": "Modelo fiel não encontrado no acervo, aguardando curadoria",
+      "variants": {},
+      "notes": [
+        "AUSENTE_NO_ACERVO"
+      ],
+      "review_status": "PENDENTE_REVISAO_VISUAL",
+      "credit": null,
+      "thumbnail": null
+    },
+    {
+      "rank": 19,
+      "id": "toyota-hilux",
+      "brand": "Toyota",
+      "model": "Hilux",
+      "category": "pickup",
+      "status": "available",
+      "blockReason": null,
+      "variants": {
+        "original": {
+          "ref": "3eb0f1afac277d81bca7b7f643de81915ea76965",
+          "path": "assets/toyota-hilux.glb",
+          "sha256": "231a8262217c1a16483d1558a79f2811ecec35d4cd0dc7ace959e4710db81c92",
+          "bytes": 2054816
+        }
+      },
+      "notes": [],
+      "review_status": "PENDENTE_REVISAO_VISUAL",
+      "credit": {
+        "author": "David_Holiday",
+        "authorUrl": "https://sketchfab.com/David_Holiday",
+        "license": "CC Attribution",
+        "sourceName": "Toyota Hilux 2007",
+        "sourceUrl": "https://sketchfab.com/3d-models/0234ebed01ee4b87affed0e58673247e"
+      },
+      "thumbnail": null
+    },
+    {
+      "rank": 20,
+      "id": "vw-kombi",
+      "brand": "Volkswagen",
+      "model": "Kombi",
+      "category": "van",
+      "status": "available",
+      "blockReason": null,
+      "variants": {
+        "original": {
+          "ref": "3eb0f1afac277d81bca7b7f643de81915ea76965",
+          "path": "assets/vw-kombi.glb",
+          "sha256": "e94d7ae0bf87ea8713f1cb1429cfa0af1b1b0206a496036ed0a1f7a2acf48d60",
+          "bytes": 485396
+        }
+      },
+      "notes": [],
+      "review_status": "PENDENTE_REVISAO_VISUAL",
+      "credit": {
+        "author": "Scuderia Morello",
+        "authorUrl": "https://sketchfab.com/scudmorello",
+        "license": "CC Attribution",
+        "sourceName": "VW Kombi 1969 LowPoly",
+        "sourceUrl": "https://sketchfab.com/3d-models/f6a7b54ec6d24d8e95992f68be6c930c"
+      },
+      "thumbnail": null
+    }
+  ]
+}
