@@ -4,7 +4,7 @@ import {createLocalTenantObjectStore} from './local-tenant-object-store.js';
 import {createCommonDataAdapter} from './common-data-adapter.js';
 import {createAsyncWorkshopServices} from './async-workshop-services.js';
 import {createAsyncWorkshopHandler} from './async-workshop-handler.js';
-import {migrateAsyncTenantStore,claimAsyncTenantIdentity,assertAsyncTenantIdentity} from './async-tenant-migrations.js';
+import {migrateAsyncTenantStore,migrateBillingFinanceExtensions,claimAsyncTenantIdentity,assertAsyncTenantIdentity} from './async-tenant-migrations.js';
 
 // A PostgreSQL schema is an isolated logical namespace, not a separate database
 // or an OS-level security boundary. Registry memberships are always verified
