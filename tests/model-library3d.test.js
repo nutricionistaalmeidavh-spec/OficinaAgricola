@@ -141,3 +141,49 @@ test('prévia 3D não aciona guarda de alterações de formulários',async()=>{
   assert.match(core,/trackChanges\s*&&\s*modalSession/);
   assert.match(modalClient,/trackChanges:false/);
 });
+
+
+test('Ka Fox Palio incluem uma variante experimental de rodas reparadas sem perder original',()=>{
+  const ids=['ford-ka','vw-fox','fiat-palio'];
+  for(const id of ids){
+    const record=manifest.models.find(x=>x.id===id);
+    assert.ok(record?.variants?.original?.sha256);
+    assert.ok(record?.variants?.restored?.sha256);
+    assert.ok(record?.variants?.repaired?.sha256,'Variante rodas não cadastrada para '+id);
+    assert.equal(record.variants.repaired.experimental,true);
+    assert.equal(record.review_status,'PENDENTE_REVISAO_VISUAL');
+    assert.match(resolveEntry(manifest,id,'repaired').path,new RegExp('^curadoria/geometria/'+id+'-rodas\\\\.glb$'));
+    assert.match(assetUrl(resolveEntry(manifest,id,'repaired')),/curadoria\/geometria\/.+-rodas\.glb$/);
+  }
+  assert.throws(()=>resolveEntry(manifest,'fiat-uno','repaired'),/indisponível/i);
+  validateCatalog(manifest);
+});
+
+test('GLB reparado segue as mesmas regras de integridade e cache das outras variantes',async()=>{
+  const dir=await mkdtemp(join(tmpdir(),'artisys3d-wheels-'));
+  try{
+    const bin=fixture();
+    const entry3d={...entry(bin),variants:{
+      ...entry(bin).variants,
+      repaired:{ref:'0123456789abcdef0123456789abcdef01234567',
+        path:'curadoria/geometria/fiat-uno-rodas.glb',
+        sha256:createHash('sha256').update(bin).digest('hex'),bytes:bin.length,experimental:true}
+    }};
+    const catalog={models:[entry3d]};
+    const fetchImpl=async()=>({ok:true,arrayBuffer:async()=>bin.buffer.slice(bin.byteOffset,bin.byteOffset+bin.byteLength)});
+    const status=await installAsset(dir,'fiat-uno','repaired',{catalog,fetchImpl});
+    assert.equal(status.installed,true);
+    assert.equal(listStatuses(dir,{catalog})[0].installed.repaired,true);
+    assert.deepEqual(readInstalledAsset(dir,'fiat-uno','repaired',{catalog}),bin);
+  }finally{await rm(dir,{recursive:true,force:true})}
+});
+
+test('interface permite abrir rodas reparadas e identificar que são peças não-OEM',async()=>{
+  const client=await readFile(new URL('../public/model-library3d.js',import.meta.url),'utf8');
+  const viewer=await readFile(new URL('../public/model-viewer.js',import.meta.url),'utf8');
+  const server=await readFile(new URL('../src/server.js',import.meta.url),'utf8');
+  assert.match(client,/Rodas reconstruídas.*experimental/);
+  assert.match(client,/variants\.includes\('repaired'\)/);
+  assert.match(viewer,/original','restored','repaired/);
+  assert.match(server,/models3d.*repaired/);
+});
