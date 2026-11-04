@@ -226,3 +226,13 @@ export async function claimAsyncTenantIdentity(port,{companyId,unitId}={}){
    throw Error('Banco já pertence a outro tenant; operação bloqueada sem migração auditada');
  return {companyId:company,unitId:unit};
 }
+
+export async function assertAsyncTenantIdentity(port,{companyId,unitId}={}){
+ const company=Number(companyId),unit=Number(unitId);
+ if(!Number.isSafeInteger(company)||company<1||!Number.isSafeInteger(unit)||unit<1)
+   throw Error('Empresa/unidade SQL não configuradas');
+ const actual=await port.first('SELECT company_id,unit_id FROM async_tenant_identity WHERE id=1');
+ if(!actual||Number(actual.company_id)!==company||Number(actual.unit_id)!==unit)
+   throw Error('Banco associado a outro tenant ou não inicializado');
+ return {companyId:company,unitId:unit};
+}
