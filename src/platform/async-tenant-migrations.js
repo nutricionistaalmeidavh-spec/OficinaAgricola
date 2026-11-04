@@ -1,5 +1,6 @@
 import {ADDITIONAL_TENANT_TABLES,ADDITIONAL_TENANT_INDEXES} from './async-tenant-extra-schema.js';
 import {PAYMENT_COLLECTION_DDL} from './payment-collection.js';
+import {BILLING_SCHEMA_DDL} from './billing-p3-p4.js';
 // Canonical async relational schema for future Postgres / Cloudflare D1
 // operational backends. Existing SQLite remains the enabled runtime until
 // the full service graph is migrated and parity-tested. No implicit fallback.
@@ -189,7 +190,7 @@ const VERSION='2026-11-04-async-canonical-initial';
 export function asyncTenantSchema(engine){
  if(!['postgres','d1'].includes(engine))
    throw Error('Engine SQL assíncrono inválido');
- const statements=[...TABLES,...ADDITIONAL_TENANT_TABLES,...PAYMENT_COLLECTION_DDL].map(sql=>{
+ const statements=[...TABLES,...ADDITIONAL_TENANT_TABLES,...PAYMENT_COLLECTION_DDL,...BILLING_SCHEMA_DDL].map(sql=>{
    if(engine!=='postgres')return sql;
    // Runtime-issued 48-bit IDs and monetary cent amounts exceed PostgreSQL
    // INT4. Keep every FK and canonical monetary column as BIGINT.
