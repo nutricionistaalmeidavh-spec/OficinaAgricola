@@ -339,8 +339,7 @@ export function migrate(db) {
   `);
   migrateFiscal(db);
   migrateMarketParity(db);
-   migrateLocalPaymentCollection(db);
-db.exec(`
+  db.exec(`
     CREATE INDEX IF NOT EXISTS idx_work_orders_status_id ON work_orders(status,id DESC);
     CREATE INDEX IF NOT EXISTS idx_work_orders_customer ON work_orders(customer_id,id DESC);
     CREATE INDEX IF NOT EXISTS idx_work_orders_delivery ON work_orders(status,delivered_at);
