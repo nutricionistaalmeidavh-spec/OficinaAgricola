@@ -74,8 +74,9 @@ export function createPostgresTenantRuntimeFactory({
        :localStorageRoot?createLocalTenantObjectStore({
           root:localStorageRoot,companyId:unit.companyId,unitId:unit.id
         }):null;
+     const services=createAsyncWorkshopServices(port,{objectStore});
      const nativeHandler=createAsyncWorkshopHandler({
-       services:createAsyncWorkshopServices(port,{objectStore}),
+       services,
        serviceToken,
        preflight:()=>assertAsyncTenantIdentity(port,{
          companyId:unit.companyId,unitId:unit.id
@@ -104,7 +105,7 @@ export function createPostgresTenantRuntimeFactory({
          throw error;
        }
      };
-     return Object.freeze({handler,commandStatus:journal.commandStatus,
+     return Object.freeze({handler,services,port,commandStatus:journal.commandStatus,
        companyId:unit.companyId,unitId:unit.id,
        schemaName:schema,pool});
    }catch(error){
