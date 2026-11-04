@@ -1,3 +1,6 @@
+import {createCommonDataAdapter} from './common-data-adapter.js';
+import {createBillingService} from './billing-p3-p4.js';
+import {addReceipt,getPaymentSummary,reverseReceipt} from '../services/finance.js';
 import { createServer as createHttpServer } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
 import {createNativeApiBridge} from './native-api-bridge.js';
@@ -469,6 +472,18 @@ export function createMultiTenantServer({
       try{
         const runtime=unitRuntime(id);
         createMaintenanceCrmTasks(runtime.db,{daysAhead:7});
+        // Unidades com backend nativo têm relógio próprio (PG) ou cron explícito (D1);
+        // nunca gerar avisos do shadow SQLite de outra origem canônica.
+        if(!nativeBackendForUnit?.(runtime.unit)){
+          const billing=createBillingService(createCommonDataAdapter({engine:'sqlite',db:runtime.db}),{
+            receivePayment:input=>addReceipt(runtime.db,input.workOrderId,input),
+            getPaymentSummary:workOrderId=>getPaymentSummary(runtime.db,workOrderId),
+            reversePayment:input=>reverseReceipt(runtime.db,input.workOrderId,input.receiptId,input),
+            reminderSender:reminderSenderForUnit?.(runtime.unit)??null
+          });
+          void billing.dispatchReminders({daysAhead:3})
+            .catch(error=>console.error('[tenant-billing-reminders]',id,error.message));
+        }
         const audit=auditInvariants(runtime.db);
         if(!audit.ok)console.warn('[tenancy-reconciliation]',id,JSON.stringify(audit.errors));
       }catch(error){console.error('[tenancy-maintenance]',id,error.message);}
