@@ -1,3 +1,4 @@
+import {createSecureSmtpReminderSender} from './platform/billing-smtp.js';
 import {cleanupOperationalData} from './platform/data-maintenance.js';
 import { resolveDatabasePath, resolveStoragePath } from './platform/data-location.js';
 import {readFileSync} from 'node:fs';
