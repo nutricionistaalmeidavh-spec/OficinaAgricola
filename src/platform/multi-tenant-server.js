@@ -13,6 +13,7 @@ import { loginHttp, validateSession, logout, hashPassword } from '../auth.js';
 import { createApprovalLink, createMaintenanceCrmTasks } from '../services/market-parity.js';
 import { financeSummary } from '../services/finance.js';
 import { sharePartCatalog, shareCustomer } from './tenant-catalog-sharing.js';
+import { transferTenantStock, retryTenantStockTransfer, listTenantStockTransfers } from './tenant-stock-transfer.js';
 import { seedDefaultChecklists, recoverOrphanAttachments } from '../services/operations.js';
 import { createEventRuntime } from './event-runtime.js';
 import { dispatchOutbox } from './outbox.js';
@@ -193,6 +194,21 @@ export function createMultiTenantServer({
     if(path==='/api/tenancy/share-part'&&method==='POST'){
       const body=await readJson(req);
       return json(res,200,sharePartCatalog({registryDb,unitRuntime,actorUserId:user.id,...body}));
+    }
+    if(path==='/api/tenancy/stock-transfer'&&method==='POST'){
+      const body=await readJson(req);
+      const result=transferTenantStock({registryDb,unitRuntime,actorUserId:user.id,...body});
+      return json(res,result.status==='PENDING'?202:200,result);
+    }
+    if(path==='/api/tenancy/stock-transfer/retry'&&method==='POST'){
+      const body=await readJson(req);
+      const result=retryTenantStockTransfer({registryDb,unitRuntime,actorUserId:user.id,...body});
+      return json(res,result.status==='PENDING'?202:200,result);
+    }
+    if(path==='/api/tenancy/stock-transfers'&&method==='GET'){
+      return json(res,200,{transfers:listTenantStockTransfers({
+        registryDb,actorUserId:user.id,companyId:positive(url.searchParams.get('companyId'))
+      })});
     }
     if(path==='/api/tenancy/audit'&&method==='GET')
       return json(res,200,listTenantAudit(registryDb,user.id,positive(url.searchParams.get('companyId'))));
