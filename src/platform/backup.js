@@ -30,15 +30,16 @@ function manifestEntry(root, filePath) {
 }
 
 function safePath(root, relPath) {
-  if (typeof relPath !== 'string' || !relPath || relPath.includes('\\\\') ||
-      relPath.includes('\\0') || !/^(?:database\\.sqlite|uploads\\/[A-Za-z0-9_. -]+(?:\\/[A-Za-z0-9_. -]+)*)$/.test(relPath) ||
-      relPath.split('/').some(segment=>segment==='.' || segment==='..')) {
+  if (typeof relPath !== 'string' || relPath.includes('\\') ||
+      relPath.includes('\0')) throw new Error('Manifesto de backup inválido');
+  const segments=relPath.split('/');
+  if (segments.some(x=>!x || x==='.' || x==='..') ||
+      !(relPath==='database.sqlite' || (segments[0]==='uploads' && segments.length>1)))
     throw new Error('Manifesto de backup inválido');
-  }
   const base=resolve(root), target=resolve(base,relPath);
   if (!target.startsWith(base+sep)) throw new Error('Manifesto de backup inválido');
   let current=base;
-  for (const segment of relPath.split('/')) {
+  for (const segment of segments) {
     current=join(current,segment);
     if (existsSync(current) && lstatSync(current).isSymbolicLink())
       throw new Error('Backup contém link simbólico');
