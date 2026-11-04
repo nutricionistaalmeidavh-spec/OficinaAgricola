@@ -15,6 +15,7 @@ import { financeSummary } from '../services/finance.js';
 import { sharePartCatalog, shareCustomer } from './tenant-catalog-sharing.js';
 import { transferTenantStock, retryTenantStockTransfer, listTenantStockTransfers } from './tenant-stock-transfer.js';
 import { resolveTenantFiscalProvider, validateTenantFiscalConfigs } from './tenant-fiscal.js';
+import { transferTenantWorkOrder, retryTenantWorkOrderTransfer } from './tenant-os-transfer.js';
 import { seedDefaultChecklists, recoverOrphanAttachments } from '../services/operations.js';
 import { createEventRuntime } from './event-runtime.js';
 import { dispatchOutbox } from './outbox.js';
@@ -208,6 +209,14 @@ export function createMultiTenantServer({
     if(path==='/api/tenancy/share-part'&&method==='POST'){
       const body=await readJson(req);
       return json(res,200,sharePartCatalog({...body,registryDb,unitRuntime,actorUserId:user.id}));
+    }
+    if(path==='/api/tenancy/os-transfer'&&method==='POST'){
+      const body=await readJson(req);
+      return json(res,200,transferTenantWorkOrder({...body,registryDb,unitRuntime,actorUserId:user.id}));
+    }
+    if(path==='/api/tenancy/os-transfer/retry'&&method==='POST'){
+      const body=await readJson(req);
+      return json(res,200,retryTenantWorkOrderTransfer({...body,registryDb,unitRuntime,actorUserId:user.id}));
     }
     if(path==='/api/tenancy/stock-transfer'&&method==='POST'){
       const body=await readJson(req);
