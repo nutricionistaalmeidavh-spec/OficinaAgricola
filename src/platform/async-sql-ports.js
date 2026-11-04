@@ -41,6 +41,25 @@ export function postgresParameters(sql){
     throw Error('SQL incompleto; identificador literal não terminado');
   return output;
 }
+// pg returns BIGINT / integral NUMERIC as strings by default.
+// Convert only provably safe integer values; never round a 64-bit ID.
+function normalizedPgRows(result){
+ const rows=result?.rows||[],fields=result?.fields||[];
+ const numeric=new Set(fields.filter(f=>f.dataTypeID===20||f.dataTypeID===1700).map(f=>f.name));
+ if(!numeric.size)return rows;
+ const lower=BigInt(Number.MIN_SAFE_INTEGER),upper=BigInt(Number.MAX_SAFE_INTEGER);
+ return rows.map(row=>{
+   const next={...row};
+   for(const name of numeric){
+     const value=next[name];
+     if(typeof value==='string'&&/^-?\\d+$/.test(value)){
+       const exact=BigInt(value);
+       if(exact>=lower&&exact<=upper)next[name]=Number(exact);
+     }
+   }
+   return next;
+ });
+}
 function postgresQuery(client){
   if(!client||typeof client.query!=='function')throw Error('PostgreSQL requer pool do driver pg open source');
   const query=(sql,params=[])=>{
@@ -49,11 +68,11 @@ function postgresQuery(client){
   };
   return Object.freeze({
     engine:'postgres',
-    async all(sql,params=[]){return (await query(sql,params)).rows;},
-    async first(sql,params=[]){return (await query(sql,params)).rows[0]??null;},
+    async all(sql,params=[]){return normalizedPgRows(await query(sql,params));},
+    async first(sql,params=[]){return normalizedPgRows(await query(sql,params))[0]??null;},
     async run(sql,params=[]){
       const r=await query(sql,params);
-      return {changes:Number(r.rowCount??0),rows:r.rows};
+      return {changes:Number(r.rowCount??0),rows:normalizedPgRows(r)};
     }
   });
 }
