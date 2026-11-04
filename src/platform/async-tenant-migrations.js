@@ -1,4 +1,4 @@
-import {ADDITIONAL_TENANT_TABLES} from './async-tenant-extra-schema.js';
+import {ADDITIONAL_TENANT_TABLES,ADDITIONAL_TENANT_INDEXES} from './async-tenant-extra-schema.js';
 // Canonical async relational schema for future Postgres / Cloudflare D1
 // operational backends. Existing SQLite remains the enabled runtime until
 // the full service graph is migrated and parity-tested. No implicit fallback.
@@ -194,6 +194,9 @@ export function asyncTenantSchema(engine){
      .replace(/\b(opened_by) INTEGER\b/g,'$1 BIGINT')
      .replace(/\bCOLLATE NOCASE\b/gi,'');
  });
+ // Create lookup/uniqueness indexes only AFTER all business tables exist.
+ for(const index of ADDITIONAL_TENANT_INDEXES)
+   statements.push(engine==='postgres'?index.replace(/\bCOLLATE NOCASE\b/gi,''):index);
  // PostgreSQL MAX(os_number)+1 is unsafe under parallel transactions:
  // separate connections can compute the same number before either commits.
  // Sequence numbers are unique even on rollback; gaps are acceptable.
