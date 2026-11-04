@@ -88,6 +88,34 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
    if(path==='/v1/fiscal/drafts'&&method==='POST')
      return json(await services.createFiscalDraft(await dataFrom(request)),201);
 
+   if(path==='/v1/schedule'&&method==='GET')
+     return json(await services.listSchedule({
+       from:u.searchParams.get('from')||undefined,
+       to:u.searchParams.get('to')||undefined,
+       limit:u.searchParams.get('limit')||100
+     }));
+   if(path==='/v1/schedule'&&method==='POST')
+     return json(await services.createScheduleEvent(await dataFrom(request)),201);
+   const schedule=path.match(/^\/v1\/schedule\/([1-9]\d*)$/);
+   if(schedule&&method==='PATCH')
+     return json(await services.updateScheduleEvent(Number(schedule[1]),await dataFrom(request)));
+   if(path==='/v1/checklist-templates'&&method==='GET')
+     return json(await services.listChecklistTemplates());
+   if(path==='/v1/checklist-templates'&&method==='POST')
+     return json(await services.createChecklistTemplate(await dataFrom(request)),201);
+   const template=path.match(/^\/v1\/checklist-templates\/([1-9]\d*)$/);
+   if(template&&method==='GET')
+     return json(await services.getChecklistTemplate(Number(template[1])));
+   const checklists=path.match(/^\/v1\/orders\/([1-9]\d*)\/checklists$/);
+   if(checklists&&method==='GET')
+     return json(await services.listWorkOrderChecklists(Number(checklists[1])));
+   if(checklists&&method==='POST')
+     return json(await services.createWorkOrderChecklist({
+       ...await dataFrom(request),workOrderId:Number(checklists[1])
+     }),201);
+   const checklist=path.match(/^\/v1\/checklists\/([1-9]\d*)$/);
+   if(checklist&&method==='GET')
+     return json(await services.getWorkOrderChecklist(Number(checklist[1])));
    if(path==='/v1/services'&&method==='GET')
      return json(await services.listServices({
        search:u.searchParams.get('search')||'',
