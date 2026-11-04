@@ -283,7 +283,7 @@ document.addEventListener?.('focusin',event=>{
 });
 window.visualViewport?.addEventListener('resize',syncModalViewport);
 window.visualViewport?.addEventListener('scroll',syncModalViewport);
-function showModal(title,html,onSubmit,{entityKey=null}={}){
+function showModal(title,html,onSubmit,{entityKey=null,trackChanges=true}={}){
   const dialog=$('#modal'),body=$('#modalBody'),heading=$('#modalTitle');
   const key=entityKey||title;
   const same=state.modalKey===key&&!dialog.classList.contains('hidden');
@@ -300,7 +300,7 @@ function showModal(title,html,onSubmit,{entityKey=null}={}){
   state.modalToken=token;
   state.modalKey=key;
   if(opening||successor)$('#modal .modal-card').focus();
-  body.oninput=()=>{if(modalSession)modalSession.dirty=true};
+  body.oninput=()=>{if(trackChanges&&modalSession)modalSession.dirty=true};
   body.onchange=body.oninput;
   const form=$('#modalBody form');
   if(form&&onSubmit)form.onsubmit=async e=>{
