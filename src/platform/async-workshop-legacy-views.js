@@ -92,6 +92,69 @@ export function createAsyncLegacyViews(port,services){
   const hasMore=rows.length>size,items=rows.slice(0,size);
   return {items,total:Number(total.n),nextCursor:hasMore?nextCursor(items.at(-1),signature):null};
  }
+ async function pageQuery({from,select,where=[],args=[],sort,id,
+   direction='DESC',cursor=null,limit=50,scope}){
+  const size=bound(limit),signature=cursorSignature(scope,{where,args,direction});
+  const after=unpackCursor(cursor,signature),filters=[...where],values=[...args];
+  const totalWhere=filters.length?' WHERE '+filters.join(' AND '):'';
+  const total=await port.first('SELECT COUNT(*) n '+from+totalWhere,args);
+  const byId=sort===id;
+  if(after){
+   const symbol=direction==='ASC'?'>':'<';
+   if(byId){filters.push(id+symbol+'?');values.push(after.i);}
+   else{
+    if(typeof after.k!=='string')fail('Cursor inválido');
+    filters.push('('+sort+symbol+'? OR ('+sort+'=? AND '+id+symbol+'?))');
+    values.push(after.k,after.k,after.i);
+   }
+  }
+  const sqlWhere=filters.length?' WHERE '+filters.join(' AND '):'';
+  const rows=await port.all('SELECT '+select+', '+sort+' AS __page_sort '+from+
+    sqlWhere+' ORDER BY '+sort+' '+direction+','+id+' '+direction+' LIMIT ?',
+    [...values,size+1]);
+  const hasMore=rows.length>size,items=rows.slice(0,size).map(({__page_sort,...rest})=>rest);
+  return {items,total:Number(total.n),nextCursor:hasMore&&items.length?
+    nextCursor(rows[size-1],signature,byId?null:String(rows[size-1].__page_sort)):null};
+ }
+ async function listSchedulePage({from='1970-01-01T00:00:00.000Z',
+   to='2999-12-31T23:59:59.999Z',limit=50,cursor=null}={}){
+  return pageQuery({from:`FROM schedule_events e
+    LEFT JOIN customers c ON c.id=e.customer_id
+    LEFT JOIN machines m ON m.id=e.machine_id
+    LEFT JOIN technicians t ON t.id=e.technician_id
+    LEFT JOIN work_orders wo ON wo.id=e.work_order_id`,
+   select:'e.*,c.name customer_name,m.model machine_model,t.name technician_name,wo.os_number',
+   where:['e.starts_at>=?','e.starts_at<=?'],args:[from,to],
+   sort:'e.starts_at',id:'e.id',direction:'ASC',cursor,limit,scope:'schedule'});
+ }
+ async function listExpensesPage({from='1970-01-01T00:00:00.000Z',
+   to='2999-12-31T23:59:59.999Z',limit=50,cursor=null}={}){
+  const sort="COALESCE(e.paid_at,e.due_date||'T00:00:00.000Z',e.created_at)";
+  return pageQuery({from:'FROM expenses e LEFT JOIN work_orders wo ON wo.id=e.work_order_id',
+   select:'e.*,wo.os_number',where:[sort+' BETWEEN ? AND ?'],args:[from,to],
+   sort,id:'e.id',cursor,limit,scope:'expenses'});
+ }
+ async function listFiscalDocumentsPage({status='',limit=50,cursor=null}={}){
+  if(status&&!['RASCUNHO','INDETERMINADO','REJEITADA','AUTORIZADA',
+    'AUTORIZADA_HOMOLOGACAO','CANCELADA'].includes(status))fail('Estado fiscal inválido');
+  return pageQuery({from:'FROM fiscal_documents f',
+   select:`f.id,f.kind,f.origin_type,f.origin_id,f.status,f.amount_cents,
+    f.snapshot_json,f.request_id,f.provider_name,f.access_key,f.protocol,
+    f.fiscal_number,f.fiscal_series,f.last_error,f.environment,
+    f.created_at,f.updated_at,f.authorized_at`,
+   where:status?['f.status=?']:[],args:status?[status]:[],
+   sort:'f.id',id:'f.id',cursor,limit,scope:'fiscal'});
+ }
+ async function listSalesPage({search='',status='',limit=50,cursor=null}={}){
+  const where=[],args=[];
+  if(search){const q='%'+String(search).trim()+'%';
+   where.push('(CAST(s.sale_number AS TEXT) LIKE ? OR c.name LIKE ?)');args.push(q,q);}
+  if(status){where.push('s.status=?');args.push(String(status).trim());}
+  return pageQuery({from:`FROM sales s LEFT JOIN customers c ON c.id=s.customer_id
+    LEFT JOIN users u ON u.id=s.created_by`,
+   select:'s.*,c.name customer_name,u.name created_by_name',
+   where,args,sort:'s.id',id:'s.id',cursor,limit,scope:'sales'});
+ }
  async function getDashboard({role='ADMIN',now=new Date()}={}){
   const today=new Date(now),start=new Date(today.getFullYear(),today.getMonth(),1),
    next=new Date(today.getFullYear(),today.getMonth()+1,1);
@@ -150,6 +213,7 @@ export function createAsyncLegacyViews(port,services){
   return port.all('SELECT * FROM cash_sessions ORDER BY id DESC LIMIT 100');
  }
  return Object.freeze({getCustomer,getMachine,getCompanySettings,updateCompanySettings,
-  listCustomersPage,listMachinesPage,getDashboard,getOperationalReport,
+  listCustomersPage,listMachinesPage,listSchedulePage,listExpensesPage,
+  listFiscalDocumentsPage,listSalesPage,getDashboard,getOperationalReport,
   getCurrentCashSession,listCashSessions});
 }
