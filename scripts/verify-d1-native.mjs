@@ -39,6 +39,9 @@ const login=await request('POST','/v1/auth/login',{
 });
 assert.equal(login.user.id,admin.id);
 assert.ok(login.token?.length>32);
+personalSession=login.token;
+const serviceOnlyRead=await fetch(base+'/v1/customers',{headers:{Authorization:'Bearer '+token}});
+assert.equal(serviceOnlyRead.status,401,'service token without a user session must be denied');
 const tech=await request('POST','/v1/auth/users',{
  username:'d1-tech',name:'D1 Technician',password:'S3cureTech#2026',
  role:'TECNICO',sessionToken:login.token
