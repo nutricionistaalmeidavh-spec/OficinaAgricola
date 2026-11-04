@@ -32,6 +32,9 @@ test('opt-in SQLite-to-D1 import migrates every table, verifies hashes, and clai
    brand:'Fiat',model:'Uno'});
   const order=await ws.createWorkOrder({customerId:customer.id,machineId:machine.id,
    problemReported:'Histórico completo'});
+  // Older SQLite releases added unit_id as a nullable column. Do not
+  // rewrite a historical NULL into another company/branch while importing.
+  source.prepare('UPDATE work_orders SET unit_id=NULL WHERE id=?').run(order.id);
   const part=await ws.createPart({sku:'OLD-PART-001',description:'Filtro'});
   await ws.postStockMovement({partId:part.id,type:'ENTRADA',quantity:4});
   const port=testD1(target);
@@ -45,6 +48,8 @@ test('opt-in SQLite-to-D1 import migrates every table, verifies hashes, and clai
   assert.equal((await port.first('SELECT COUNT(*) n FROM inventory_movements')).n,1);
   assert.equal((await port.first('SELECT * FROM work_orders WHERE id=?',[order.id])).problem_reported,
    'Histórico completo');
+  assert.equal((await port.first('SELECT unit_id FROM work_orders WHERE id=?',
+   [order.id])).unit_id,null,'historical NULL unit must be preserved byte-for-byte');
   assert.deepEqual(await assertAsyncTenantIdentity(port,{companyId:22,unitId:7}),
    {companyId:22,unitId:7});
   assert.equal(source.prepare('SELECT COUNT(*) n FROM work_orders').get().n,1);
