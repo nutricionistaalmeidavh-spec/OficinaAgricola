@@ -348,6 +348,16 @@ export function createBillingService(port,{receivePayment,getPaymentSummary,prov
    JOIN billing_installments i ON i.id=r.installment_id
    WHERE r.status='DRAFT' AND i.status='PENDING' ORDER BY r.due_date,r.id`);
  }
+ async function getPlanForOrder(workOrderId){
+  const row=await port.first('SELECT id FROM billing_plans WHERE work_order_id=?',[num(workOrderId)]);
+  return row?loadPlan(row.id):null;
+ }
+ async function listStatements({limit=100}={}){
+  const n=Number(limit);
+  if(!Number.isInteger(n)||n<1||n>200)fail('Limite de extrato inválido');
+  // LIMIT bound parameter works on SQLite, D1 and PostgreSQL.
+  return port.all('SELECT * FROM billing_bank_entries ORDER BY booked_at DESC,id DESC LIMIT ?',[n]);
+ }
  async function financeReport({asOf=new Date().toISOString().slice(0,10)}={}){
   const day=isoDay(asOf);
   const installments=await port.first(`SELECT
@@ -374,9 +384,9 @@ export function createBillingService(port,{receivePayment,getPaymentSummary,prov
   };
  }
  return Object.freeze({
-  createPlan,getPlan:loadPlan,getInstallment:loadInstallment,activateInstallment,
+  createPlan,getPlan:loadPlan,getPlanForOrder,getInstallment:loadInstallment,activateInstallment,
   syncInstallment,confirmManual,recordSettlement,importStatement,matchStatement,
-  prepareReminders,financeReport,
+  prepareReminders,financeReport,listStatements,
   capabilities:()=>({manual:true,boleto:Boolean(providers.BOLETO),
    paymentLink:Boolean(providers.PAYMENT_LINK)})
  });
