@@ -20,6 +20,7 @@ async function openTenantAdmin(){
       ${managed.length?'<button type="button" class="btn" id="editTenantMember">Alterar acessos</button>':''}
       ${managed.length?'<button type="button" class="btn" id="tenantCompanySummary">Resumo da empresa</button>':''}
       ${possibleCatalogSources.length?'<button type="button" class="btn" id="tenantSharePart">Compartilhar catálogo</button>':''}
+      ${possibleCatalogSources.length?'<button type="button" class="btn" id="tenantShareCustomer">Compartilhar cliente</button>':''}
     </div>
     <div class="list">${units.map(u=>'<div class="list-item"><div><strong>'+esc(u.companyName)+' / '+esc(u.name)+'</strong><br><small>'+esc(u.code)+' · '+esc(u.role)+'</small></div></div>').join('')}</div>
   </div>`);
@@ -98,6 +99,49 @@ async function openTenantAdmin(){
         option.textContent=part.sku+' — '+part.description;partPicker.append(option);
       }
       if(!partPicker.options.length)toast('Nenhuma peça ativa encontrada na unidade de origem');
+    };
+    sourcePicker.onchange=()=>void load().catch(error=>toast(error.message,true));
+    await load();
+  };
+
+  const shareCustomerBtn=$('#tenantShareCustomer');
+  if(shareCustomerBtn)shareCustomerBtn.onclick=async()=>{
+    const choices=possibleCatalogSources.map(u=>'<option value="'+u.id+'">'+esc(u.companyName)+' / '+esc(u.name)+'</option>').join('');
+    showModal('Compartilhar cadastro de cliente',`<form class="form-stack">
+      <p class="muted">Compartilhamento manual somente dentro da mesma empresa, com base legal e referência registradas em auditoria. Observações privadas, veículos e finanças não são copiados.</p>
+      <label>Unidade de origem<select name="sourceUnitId" id="customerSourceUnit">${choices}</select></label>
+      <label>Unidade de destino<select name="targetUnitId" id="customerTargetUnit" required></select></label>
+      <label>Cliente<select name="customerId" id="customerShareId" required></select></label>
+      <label>Base legal<select name="legalBasis" required>
+        <option value="CONTRATO">Execução de contrato</option>
+        <option value="CONSENTIMENTO">Consentimento documentado</option>
+        <option value="LEGITIMO_INTERESSE">Legítimo interesse avaliado</option>
+        <option value="OBRIGACAO_LEGAL">Obrigação legal</option>
+      </select></label>
+      <label>Referência da finalidade ou autorização<input name="recordReference" minlength="8" maxlength="120" required placeholder="Ex.: OS-2026-001 / autorização interna"></label>
+      <button type="submit" class="btn primary">Compartilhar cadastro</button>
+    </form>`,async fd=>{
+      const data=formObj(fd);
+      const result=await api('/api/tenancy/share-customer',{method:'POST',body:{
+        sourceUnitId:Number(data.sourceUnitId),targetUnitId:Number(data.targetUnitId),customerId:Number(data.customerId),
+        legalBasis:data.legalBasis,recordReference:data.recordReference
+      }});
+      toast(result.created?'Cliente copiado com trilha de auditoria':'Cliente já compartilhado anteriormente');
+    });
+    const sourcePicker=$('#customerSourceUnit'),targetPicker=$('#customerTargetUnit'),customerPicker=$('#customerShareId');
+    const load=async()=>{
+      const source=managed.find(u=>String(u.id)===sourcePicker.value);
+      targetPicker.replaceChildren();customerPicker.replaceChildren();
+      for(const unit of managed.filter(u=>u.companyId===source.companyId&&u.id!==source.id)){
+        const option=document.createElement('option');option.value=String(unit.id);
+        option.textContent=unit.name;targetPicker.append(option);
+      }
+      const result=await api('/api/tenancy/shareable-customers?unitId='+encodeURIComponent(sourcePicker.value));
+      for(const customer of result.customers||[]){
+        const option=document.createElement('option');option.value=String(customer.id);
+        option.textContent=customer.name;customerPicker.append(option);
+      }
+      if(!customerPicker.options.length)toast('Nenhum cliente ativo encontrado na unidade de origem');
     };
     sourcePicker.onchange=()=>void load().catch(error=>toast(error.message,true));
     await load();
