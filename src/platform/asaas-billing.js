@@ -72,7 +72,13 @@ export function createAsaasBillingProvider({transport,resolveCustomer,method}={}
    const customer=String(await resolveCustomer(workOrderId)??'').trim();
    if(!/^cus_[A-Za-z0-9]+$/.test(customer))
     fail('Cliente Asaas não vinculado à OS e à unidade');
-   const created=await transport('POST','/payments',{
+   // Recuperação antes de reemitir: o Asaas não garante que um timeout
+   // signifique ausência da cobrança. Nunca repetir POST sem consulta.
+   const previous=await transport('GET','/payments?externalReference='+encodeURIComponent(ref));
+   const matches=Array.isArray(previous?.data)?
+     previous.data.filter(row=>row.externalReference===ref):[];
+   if(matches.length>1)fail('Asaas retornou cobranças duplicadas: conciliação manual necessária',409);
+   const created=matches[0]??await transport('POST','/payments',{
     customer,billingType,value:Number((sum/100).toFixed(2)),
     dueDate,externalReference:ref,
     description:'Oficina - cobrança vinculada à OS'
@@ -85,11 +91,13 @@ export function createAsaasBillingProvider({transport,resolveCustomer,method}={}
    if(!url.startsWith('https://'))fail('Asaas não retornou link HTTPS da cobrança',409);
    return {reference:created.id,paymentUrl:url};
   },
-  async status(reference,{requestId}={}){
+  async status(reference,{requestId,workOrderId}={}){
    const id=String(reference??'');
    if(!/^pay_[A-Za-z0-9_-]+$/.test(id))fail('ID Asaas inválido');
    const current=await transport('GET','/payments/'+id);
-   if(current?.id!==id||current?.externalReference!==validateReference(requestId))
+   const customer=String(await resolveCustomer(workOrderId)??'').trim();
+   if(current?.id!==id||current?.externalReference!==validateReference(requestId)||
+      current?.customer!==customer||current?.billingType!==billingType)
     fail('Asaas retornou cobrança não vinculada à parcela',409);
    const cents=centavos(current.value);
    const status=String(current.status??'');
