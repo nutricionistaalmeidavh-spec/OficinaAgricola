@@ -170,3 +170,22 @@ atômica entre múltiplos bancos. Para recuperação consistente, produza um
 conjunto de backups com escrita pausada e faça ensaio de restauração offline
 antes do cutover. O comando **não** realiza cutover, não configura produção,
 não migra PostgreSQL/D1 e não substitui backups isolados por um único snapshot.
+
+
+## Autorização do serviço nativo PostgreSQL/D1 (incremental)
+
+A API privada `/v1/*` agora exige **duas credenciais distintas**:
+`Authorization: Bearer <token-interno>` identifica o serviço autorizado;
+`X-Oficina-Session: <sessao-pessoal>` identifica o usuário autenticado na
+base isolada da unidade. Operações são recusadas sem ambas as provas.
+Sessões inativas, expiradas ou de outra unidade são negadas.
+Rotas de saúde/migração/bootstrap/login e gestão de sessão permanecem
+restritas ao token interno; criação de usuários também verifica ADMIN
+individualmente pelo token da sessão enviado ao serviço de autenticação.
+
+As rotas operacionais usam matriz explícita de permissões; relatórios
+financeiros e escrituração fiscal não ficam acessíveis a técnicos.
+**Ainda não existe ponte de sessões globais do gateway SQLite para a API
+assíncrona**. Portanto não colocar tokens internos no navegador e não mudar
+o backend principal para PostgreSQL/D1 antes da integração de identidade,
+dos contratos da UI e dos ensaios E2E em instâncias nativas.
