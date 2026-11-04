@@ -1,10 +1,11 @@
+import {fileURLToPath} from 'node:url';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {existsSync,readdirSync,readFileSync,statSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {createBillingService} from '../src/platform/billing-p3-p4.js';
 
-const root=resolve(new URL('..',import.meta.url).pathname);
+const root=resolve(fileURLToPath(new URL('..',import.meta.url)));
 function walk(dirname){
  return readdirSync(dirname).flatMap(entry=>{
   const full=join(dirname,entry);
