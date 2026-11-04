@@ -70,4 +70,53 @@ assert.equal(receipt.id,repeat.id);
 const finances=await request('GET','/v1/reports/finance');
 assert.equal(finances.receivedCents,2000);
 assert.equal(finances.pendingCents,2000);
-console.log('Wrangler local D1 real: native schema, quote, fiscal draft, stock, payment, finance OK');
+
+const auto=await request('POST','/v1/machines',{
+ customerId:c.id,type:'AUTOMOVEL',brand:'Volkswagen',model:'Gol',
+ year:2018,engine:'1.6',fuelType:'FLEX'
+});
+const fit=await request('POST','/v1/parts/'+part.id+'/fitments',{
+ brand:'Volkswagen',model:'Gol',yearFrom:2017,yearTo:2020,
+ engine:'1.6',fuelType:'FLEX'
+});
+assert.equal((await request('GET','/v1/machines/'+auto.id+'/compatible-parts'))[0].id,part.id);
+await request('DELETE','/v1/parts/'+part.id+'/fitments/'+fit.id);
+assert.equal((await request('GET','/v1/machines/'+auto.id+'/compatible-parts')).length,0);
+const plan=await request('POST','/v1/machines/'+auto.id+'/maintenance-plans',{
+ name:'Revisão preventiva',intervalDays:90,startingDate:'2026-08-01'
+});
+assert.equal(plan.next_due_date,'2026-10-30');
+assert.ok((await request('GET','/v1/maintenance-alerts?today=2026-11-04'))
+ .some(row=>row.id===plan.id));
+const completed=await request('POST','/v1/maintenance-plans/'+plan.id+'/complete',{
+ performedAt:'2026-11-04'
+});
+assert.equal(completed.last_completed_at,'2026-11-04');
+assert.equal((await request('GET','/v1/machines/'+auto.id+'/maintenance')).length,1);
+const repeatMaintenance=await fetch(base+'/v1/maintenance-plans/'+plan.id+'/complete',{
+ method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+ body:JSON.stringify({performedAt:'2026-11-04'})
+});
+assert.equal(repeatMaintenance.status,409,'duplicate preventive completion must never double-book');
+const session=await request('POST','/v1/cash/open',{
+ openingCents:1000,requestId:'d1-real-cash-001'
+});
+assert.equal(session.status,'ABERTO');
+const d1Sale={
+ paymentMethod:'DINHEIRO',cashSessionId:session.id,
+ items:[{partId:part.id,quantity:1}],
+ requestId:'d1-real-sale-001'
+};
+const sold=await request('POST','/v1/sales',d1Sale);
+assert.equal(sold.total_cents,1500);
+assert.equal((await request('POST','/v1/sales',d1Sale)).id,sold.id);
+assert.equal((await request('GET','/v1/parts/'+part.id+'/reconcile')).difference,0);
+const refunded=await request('POST','/v1/sales/'+sold.id+'/cancel',{
+ reason:'Estorno QA do fluxo nativo'
+});
+assert.equal(refunded.status,'CANCELADA');
+assert.equal((await request('GET','/v1/parts/'+part.id+'/reconcile')).difference,0);
+const cashSummary=await request('GET','/v1/cash/summary');
+assert.equal(cashSummary.expectedCashCents,1000);
+console.log('Wrangler D1 real: 46 tabelas, OS, fiscal, caixa, estoque, reembolso, fitment e revisão OK');
+
