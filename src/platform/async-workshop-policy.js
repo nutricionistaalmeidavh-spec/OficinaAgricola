@@ -16,6 +16,7 @@ export function requiredNativeRoles(method,path){
  const verb=String(method||'').toUpperCase();
  const route=String(path||'');
  if(serviceOnlyNativeRoute(route))return [];
+ if(route==='/v1/company'&&verb!=='GET')return ADMIN;
  if(/^\/v1\/fiscal\/settings$/.test(route))return verb==='GET'?FINANCE:ADMIN;
  if(/^\/v1\/fiscal\/(?:\d+\/(?:submit|reconcile))$/.test(route))return ADMIN;
  if(/^\/v1\/(?:fiscal|reports\/finance)(?:\/|$)/.test(route))return FINANCE;
