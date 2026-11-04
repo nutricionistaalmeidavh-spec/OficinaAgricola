@@ -46,8 +46,12 @@ const handler=createAsyncWorkshopHandler({
 const nodeServer=createServer(async(req,res)=>{
  const host='http://127.0.0.1';
  const url=new URL(req.url||'/',host);
+ // Base64-encoded 5 MiB attachments require roughly 6.7 MiB of JSON.
+ // All other routes stay at the strict 1 MiB request limit.
+ const maxBody=req.method==='POST'&&/^\/v1\/orders\/\d+\/attachments$/.test(url.pathname)
+   ?7*1024*1024:1048576;
  const chunks=[];let length=0;
- for await(const chunk of req){length+=chunk.length;if(length>1048576){res.writeHead(413);res.end();return;}chunks.push(chunk);}
+ for await(const chunk of req){length+=chunk.length;if(length>maxBody){res.writeHead(413);res.end();return;}chunks.push(chunk);}
  const body=Buffer.concat(chunks);
  const request=new Request(url,{method:req.method,headers:req.headers,
   ...(['GET','HEAD'].includes(req.method)?{}:{body})});
