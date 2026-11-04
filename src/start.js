@@ -74,7 +74,15 @@ const tls=process.env.HTTPS_CERT_FILE&&process.env.HTTPS_KEY_FILE?{
   cert:readFileSync(process.env.HTTPS_CERT_FILE),
   key:readFileSync(process.env.HTTPS_KEY_FILE)
 }:null;
-const server = createAssistenciaServer({ db, storageDir: process.env.STORAGE_DIR, eventRuntime, tls });
+// Chave Pix local explícita: modo multiempresa nunca herda uma chave global.
+const pixStatic=process.env.OFICINA_PIX_KEY&&process.env.OFICINA_PIX_MERCHANT_NAME&&process.env.OFICINA_PIX_CITY?{
+  pixKey:process.env.OFICINA_PIX_KEY,
+  merchantName:process.env.OFICINA_PIX_MERCHANT_NAME,
+  merchantCity:process.env.OFICINA_PIX_CITY
+}:null;
+const server = createAssistenciaServer({ db, storageDir: process.env.STORAGE_DIR, eventRuntime, tls,
+  paymentOptions:{pixStatic}
+});
 const stopBackupSchedule=startBackupSchedule({
  databasePath:process.env.DATABASE_PATH,
  uploadsPath:process.env.STORAGE_DIR,
