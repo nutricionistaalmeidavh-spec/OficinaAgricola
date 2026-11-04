@@ -1,5 +1,6 @@
 import {asyncTenantSchema,claimAsyncTenantIdentity} from './async-tenant-migrations.js';
 import {buildCanonicalSqliteManifest,verifyCanonicalTargetManifest} from './tenant-migration-manifest.js';
+import {readRemoteAttachment} from './remote-attachments.js';
 
 // Explicit OFFLINE migration, intended only for a NEW/empty PostgreSQL or
 // Cloudflare D1 staging database. Existing local SQLite is read-only.
@@ -38,6 +39,16 @@ function readySqlite(sourceDb){
      ' anexo(s) ainda no disco local precisam ser enviados/verificados antes de trocar o banco');
  return manifest;
 }
+async function verifyOriginalObjects(sourceDb,objectStore){
+ const rows=sourceDb.prepare('SELECT * FROM attachments ORDER BY id').iterate();
+ for(const row of rows){
+   if(!objectStore?.getObject)
+     fail('Anexos remotos exigem objectStore R2/MinIO explícito para verificar bytes antes da migração');
+   // Each object read validates scoped S3 key, upload checksum and expected
+   // byte count; DO NOT trust a metadata-only copy when switching storage.
+   await readRemoteAttachment(row,objectStore);
+ }
+}
 async function requirePristineTarget(port,manifest){
  const identity=await port.first('SELECT * FROM async_tenant_identity WHERE id=1');
  if(identity)fail('Banco destino já inicializado para uma empresa/unidade; não sobrescrever');
@@ -74,7 +85,7 @@ async function reseedPgSequences(port,manifest){
  * identity lock remains unset so the normal Worker denies all operations.
  */
 export async function importCanonicalSqliteTenant({sourceDb,targetPort,
- companyId,unitId,batchSize=40}={}){
+ companyId,unitId,batchSize=40,objectStore=null}={}){
  if(!['d1','postgres'].includes(targetPort?.engine))
    fail('Importação exige destino nativo PostgreSQL ou D1, nunca o SQLite local');
  const company=Number(companyId),unit=Number(unitId);
@@ -84,6 +95,7 @@ export async function importCanonicalSqliteTenant({sourceDb,targetPort,
  if(!Number.isSafeInteger(size)||size<1||size>100)
    fail('Lote de importação deve conter entre 1 e 100 linhas');
  const manifest=readySqlite(sourceDb);
+ await verifyOriginalObjects(sourceDb,objectStore);
  await requirePristineTarget(targetPort,manifest);
  const order=sortByForeignKey(sourceDb,Object.keys(manifest.tables));
  let importedRows=0;
