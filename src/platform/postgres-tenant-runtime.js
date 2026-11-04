@@ -1,3 +1,4 @@
+import {createPostgresCommandJournal} from './postgres-command-journal.js';
 import {createLocalTenantObjectStore} from './local-tenant-object-store.js';
 import {createCommonDataAdapter} from './common-data-adapter.js';
 import {createAsyncWorkshopServices} from './async-workshop-services.js';
@@ -60,7 +61,9 @@ export function createPostgresTenantRuntimeFactory({
      idleTimeoutMillis:20000,statement_timeout:10000,
      options:'-c search_path='+schema});
    try{
-     const port=createCommonDataAdapter({engine:'postgres',pool});
+     const basePort=createCommonDataAdapter({engine:'postgres',pool});
+     const journal=createPostgresCommandJournal(basePort);
+     const port=journal.port;
      if(created){
        await migrateAsyncTenantStore(port);
        await claimAsyncTenantIdentity(port,{companyId:unit.companyId,unitId:unit.id});
@@ -71,14 +74,38 @@ export function createPostgresTenantRuntimeFactory({
        :localStorageRoot?createLocalTenantObjectStore({
           root:localStorageRoot,companyId:unit.companyId,unitId:unit.id
         }):null;
-     const handler=createAsyncWorkshopHandler({
+     const nativeHandler=createAsyncWorkshopHandler({
        services:createAsyncWorkshopServices(port,{objectStore}),
        serviceToken,
        preflight:()=>assertAsyncTenantIdentity(port,{
          companyId:unit.companyId,unitId:unit.id
        })
      });
-     return Object.freeze({handler,companyId:unit.companyId,unitId:unit.id,
+     const handler=async request=>{
+       const key=request.headers.get('x-oficina-command-id');
+       const scope=request.headers.get('x-oficina-command-scope');
+       if(!key||!scope)return nativeHandler(request);
+       if(request.method==='GET'||request.method==='HEAD')
+         fail('Journal não aceita GET',400);
+       let body;
+       try{body=await request.clone().json();}
+       catch{fail('Payload de journal inválido',400);}
+       try{
+         const result=await journal.execute({
+           scope,requestId:key,body,action:()=>nativeHandler(request)
+         });
+         return Response.json(result.body,{status:result.cached?200:result.status});
+       }catch(error){
+         if(error.safeResponse)
+           return new Response(error.safeResponse.body,{
+             status:error.safeResponse.status,
+             headers:{'content-type':error.safeResponse.contentType}
+           });
+         throw error;
+       }
+     };
+     return Object.freeze({handler,commandStatus:journal.commandStatus,
+       companyId:unit.companyId,unitId:unit.id,
        schemaName:schema,pool});
    }catch(error){
      await pool.end();
