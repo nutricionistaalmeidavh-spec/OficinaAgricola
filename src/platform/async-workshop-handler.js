@@ -453,6 +453,8 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
      return json(await services.recordSettlement(await dataFrom(request,16384)),201);
    if(path==='/v1/billing/report'&&method==='GET')
      return json(await services.financeReport({asOf:u.searchParams.get('asOf')||undefined}));
+   if(path==='/v1/billing/receipts/available'&&method==='GET')
+     return json(await services.listAvailableReceipts({limit:u.searchParams.get('limit')||100}));
    if(path==='/v1/billing/statements'&&method==='GET')
      return json(await services.listStatements({limit:u.searchParams.get('limit')||100}));
    if(path==='/v1/billing/statements'&&method==='POST')
