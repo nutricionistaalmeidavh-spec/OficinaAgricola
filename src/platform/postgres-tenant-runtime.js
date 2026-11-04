@@ -1,3 +1,4 @@
+import {startBillingReminderScheduler} from './billing-reminder-scheduler.js';
 import {createPostgresCommandJournal} from './postgres-command-journal.js';
 import {createLocalTenantObjectStore} from './local-tenant-object-store.js';
 import {createCommonDataAdapter} from './common-data-adapter.js';
@@ -77,6 +78,8 @@ export function createPostgresTenantRuntimeFactory({
      const paymentOptions=typeof paymentOptionsForUnit==='function'
        ?paymentOptionsForUnit(unit,port):{};
      const services=createAsyncWorkshopServices(port,{objectStore,paymentOptions});
+      const stopReminders=startBillingReminderScheduler(services,{onError:error=>
+       console.error('[postgres-reminders]',error.message)});
      const nativeHandler=createAsyncWorkshopHandler({
        services,
        serviceToken,
@@ -109,7 +112,7 @@ export function createPostgresTenantRuntimeFactory({
      };
      return Object.freeze({handler,services,port,commandStatus:journal.commandStatus,
        companyId:unit.companyId,unitId:unit.id,
-       schemaName:schema,pool});
+       schemaName:schema,pool,stopReminders});
    }catch(error){
      await pool.end();
      throw error;
@@ -131,7 +134,7 @@ export function createPostgresTenantRuntimeFactory({
    const tasks=[...cache.values()];
    const settled=await Promise.allSettled(tasks);
    await Promise.all(settled.filter(x=>x.status==='fulfilled')
-     .map(x=>x.value.pool.end()));
+     .map(async x=>{x.value.stopReminders?.();await x.value.pool.end();}));
    await admin.end();
  }
  return Object.freeze({handlerForUnit,close});
