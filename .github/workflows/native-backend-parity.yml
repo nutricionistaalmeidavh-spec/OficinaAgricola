@@ -54,6 +54,11 @@ jobs:
           CI: "true"
           POSTGRES_TEST_URL: postgresql://oficina_ci:ci-only-disposable@127.0.0.1:5432/oficina_ci
         run: node scripts/verify-postgres-native.mjs
+      - name: PostgreSQL 16 · registry global, RBAC e sessões reais
+        env:
+          CI: "true"
+          POSTGRES_TEST_URL: postgresql://oficina_ci:ci-only-disposable@127.0.0.1:5432/oficina_ci
+        run: node scripts/verify-postgres-registry.mjs
 
   d1-local:
     runs-on: ubuntu-latest
