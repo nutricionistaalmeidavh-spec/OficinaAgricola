@@ -185,3 +185,16 @@ test('P4 não estorna parcela reconciliada no banco nem com repasse contabilizad
   assert.equal((await core.getPaymentSummary(order.id)).receivedCents,10001);
  }finally{db.close();}
 });
+
+test('porta PostgreSQL nativa pode usar transação sem batch; D1 exige batch atômico',()=>{
+ const fake={engine:'postgres',
+  first:async()=>null,all:async()=>[],run:async()=>({changes:1}),
+  transaction:async fn=>fn(fake)};
+ const service=createBillingService(fake,{
+  receivePayment:async()=>({id:1}),getPaymentSummary:async()=>({pendingCents:100})
+ });
+ assert.equal(service.capabilities().manual,true);
+ assert.throws(()=>createBillingService({...fake,engine:'d1'},{
+  receivePayment:async()=>({id:1}),getPaymentSummary:async()=>({pendingCents:100})
+ }),/Porta SQL canônica/);
+});
