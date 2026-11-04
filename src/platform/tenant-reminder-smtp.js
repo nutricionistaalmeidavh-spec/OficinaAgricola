@@ -6,6 +6,8 @@ export function loadTenantReminderSenders(file){
  if(!file)return ()=>null;
  const stat=statSync(file);
  if(!stat.isFile()||stat.size>65536)throw Error('Mapa privado SMTP inválido ou acima de 64 KiB');
+ if(process.platform!=='win32'&&(stat.mode&0o077)!==0)
+  throw Error('Mapa SMTP privado deve ter permissão 0600');
  const config=JSON.parse(readFileSync(file,'utf8'));
  if(!config||typeof config!=='object'||Array.isArray(config))
   throw Error('Mapa SMTP por empresa/unidade inválido');
