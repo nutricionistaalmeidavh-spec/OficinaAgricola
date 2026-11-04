@@ -8,6 +8,7 @@ import {createAsyncWorkshopFinance} from './async-workshop-finance.js';
 import {createAsyncWorkshopOrders} from './async-workshop-orders.js';
 import {createAsyncWorkshopInventory} from './async-workshop-inventory.js';
 import {createAsyncWorkshopAutomotive} from './async-workshop-automotive.js';
+import {createAsyncWorkshopAuth} from './async-workshop-auth.js';
 import {createAsyncWorkshopCrm} from './async-workshop-crm.js';
 
 // Async canonical service layer for PostgreSQL and D1. Each command is
@@ -469,6 +470,7 @@ export function createAsyncWorkshopServices(port,{fiscalProvider=null}={}){
    ...createAsyncWorkshopOrders(port,{createWorkOrder,transitionWorkOrder,getWorkOrder}),
    ...createAsyncWorkshopInventory(port),
    ...createAsyncWorkshopAutomotive(port),
+   ...createAsyncWorkshopAuth(port),
    ...createAsyncWorkshopCrm(port)
  });
 }
