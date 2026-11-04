@@ -152,8 +152,19 @@ test('Ka Fox Palio incluem uma variante experimental de rodas reparadas sem perd
     assert.ok(record?.variants?.repaired?.sha256,'Variante rodas não cadastrada para '+id);
     assert.equal(record.variants.repaired.experimental,true);
     assert.equal(record.review_status,'PENDENTE_REVISAO_VISUAL');
-    assert.match(resolveEntry(manifest,id,'repaired').path,new RegExp('^curadoria/geometria/'+id+'-rodas\\\\.glb$'));
-    assert.match(assetUrl(resolveEntry(manifest,id,'repaired')),/curadoria\/geometria\/.+-rodas\.glb$/);
+    assert.match(resolveEntry(manifest,id,'repaired').path,new RegExp('^curadoria/rodas-reparadas/'+id+'-rodas\\\\.glb$'));
+    assert.match(assetUrl(resolveEntry(manifest,id,'repaired')),/curadoria\/rodas-reparadas\/.+-rodas\.glb$/);
+  }
+  const hashes={
+    'ford-ka':'f1a341df196763861685003e8ff10ec5f8dd1dbe69fde4f4b228e612d1290d98',
+    'vw-fox':'4f17486528adb1763dcdbdca09c3cb05ed6b2ec561fd91fb3f33adc7305b6df7',
+    'fiat-palio':'1fe9608e1b398d7ae8686cf56dee5dcfe05e47874b64f6461c5e92036aee99b8'
+  };
+  for(const id of ids){
+    const v=resolveEntry(manifest,id,'repaired');
+    assert.equal(v.ref,'0bf77d508b02df9889bda4b9c403119fbd83774f');
+    assert.equal(v.sha256,hashes[id]);
+    assert.equal(v.geometry,id==='fiat-palio'?'PROCEDURAL_APPROXIMATION':'REUSED_SOURCE_WHEELS');
   }
   assert.throws(()=>resolveEntry(manifest,'fiat-uno','repaired'),/indisponível/i);
   validateCatalog(manifest);
@@ -166,7 +177,7 @@ test('GLB reparado segue as mesmas regras de integridade e cache das outras vari
     const entry3d={...entry(bin),variants:{
       ...entry(bin).variants,
       repaired:{ref:'0123456789abcdef0123456789abcdef01234567',
-        path:'curadoria/geometria/fiat-uno-rodas.glb',
+        path:'curadoria/rodas-reparadas/fiat-uno-rodas.glb',
         sha256:createHash('sha256').update(bin).digest('hex'),bytes:bin.length,experimental:true}
     }};
     const catalog={models:[entry3d]};
@@ -182,7 +193,8 @@ test('interface permite abrir rodas reparadas e identificar que são peças não
   const client=await readFile(new URL('../public/model-library3d.js',import.meta.url),'utf8');
   const viewer=await readFile(new URL('../public/model-viewer.js',import.meta.url),'utf8');
   const server=await readFile(new URL('../src/server.js',import.meta.url),'utf8');
-  assert.match(client,/Rodas reconstruídas.*experimental/);
+  assert.match(client,/Rodas originais reposicionadas/);
+  assert.match(client,/Rodas complementares/);
   assert.match(client,/variants\.includes\('repaired'\)/);
   assert.match(viewer,/original','restored','repaired/);
   assert.match(server,/models3d.*repaired/);
