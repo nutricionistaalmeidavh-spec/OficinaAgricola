@@ -58,8 +58,9 @@ export async function saveRemoteAttachment(db,workOrderId,input,{objectStore,onP
   }
   const key=osId+'/'+randomUUID()+ext;
   await objectStore.putObject({key,data:raw,mimeType:input.mimeType});
+  let canonicalRow=null,created=false;
   try{
-    return transaction(db,()=>{
+    canonicalRow=transaction(db,()=>{
       // Final re-check in same transaction for replay/concurrency.
       if(id){
         const existing=db.prepare('SELECT attachment_id,payload_hash FROM tenant_remote_upload_requests WHERE work_order_id=? AND request_id=?').get(osId,id);
@@ -78,6 +79,7 @@ export async function saveRemoteAttachment(db,workOrderId,input,{objectStore,onP
         .run(osId,id,fingerprint,attachmentId);
       const row=db.prepare('SELECT * FROM attachments WHERE id=?').get(attachmentId);
       if(onPersist)onPersist(row);
+      created=true;
       return row;
     });
   }catch(error){
@@ -85,6 +87,13 @@ export async function saveRemoteAttachment(db,workOrderId,input,{objectStore,onP
     catch{console.error('[remote-attachment] Falha na remoção do objeto órfão');}
     throw error;
   }
+  if(!created){
+    // Another concurrent request persisted the same idempotency key while this
+    // upload was in flight. Never leave its unused object behind.
+    try{await objectStore.deleteObject({key});}
+    catch{console.error('[remote-attachment] Falha na remoção do objeto de replay');}
+  }
+  return canonicalRow;
 }
 export async function readRemoteAttachment(row,objectStore){
   if(!row?.relative_path?.startsWith('s3:'))fail('Anexo não aponta para armazenamento remoto');
