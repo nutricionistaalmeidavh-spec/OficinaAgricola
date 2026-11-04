@@ -91,12 +91,16 @@ Por padrão, o core mantém SQLite e anexos no disco (100% self-hosted). Além d
 - Em cada transmissão/consulta, o CNPJ do snapshot fiscal é verificado contra o CNPJ atribuído à empresa; chamadas com outro CNPJ são rejeitadas antes de alcançar o adaptador. Um ID de empresa sem emissor configurado não herda os caminhos fiscais globais da matriz.
 - O emissor real depende de credenciamento SEFAZ/município, certificado digital, conteúdo tributário, ambiente configurado e homologação. Não registrar credenciais no banco nem no Git.
 
-## Transferência de OS entre filiais: estágio inicial seguro
+## Transferência operacional de OS com dossiê completo e proveniência
 
-- `POST /api/tenancy/os-transfer` recebe `sourceUnitId`, `targetUnitId`, `workOrderId`, `legalBasis`, `recordReference`, `requestId`. Requer ADMIN nas duas unidades da mesma empresa.
-- Apenas OS em `ENTRADA` ou `DIAGNOSTICO` **sem** orçamento, baixa de estoque, recebimentos, despesas, documentos fiscais, anexos, agenda ou checklists podem ser transferidas pelo fluxo atual.
-- O serviço cria novos IDs locais para cliente/veículo/OS no destino, sem copiar notas privadas, persiste referência da origem, cancela a OS original e registra auditoria. A intenção durável permite retry via `POST /api/tenancy/os-transfer/retry` com `transferId`, evitando duplicidade.
-- **Não atende ainda à transferência de uma OS complexa completa** com orçamento aprovado, pagamentos, documentos fiscais, itens de estoque e anexos. Esses vínculos precisam de preservação de evidências, trilha fiscal e livro contábil, sem duplicação automática.
+- `POST /api/tenancy/os-transfer` recebe `sourceUnitId`, `targetUnitId`, `workOrderId`, `legalBasis`, `recordReference`, `requestId`. Exige ADMIN ativo nas duas unidades da **mesma empresa**. Rejeita OS terminal (cancelada, entregue, já transferida).
+- OS em qualquer etapa operacional aberta podem ser transferidas, inclusive com orçamento aprovado, recebimentos, despesas, peças consumidas, documentos fiscais, checklists, agenda e anexos. **A transferência não muda o responsável legal pelos lançamentos passados**: permanecem nos livros originais, sem duplicar pagamentos, estoque ou emissão de NF na filial de destino.
+- A unidade destino recebe nova OS de continuidade (`ENTRADA`, ou `DIAGNOSTICO` quando aplicável), novo ID local, cliente e veículo vinculados, sem observações privadas e sem novo orçamento automaticamente aprovado. A unidade origem muda para estado terminal `TRANSFERIDA`, que **não é cancelamento nem estorno**; a receita faturada, valores pendentes, notas e pagamentos permanecem contabilizados na origem.
+- A intenção durável guarda ID de origem, destino, base legal, referência e versão da OS na origem. A atualização de estado usa controle de versão para falhar em caso de alteração concorrente. Se o servidor cair depois de copiar destino, `POST /api/tenancy/os-transfer/retry` retoma por `transferId` sem duplicar OS e mantém auditoria.
+- `GET /api/tenancy/os-transfers?companyId=...` lista histórico auditado apenas para ADMIN de **todas** as unidades da empresa. `GET /api/tenancy/os-transfer/:id/dossier` exige ADMIN nas **duas** unidades envolvidas e consulta, na fonte original, orçamento, itens, recebimentos, eventos de pagamento, consumos de estoque, despesas, fiscal, anexos, checklists, agenda e alterações da OS, sem replicar livros.
+- `GET /api/tenancy/os-transfer/:id/attachments/:attachmentId/file` exige a mesma autorização, verifica se o anexo pertence à OS original e baixa com restrição de diretório, verificação de tamanho e acesso ao storage correto (disco ou S3). O painel mostra os históricos e baixa os arquivos autenticadamente.
+- **Limite fiscal:** transferência operacional não transfere titularidade de NF-e/NFS-e, obrigações de estorno, crédito de estoque já consumido, conta a receber ou certificado de emitente. Essas obrigações permanecem na empresa/unidade original; movimentações físicas novas exigem operação de estoque/documentação própria.
+- Não existem transações distribuídas entre os bancos das filiais: a continuidade depende de saga e reconciliação em falhas parciais. Para operações históricas irregulares, auditar antes de transferir, sem copiar automaticamente lançamentos com inconsistências.
 
 ## Portas SQL assíncronas nativas (fase de migração)
 
@@ -108,6 +112,6 @@ Por padrão, o core mantém SQLite e anexos no disco (100% self-hosted). Além d
 
 - Banco PostgreSQL e Cloudflare D1: portas assíncronas parametrizadas estão prontas para receber drivers nativos, mas **falta adaptar cada serviço, as migrações e testes de integração com instâncias reais**. Nunca alegar armazenamento primário concluído.
 - Arquivos MinIO/R2: anexos novos e PDFs anexados já têm backend S3 primário opcional. Faltam política de retenção, varredura de órfãos, restore remoto testado e cópia automatizada dos objetos legados.
-- Compartilhamento entre filiais: cópia manual auditada e idempotente de peças (estoque inicial zero) e contatos básicos de clientes (sem notas privadas, com base legal e referência obrigatórias). Transferência manual de estoque agora registra saída/entrada canônicas com intenção persistida e retomada por ID; não é transação distribuída. ADMIN em ambas as unidades. Transferência integral de OS com vínculos financeiros/fiscais e anexos, sincronização contínua e automatização da base legal permanecem pendentes.
+- Compartilhamento entre filiais: catálogos, clientes, estoque e continuidade operacional de OS com dossiê de evidências e livros preservados na origem. Não é uma migração de titularidade fiscal nem transação distribuída. Sincronização contínua, compensação automática e automatização da análise LGPD seguem pendentes.
 - Relatórios consolidados da empresa, testes completos de carga, restore do conjunto e QA E2E da UI no Linux.
 - Nenhum merge/deploy sem gates aprovados e revisão de isolamento.
