@@ -47,6 +47,14 @@ const tech=await request('POST','/v1/auth/users',{
  role:'TECNICO',sessionToken:login.token
 });
 assert.equal(tech.role,'TECNICO');
+const techLogin=await request('POST','/v1/auth/login',{
+ username:'d1-tech',password:'S3cureTech#2026'
+});
+const forbiddenFinance=await fetch(base+'/v1/reports/finance',{headers:{
+ Authorization:'Bearer '+token,'X-Oficina-Session':techLogin.token
+}});
+assert.equal(forbiddenFinance.status,403,'a technician must never read financial reports');
+
 const c=await request('POST','/v1/customers',{name:'D1 Cliente real'});
 const machine=await request('POST','/v1/machines',{customerId:c.id,type:'AUTOMOVEL',brand:'VW'});
 const os=await request('POST','/v1/orders',{customerId:c.id,machineId:machine.id,problemReported:'D1 QA'});
