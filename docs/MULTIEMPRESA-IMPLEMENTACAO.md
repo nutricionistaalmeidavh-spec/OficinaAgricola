@@ -121,6 +121,20 @@ A restauração de um conjunto multiempresa **exige desligar o serviço e recupe
 - Existe um **núcleo assíncrono independente** (`async-workshop-services.js`) para clientes, veículos, OS, peças, movimentações de estoque, pagamentos e resumo financeiro, com entradas experimentais PostgreSQL localhost e Worker D1. Seus comandos não usam SQLite legado. Os testes reais de PostgreSQL 16 e Workerd/D1 local são executados no GitHub Actions sem conectar dados de clientes ou infraestrutura paga.
 - **Paridade parcial:** as interfaces completas de orçamento/fiscal, autenticação/RBAC, relatórios, anexos e aplicação desktop/PWA ainda dependem do runtime legado. Não dirigir clientes ao backend nativo experimental como se fosse sistema completo.
 
+## Backend nativo SQL assíncrono (PostgreSQL ou D1) — serviço isolado
+
+O núcleo atual oferece um **serviço de domínio assíncrono separado**, que ainda **não substitui toda a API** do Oficina. O core SQLite/disco permanece gratuito, local e obrigatório para o sistema completo até o restante dos módulos ser migrado.
+
+- `migrateAsyncTenantStore()` cria esquema canônico para cliente, veículo, OS, histórico, orçamento, estoque, movimentos, pagamentos, despesas, anexos, documentos e eventos fiscais. Usa `BIGINT` no PostgreSQL para IDs, chaves e centavos; D1 mantém INTEGER de 64 bits.
+- `claimAsyncTenantIdentity()` vincula o banco exclusivamente a empresa/unidade, e `assertAsyncTenantIdentity()` verifica cada operação. Compartilhar indevidamente o mesmo DB entre filiais é recusado.
+- `createAsyncWorkshopServices()` possui criação de cliente/veículo/OS, mudança de status, orçamento e aprovação, movimentação de estoque, recebimentos idempotentes, rascunhos fiscais e resumo financeiro. O envio fiscal efetivo ainda depende da integração ACBr/homologação do runtime principal.
+- `createAsyncWorkshopHandler()` é um serviço HTTP privado, somente com token de serviço forte e rotas explícitas. Não oferece consultas SQL arbitrárias. `POST /v1/migrate` inicializa schema e identidade sem importar dados antigos silenciosamente.
+- PostgreSQL self-hosted: instale o driver OSS `pg@8` somente quando optar pelo modo, configure `OFICINA_POSTGRES_URL`, `ASYNC_BACKEND_SERVICE_TOKEN`, `ASYNC_TENANT_COMPANY_ID`, `ASYNC_TENANT_UNIT_ID` e execute `npm run start:postgres-core`. O serviço escuta apenas loopback.
+- D1 opcional: Worker `src/workers/d1-workshop.js` e `deploy/d1/wrangler.example.toml`. Vincule banco D1 exclusivo por tenant e cadastre `ASYNC_BACKEND_SERVICE_TOKEN` como secret privado. Não publicar sem autenticação, CNPJ e configuração revisados.
+- Os testes de paridade usam PostgreSQL 16 real em contêiner e ambientes D1 locais, sem conta Cloudflare paga ou secrets de produção.
+
+**Ainda não habilite `OFICINA_DATABASE_ENGINE=postgres` ou `d1` em `npm run start:multi`**: esse gateway contém dezenas de rotas legadas (vendas, caixa, checklists, diagnósticos, agenda, fiscalização completa, RH e relatórios) que ainda dependem de SQLite síncrono. Misturar duas fontes canônicas silenciosamente é proibido.
+
 ## Pendências técnicas para declarar implementação integral
 
 - Banco PostgreSQL e Cloudflare D1: núcleo operacional assíncrono e testes contra PostgreSQL 16 real / D1 local já implementados; ainda falta adaptar todas as rotas, login, RBAC, anexos, fiscal, domínio completo e a UI, com paridade E2E no backend selecionado. Sem fallback disfarçado.
