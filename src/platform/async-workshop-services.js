@@ -76,6 +76,9 @@ export function createAsyncWorkshopServices(port,{fiscalProvider=null,objectStor
    if(!customer)fail('Cliente não encontrado',404);
    const machine=await port.first('SELECT * FROM machines WHERE id=? AND customer_id=? AND active=1',[machineId,customerId]);
    if(!machine)fail('Máquina não pertence ao cliente',409);
+   const unitId=numericId(input.unitId??1);
+   if(!await port.first('SELECT id FROM shop_units WHERE id=? AND active=1',[unitId]))
+     fail('Unidade da OS inválida',409);
    const workOrderId=id(),at=iso(),priority=text(input.priority)||'NORMAL';
    if(!new Set(['BAIXA','NORMAL','ALTA','URGENTE']).has(priority))fail('Prioridade inválida');
    const fields=[
@@ -84,14 +87,14 @@ export function createAsyncWorkshopServices(port,{fiscalProvider=null,objectStor
      text(input.internalNotes),JSON.stringify({id:customer.id,name:customer.name,
        document:customer.document,phone:customer.phone,address:customer.address}),
      JSON.stringify({id:machine.id,type:machine.type,brand:machine.brand,
-       model:machine.model,vin:machine.vin}),at,at
+       model:machine.model,vin:machine.vin}),unitId,at,at
    ];
    const statements=[
     select(`INSERT INTO work_orders(
        id,os_number,customer_id,machine_id,entered_at,problem_reported,
        diagnosis,technician_id,estimated_delivery,priority,internal_notes,
-       status,snapshot_customer,snapshot_machine,created_at,updated_at
-     ) VALUES(?,${port.engine==='postgres'?"nextval('async_os_number_seq')":'(SELECT COALESCE(MAX(os_number),0)+1 FROM work_orders)'},?,?,?,?,?,?,?,?,?,'ENTRADA',?,?,?,?)`,fields),
+       status,snapshot_customer,snapshot_machine,unit_id,created_at,updated_at
+     ) VALUES(?,${port.engine==='postgres'?"nextval('async_os_number_seq')":'(SELECT COALESCE(MAX(os_number),0)+1 FROM work_orders)'},?,?,?,?,?,?,?,?,?,'ENTRADA',?,?,?,?,?)`,fields),
     select(`INSERT INTO work_order_status_history(
        work_order_id,from_status,to_status,reason,changed_at
      ) VALUES(?,NULL,'ENTRADA','Abertura da OS',?)`,[workOrderId,at]),
