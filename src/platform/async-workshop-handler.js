@@ -40,6 +40,21 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
      return json({ok:true,backend:'async-workshop'});
    if(path==='/v1/migrate'&&method==='POST'&&migrate)
      return json(await migrate());
+   if(path==='/v1/auth/bootstrap'&&method==='POST')
+     return json(await services.bootstrapAdmin(await dataFrom(request)),201);
+   if(path==='/v1/auth/login'&&method==='POST')
+     return json(await services.login(await dataFrom(request)));
+   if(path==='/v1/auth/users'&&method==='POST'){
+     const input=await dataFrom(request);
+     if(!input.sessionToken)
+       throw Object.assign(new Error('Sessão inválida'),{status:401});
+     const {sessionToken,...fields}=input;
+     return json(await services.createUser(fields,sessionToken),201);
+   }
+   if(path==='/v1/auth/logout'&&method==='POST'){
+     const {sessionToken}=await dataFrom(request);
+     return json(await services.logout(sessionToken));
+   }
    if(path==='/v1/customers'&&method==='POST')
      return json(await services.createCustomer(await dataFrom(request)),201);
    if(path==='/v1/customers'&&method==='GET')
@@ -338,7 +353,7 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
      }));
    return json({error:'Rota interna não encontrada'},404);
   }catch(error){
-   const status=[400,403,404,409,413,415,422].includes(error?.status)?error.status:500;
+   const status=[400,401,403,404,409,413,415,422].includes(error?.status)?error.status:500;
    return json({error:status===500?'Falha na operação SQL interna':error.message},status);
   }
  };
