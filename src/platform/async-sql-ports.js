@@ -52,7 +52,7 @@ function normalizedPgRows(result){
    const next={...row};
    for(const name of numeric){
      const value=next[name];
-     if(typeof value==='string'&&/^-?\\d+$/.test(value)){
+     if(typeof value==='string'&&/^-?\d+$/.test(value)){
        const exact=BigInt(value);
        if(exact>=lower&&exact<=upper)next[name]=Number(exact);
      }
