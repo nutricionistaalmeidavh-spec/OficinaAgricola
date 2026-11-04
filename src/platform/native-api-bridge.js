@@ -41,7 +41,11 @@ export function createNativeApiBridge({fetchImpl=fetch}={}){
   const sessionToken=scopedToken(backend,globalToken);
   const commonHeaders={authorization:'Bearer '+backend.serviceToken,
     'content-type':'application/json'};
-  const auth=await fetchImpl(new URL('/v1/internal/gateway-session',base),{
+  const remoteFetch=async(url,options)=>{
+   try{return await fetchImpl(url,options);}
+   catch{fail('Backend nativo temporariamente indisponível',503);}
+  };
+  const auth=await remoteFetch(new URL('/v1/internal/gateway-session',base),{
    method:'POST',headers:commonHeaders,
    body:JSON.stringify({globalUserId:Number(user.id),name:user.name,
     role:unit.role,sessionToken,expiresAt}),
@@ -53,6 +57,13 @@ export function createNativeApiBridge({fetchImpl=fetch}={}){
     if(body===null||typeof body!=='object'||Array.isArray(body))
       fail('Corpo JSON inválido');
     input=mapping.mapBody(body);
+    // Global identity is authoritative; clients cannot forge native audit IDs.
+    delete input.createdBy;delete input.changedBy;delete input.userRole;
+    if(mapping.path.startsWith('/v1/technicians')&&input.userId!=null)
+      fail('Vinculação de técnico ao usuário exige sincronização de cadastro',409);
+    if(mapping.path.startsWith('/v1/sales/')&&mapping.path.endsWith('/cancel'))
+      input.userId=2**52+Number(user.id);
+
     if(idempotencyKey&&typeof idempotencyKey==='string'&&
        /^[a-zA-Z0-9_:.-]{3,128}$/.test(idempotencyKey)&&!input.requestId)
       input.requestId=idempotencyKey;
@@ -62,7 +73,7 @@ export function createNativeApiBridge({fetchImpl=fetch}={}){
   }
   const target=new URL(mapping.path+String(search||''),base);
   const headers={...commonHeaders,'x-oficina-session':sessionToken};
-  const response=await fetchImpl(target,{
+  const response=await remoteFetch(target,{
    method:mapping.method,headers,
    ...(['GET','HEAD'].includes(mapping.method)?{}:{body:JSON.stringify(input)}),
    signal:AbortSignal.timeout(30000)
