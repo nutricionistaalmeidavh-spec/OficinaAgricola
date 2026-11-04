@@ -61,3 +61,23 @@ test('adapter factory refuses unconfigured engines instead of silently falling b
  assert.throws(()=>createCommonDataAdapter({engine:'d1'}),/D1|binding/);
  assert.throws(()=>createCommonDataAdapter({engine:'auto'}),/Engine|suportado/);
 });
+
+test('shared catalog CRUD and technicians behave identically on the legacy local database',async()=>{
+ const db=openDatabase(':memory:');
+ try{
+  migrate(db);migrateAssistencia(db);
+  const api=createAsyncWorkshopServices(createCommonDataAdapter({engine:'sqlite',db}));
+  const customer=await api.createCustomer({name:'Cliente A',phone:'16912345678'});
+  assert.equal((await api.listCustomers({search:'Cliente'})).length,1);
+  const updated=await api.updateCustomer(customer.id,{name:'Cliente B',email:'contato@empresa.com'});
+  assert.equal(updated.name,'Cliente B');
+  assert.equal(updated.phone,'16912345678');
+  const vehicle=await api.createMachine({customerId:customer.id,type:'AUTOMOVEL',plate:'ABC1D23',brand:'Ford'});
+  assert.equal((await api.listMachines({customerId:customer.id})).length,1);
+  assert.equal((await api.updateMachine(vehicle.id,{model:'Fiesta'})).model,'Fiesta');
+  await assert.rejects(api.createMachine({customerId:999,type:'AUTOMOVEL'}),/Cliente/);
+  const tech=await api.createTechnician({name:'Carlos',specialty:'Motor'});
+  assert.equal((await api.listTechnicians()).length,1);
+  assert.equal(tech.name,'Carlos');
+ }finally{db.close();}
+});
