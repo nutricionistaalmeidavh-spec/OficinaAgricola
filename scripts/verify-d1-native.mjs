@@ -15,6 +15,7 @@ for(let attempt=0;attempt<40;attempt++){
  await new Promise(resolve=>setTimeout(resolve,400));
 }
 if(!ready)throw Error('Local Wrangler D1 Worker failed to start');
+let personalSession=null;
 const request=async(method,path,body)=>{
  const response=await fetch(base+path,{method,headers:{
    Authorization:'Bearer '+token,
