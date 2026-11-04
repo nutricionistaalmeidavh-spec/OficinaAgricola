@@ -43,7 +43,7 @@ const TABLES=[
   completed_at TEXT,delivered_at TEXT,
   snapshot_customer TEXT NOT NULL,snapshot_machine TEXT NOT NULL,
   quote_total_cents INTEGER NOT NULL DEFAULT 0,
-  unit_id INTEGER NOT NULL DEFAULT 1,version INTEGER NOT NULL DEFAULT 1,
+  unit_id INTEGER DEFAULT 1,version INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL,updated_at TEXT NOT NULL
 )`,
 `CREATE TABLE IF NOT EXISTS work_order_status_history(
