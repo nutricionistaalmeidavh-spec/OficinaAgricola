@@ -1,8 +1,7 @@
 import {requestPayloadLimit} from './platform/billing-http-limits.js';
 import {fileURLToPath} from 'node:url';
-// Self-hosted, opt-in unified PostgreSQL gateway for P3/P4.
-// It replaces SQLite for this process only; main/legacy entry points stay
-// untouched until migration, restore and Windows E2E gates pass.
+// Backend canônico PostgreSQL. Sem SQLite ou fallback para o runtime do Oficina.
+// Self-hosted R$0; PostgreSQL embarcado no instalador Windows.
 import {createServer} from 'node:http';
 import {readFile,stat} from 'node:fs/promises';
 import {resolve,extname,sep} from 'node:path';
