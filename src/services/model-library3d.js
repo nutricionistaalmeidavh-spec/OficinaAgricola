@@ -13,7 +13,7 @@ const inflight=new Map();
 export const manifest=JSON.parse(readFileSync(DATA_FILE,'utf8'));
 const SHA=/^[a-f0-9]{64}$/;
 const GIT_REF=/^[a-f0-9]{40}$/;
-const FILE=/^(?:assets\/[a-z0-9-]+\.glb|curadoria\/restaurados\/[a-z0-9-]+-restaurado\.glb)$/;
+const FILE=/^(?:assets\/[a-z0-9-]+\.glb|curadoria\/restaurados\/[a-z0-9-]+-restaurado\.glb|curadoria\/geometria\/[a-z0-9-]+-rodas\.glb)$/;
 const SAFE_ID=/^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export function validateCatalog(catalog=manifest){
@@ -26,12 +26,13 @@ export function validateCatalog(catalog=manifest){
     if(!['available','blocked'].includes(entry.status))throw new Error('Estado de modelo inválido');
     if(entry.status==='blocked'&&Object.keys(entry.variants||{}).length)throw new Error('Modelo bloqueado não pode ter GLB');
     for(const [kind,variant] of Object.entries(entry.variants||{})){
-      if(!['original','restored'].includes(kind)||!GIT_REF.test(variant.ref)||
+      if(!['original','restored','repaired'].includes(kind)||!GIT_REF.test(variant.ref)||
          !FILE.test(variant.path)||!SHA.test(variant.sha256)||
          (variant.bytes!=null&&(!Number.isInteger(variant.bytes)||variant.bytes<=0||variant.bytes>MAX_BYTES)))
         throw new Error('Fonte de GLB inválida');
       if(kind==='original'&&!variant.path.startsWith('assets/'))throw new Error('Variante original fora de assets/');
       if(kind==='restored'&&!variant.path.startsWith('curadoria/restaurados/'))throw new Error('Variante restaurada fora da curadoria');
+      if(kind==='repaired'&&(!variant.path.startsWith('curadoria/geometria/')||variant.experimental!==true))throw new Error('Rodas reparadas devem ser experimentais e vir da curadoria geométrica');
     }
   }
   return catalog;
@@ -39,7 +40,7 @@ export function validateCatalog(catalog=manifest){
 validateCatalog(manifest);
 
 export function resolveEntry(catalog,id,variant='original'){
-  if(!SAFE_ID.test(String(id||''))||!['original','restored'].includes(variant))throw new Error('Modelo 3D indisponível');
+  if(!SAFE_ID.test(String(id||''))||!['original','restored','repaired'].includes(variant))throw new Error('Modelo 3D indisponível');
   const item=catalog.models.find(x=>x.id===id);
   if(!item||item.status!=='available'||!item.variants?.[variant])
     throw new Error('Modelo 3D não encontrado ou indisponível para download');
@@ -53,7 +54,7 @@ export function assetUrl(entry){
 }
 
 function filename(id,variant){
-  if(!SAFE_ID.test(String(id||''))||!['original','restored'].includes(variant))
+  if(!SAFE_ID.test(String(id||''))||!['original','restored','repaired'].includes(variant))
     throw new Error('Identificador de arquivo inválido');
   return id+'__'+variant+'.glb';
 }
