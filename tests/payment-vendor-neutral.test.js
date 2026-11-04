@@ -27,5 +27,8 @@ test('parcelamento self-hosted não habilita boleto e link sem provedor explíci
   transaction:async fn=>fn(port)};
  const finance=createBillingService(port,{receivePayment:async()=>({id:1}),
   getPaymentSummary:async()=>({pendingCents:10000})});
- assert.deepEqual(finance.capabilities(),{manual:true,boleto:false,paymentLink:false});
+ assert.equal(finance.capabilities().manual,true);
+ assert.equal(finance.capabilities().boleto,false);
+ assert.equal(finance.capabilities().paymentLink,false);
+ assert.equal(finance.capabilities().externalRefunds,false);
 });
