@@ -3,6 +3,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomBytes} from 'node:crypto';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {createCommonDataAdapter} from '../src/platform/common-data-adapter.js';
 import {createPostgresTenantRegistry} from '../src/platform/async-postgres-registry.js';
 import {createPostgresTenantRuntimeFactory,tenantSchemaName} from '../src/platform/postgres-tenant-runtime.js';
@@ -14,6 +17,7 @@ const {Pool}=await import('pg');
 const url=process.env.POSTGRES_TEST_URL;
 const suffix=randomBytes(5).toString('hex'),prefix='p4'+suffix;
 const registrySchema='oficina_registry_p4_'+suffix;
+const attachmentRoot=await mkdtemp(join(tmpdir(),'oficina-p4-storage-'));
 const admin=new Pool({connectionString:url,max:1});
 await admin.query('CREATE SCHEMA "'+registrySchema+'"');
 const registryPool=new Pool({
@@ -25,7 +29,7 @@ const registry=createPostgresTenantRegistry(createCommonDataAdapter({
 }));
 const factory=createPostgresTenantRuntimeFactory({
  Pool,connectionString:url,registry,serviceToken,allowProvision:true,
- schemaPrefix:prefix
+ schemaPrefix:prefix,localStorageRoot:attachmentRoot
 });
 const gateway=createPostgresUnifiedGateway({
  registry,tenantHandlerForUnit:factory.handlerForUnit,
@@ -84,6 +88,59 @@ try{
    const rows=await registryPool.query('SELECT COUNT(*)::integer AS n FROM users');
    assert.equal(rows.rows[0].n,1,'native shadow users must never pollute the global registry');
  });
+
+ await test('PostgreSQL public approval and local attachments preserve browser HTTP behavior',async()=>{
+   const signed=await call('/api/auth/login',{method:'POST',body:{
+     username:'admin-p4',password:'TestPass2026!'
+   }});
+   const token=signed.data.token;
+   const orders=await call('/api/work-orders',{token});
+   const os=orders.data[0];
+   assert.ok(os.id);
+   const scan='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/aZ8AAAAASUVORK5CYII=';
+   const upload=await call('/api/work-orders/'+os.id+'/attachments',{
+     method:'POST',token,body:{
+       category:'DIAGNOSTICO',mimeType:'image/png',originalName:'registro.png',
+       base64:scan,requestId:'p4-attachment-001'
+     }
+   });
+   assert.equal(upload.status,200,JSON.stringify(upload.data));
+   assert.match(upload.data.relative_path,/^local:/);
+   const bytes=await gateway(request('/api/attachments/'+upload.data.id+'/file',{token}));
+   assert.equal(bytes.status,200);
+   assert.equal(Buffer.from(await bytes.arrayBuffer()).toString('base64'),scan);
+   const replay=await call('/api/work-orders/'+os.id+'/attachments',{
+     method:'POST',token,body:{
+       category:'DIAGNOSTICO',mimeType:'image/png',originalName:'registro.png',
+       base64:scan,requestId:'p4-attachment-001'
+     }
+   });
+   assert.equal(replay.data.id,upload.data.id);
+   const state=await call('/api/work-orders/'+os.id+'/status',{method:'POST',token,
+     body:{toStatus:'DIAGNOSTICO',expectedVersion:os.version}});
+   assert.equal(state.status,200,JSON.stringify(state.data));
+   const saved=await call('/api/work-orders/'+os.id+'/quote',{method:'PUT',token,
+     body:{items:[{kind:'MAO_DE_OBRA',description:'Revisão',quantity:1,unitPriceCents:15000}]}});
+   assert.equal(saved.status,200,JSON.stringify(saved.data));
+   const submitted=await call('/api/work-orders/'+os.id+'/quote/submit',{method:'POST',token,body:{}});
+   assert.equal(submitted.status,200,JSON.stringify(submitted.data));
+   const link=await call('/api/work-orders/'+os.id+'/quote/approval-link',{method:'POST',token,
+     body:{expiresInHours:48}});
+   assert.equal(link.status,200,JSON.stringify(link.data));
+   assert.match(link.data.path,/^\/approval\.html\?token=[a-f0-9]{64}&unit=1$/);
+   const publicPath='/api/public/approval/'+link.data.token+'?unit=1';
+   const proposed=await call(publicPath);
+   assert.equal(proposed.status,200,JSON.stringify(proposed.data));
+   assert.equal(proposed.data.status,'ATIVO');
+   assert.equal(proposed.data.totalCents,15000);
+   const decision=await call(publicPath,{method:'POST',body:{decision:'APROVAR'}});
+   assert.equal(decision.status,200,JSON.stringify(decision.data));
+   assert.equal(decision.data.status,'APROVADO');
+   const replayDecision=await call(publicPath,{method:'POST',body:{decision:'APROVAR'}});
+   assert.equal(replayDecision.status,200);
+   const invalidCompany=await call('/api/public/approval/'+link.data.token+'?unit=999');
+   assert.equal(invalidCompany.status,404);
+ });
  await test('PostgreSQL schemas isolate two companies and membership is checked per request',async()=>{
    const signed=await call('/api/auth/login',{method:'POST',body:{
      username:'admin-p4',password:'TestPass2026!'
@@ -130,4 +187,5 @@ try{
    await admin.query('DROP SCHEMA "'+item.nspname+'" CASCADE');
  }
  await admin.end();
+ await rm(attachmentRoot,{recursive:true,force:true});
 }
