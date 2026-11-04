@@ -279,6 +279,7 @@ export function createAppServer({db=openDatabase(),storageDir=process.env.STORAG
         else if(method==='GET'&&path==='/api/billing/capabilities')result=billing.capabilities();
         else if(method==='GET'&&path==='/api/billing/report')result=await billing.financeReport({asOf:url.searchParams.get('asOf')||undefined});
         else if(method==='GET'&&path==='/api/billing/statements')result=await billing.listStatements({limit:url.searchParams.get('limit')||100});
+        else if(method==='GET'&&path==='/api/billing/receipts/available')result=await billing.listAvailableReceipts({limit:url.searchParams.get('limit')||100});
         else if(method==='POST'&&path==='/api/billing/statements')result=await billing.importStatement(data);
         else if(method==='POST'&&path==='/api/billing/settlements')result=await billing.recordSettlement(data);
         else if(method==='POST'&&path==='/api/billing/reminders/prepare')result=await billing.prepareReminders(data);
