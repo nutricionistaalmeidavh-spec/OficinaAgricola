@@ -25,6 +25,8 @@
     "start:postgres-core": "node src/start-postgres-core.js",
     "db:postgres:audit": "node scripts/audit-postgres-readiness.mjs --summary",
     "start:postgres-registry": "node src/start-postgres-registry.js",
-    "db:postgres:verify-registry": "node scripts/verify-postgres-registry.mjs"
+    "db:postgres:verify-registry": "node scripts/verify-postgres-registry.mjs",
+    "start:postgres:unified": "node src/start-postgres-unified.js",
+    "db:postgres:verify-unified": "node scripts/verify-postgres-unified.mjs"
   }
 }
