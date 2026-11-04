@@ -21,6 +21,8 @@ async function openTenantAdmin(){
       ${managed.length?'<button type="button" class="btn" id="tenantCompanySummary">Resumo da empresa</button>':''}
       ${possibleCatalogSources.length?'<button type="button" class="btn" id="tenantSharePart">Compartilhar catálogo</button>':''}
       ${possibleCatalogSources.length?'<button type="button" class="btn" id="tenantShareCustomer">Compartilhar cliente</button>':''}
+      ${possibleCatalogSources.length?'<button type="button" class="btn" id="tenantTransferStock">Transferir estoque</button>':''}
+      ${possibleCatalogSources.length?'<button type="button" class="btn" id="tenantStockHistory">Transferências / retomar</button>':''}
     </div>
     <div class="list">${units.map(u=>'<div class="list-item"><div><strong>'+esc(u.companyName)+' / '+esc(u.name)+'</strong><br><small>'+esc(u.code)+' · '+esc(u.role)+'</small></div></div>').join('')}</div>
   </div>`);
@@ -145,6 +147,67 @@ async function openTenantAdmin(){
     };
     sourcePicker.onchange=()=>void load().catch(error=>toast(error.message,true));
     await load();
+  };
+
+  const transferStockButton=$('#tenantTransferStock');
+  if(transferStockButton)transferStockButton.onclick=async()=>{
+    const choices=possibleCatalogSources.map(u=>'<option value="'+u.id+'">'+esc(u.companyName)+' / '+esc(u.name)+'</option>').join('');
+    const requestId=newCommandId();
+    showModal('Transferência de estoque entre filiais',`<form class="form-stack">
+      <p class="muted">Movimentação auditada com baixa e entrada no livro de estoque. Exige ADMIN nas duas unidades e cadastro da mesma peça no destino. Em falha parcial o estoque aparece como EM TRÂNSITO para retomada.</p>
+      <label>Origem<select name="sourceUnitId" id="stockSourceUnit">${choices}</select></label>
+      <label>Destino<select name="targetUnitId" id="stockTargetUnit" required></select></label>
+      <label>Peça<select name="sourcePartId" id="stockSourcePart" required></select></label>
+      <label>Quantidade<input name="quantity" type="number" min="0.001" step="0.001" max="1000000" required></label>
+      <button class="btn primary" type="submit">Confirmar transferência</button>
+    </form>`,async fd=>{
+      const data=formObj(fd);
+      const result=await api('/api/tenancy/stock-transfer',{method:'POST',body:{
+        sourceUnitId:Number(data.sourceUnitId),targetUnitId:Number(data.targetUnitId),
+        sourcePartId:Number(data.sourcePartId),quantity:Number(data.quantity),requestId
+      }});
+      toast(result.status==='COMPLETED'?'Estoque transferido e auditado':'Transferência #'+result.transferId+' em trânsito; abra Transferências / retomar');
+    });
+    const sourcePicker=$('#stockSourceUnit'),targetPicker=$('#stockTargetUnit'),partPicker=$('#stockSourcePart');
+    const load=async()=>{
+      const source=managed.find(u=>String(u.id)===sourcePicker.value);
+      targetPicker.replaceChildren();partPicker.replaceChildren();
+      for(const u of managed.filter(x=>x.companyId===source.companyId&&x.id!==source.id)){
+        const option=document.createElement('option');option.value=String(u.id);
+        option.textContent=u.name;targetPicker.append(option);
+      }
+      const result=await api('/api/tenancy/shareable-parts?unitId='+encodeURIComponent(sourcePicker.value));
+      for(const part of result.parts||[]){
+        if(!(Number(part.quantity)>0))continue;
+        const option=document.createElement('option');option.value=String(part.id);
+        option.textContent=part.sku+' — '+part.description+' ('+Number(part.quantity)+' '+part.unit+')';
+        partPicker.append(option);
+      }
+      if(!partPicker.options.length)toast('Sem peças com estoque disponível nessa unidade',true);
+    };
+    sourcePicker.onchange=()=>void load().catch(error=>toast(error.message,true));
+    await load();
+  };
+  const transfersButton=$('#tenantStockHistory');
+  if(transfersButton)transfersButton.onclick=()=>{
+    showModal('Transferências e recuperação',`<form class="form-stack">
+      <label>Empresa<select name="companyId">${companyOptions}</select></label>
+      <button class="btn primary" type="submit">Consultar transferências</button>
+    </form>`,async fd=>{
+      const companyId=Number(formObj(fd).companyId);
+      const result=await api('/api/tenancy/stock-transfers?companyId='+companyId);
+      showModal('Transferências recentes',`<div class="form-stack">
+        <p class="muted">EM TRÂNSITO indica baixa já registrada na origem; retomar é idempotente. Apenas administradores autorizados nas duas unidades podem confirmar.</p>
+        ${(result.transfers||[]).map(t=>'<div class="list-item"><div><strong>#'+t.transferId+' · '+esc(t.status)+'</strong><br><small>Unidade '+t.sourceUnitId+' → '+t.targetUnitId+' · '+t.quantity+' unidades</small></div>'+ (t.status==='PENDING'?'<button type="button" class="btn sm" data-stock-retry="'+t.transferId+'">Retomar</button>':'') +'</div>').join('')||'<p class="muted">Nenhuma transferência registrada.</p>'}
+      </div>`);
+      for(const button of document.querySelectorAll('[data-stock-retry]')){
+        button.onclick=async()=>{
+          const result=await api('/api/tenancy/stock-transfer/retry',{method:'POST',body:{transferId:Number(button.dataset.stockRetry)}});
+          toast(result.status==='COMPLETED'?'Transferência concluída':'Transferência continua em trânsito');
+          if(result.status==='COMPLETED'){button.disabled=true;button.textContent='Concluída';}
+        };
+      }
+    });
   };
   const edit=$('#editTenantMember');
   if(edit)edit.onclick=async()=>{
