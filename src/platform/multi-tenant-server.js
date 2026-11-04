@@ -1,5 +1,6 @@
 import { createServer as createHttpServer } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
+import {createNativeApiBridge} from './native-api-bridge.js';
 import { createHash, randomBytes } from 'node:crypto';
 import { resolve, join, dirname, sep } from 'node:path';
 import { mkdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
@@ -30,9 +31,9 @@ import {
 const json=(res,status,data)=>{if(res.writableEnded)return;res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(data));};
 const httpError=(message,status=400)=>Object.assign(new Error(message),{status});
 const tokenDigest=value=>createHash('sha256').update(value).digest('hex');
-async function readJson(req){
+async function readJson(req,maxBytes=1048576){
   let bytes=0;const buffers=[];
-  for await(const part of req){bytes+=part.length;if(bytes>1048576)throw httpError('Requisição muito grande',413);buffers.push(part);}
+  for await(const part of req){bytes+=part.length;if(bytes>maxBytes)throw httpError('Requisição muito grande',413);buffers.push(part);}
   if(!bytes)return {};
   try{return JSON.parse(Buffer.concat(buffers).toString('utf8'));}
   catch{throw httpError('JSON inválido',400);}
@@ -56,7 +57,9 @@ export function createMultiTenantServer({
   tls = null,
   tenantFiscalConfigs = {},
   objectStoreForUnit = null,
-  unitServerFactory = createAssistenciaServer
+  unitServerFactory = createAssistenciaServer,
+  nativeBackendForUnit = null,
+  nativeApiBridge = createNativeApiBridge()
 } = {}) {
   migrate(legacyDb);
   migrateAssistencia(legacyDb);
@@ -67,11 +70,16 @@ export function createMultiTenantServer({
   validateTenantFiscalConfigs(tenantFiscalConfigs);
   const root=resolve(tenantsRoot);
   const cache=new Map();
-  function unitRuntime(unitId) {
+  function unitRuntime(unitId,{staticOnly=false}={}) {
     const id=positive(unitId);
-    const found=cache.get(id);if(found)return found;
+
     const unit=registryDb.prepare("SELECT u.id,u.company_id AS companyId,u.name,c.name AS companyName FROM tenant_units u JOIN tenant_companies c ON c.id=u.company_id WHERE u.id=? AND u.active=1 AND c.active=1").get(id);
     if(!unit)throw httpError('Unidade indisponível',404);
+    // Never open or mutate a shadow SQLite business database for an
+    // explicitly remote tenant. Static assets alone may use the legacy shell.
+    if(!staticOnly&&nativeBackendForUnit?.(unit))
+      throw httpError('Operação multiempresa ainda não disponível para a unidade nativa',501);
+    const found=cache.get(id);if(found)return found;
     const isLegacy=id===1&&unit.companyId===1;
     const dir=join(root,'company-'+unit.companyId,'unit-'+id);
     if(!isLegacy)mkdirSync(dir,{recursive:true});
@@ -372,6 +380,33 @@ export function createMultiTenantServer({
     }
     if(path==='/api/units/assign'&&method==='POST')
       throw httpError('OS pertence à unidade de origem. Transferência entre unidades exige uma operação auditada.',409);
+    // Native operational units use an explicit allowlist and never fall back
+    // to the local SQLite database on a missing route or backend failure.
+    const nativeBackend=nativeBackendForUnit?.(unit);
+    if(nativeBackend){
+      const session=registryDb.prepare(
+        'SELECT expires_at FROM sessions WHERE token_hash=? AND user_id=?'
+      ).get(tokenDigest(token),user.id);
+      if(!session)throw httpError('Sessão global inválida',401);
+      const maxBytes=method==='POST'&&/^\\/api\\/work-orders\\/\\d+\\/attachments$/.test(path)
+        ?7*1024*1024:1048576;
+      const body=['POST','PUT','PATCH'].includes(method)?await readJson(req,maxBytes):{};
+      const answer=await nativeApiBridge({
+        backend:nativeBackend,unit,user,globalToken:token,
+        expiresAt:session.expires_at,method,path,search:url.search,
+        body,idempotencyKey:req.headers['idempotency-key']
+      });
+      if(Buffer.isBuffer(answer.body)){
+        const headers={'Content-Type':answer.contentType||'application/octet-stream',
+          'Cache-Control':'no-store'};
+        if(answer.disposition)
+          headers['Content-Disposition']=String(answer.disposition)
+            .replace(/[\\r\\n]/g,'').slice(0,220);
+        res.writeHead(answer.status,headers);
+        res.end(answer.body);
+      }else json(res,answer.status,answer.body);
+      return;
+    }
     // This endpoint intentionally returns the current unit's report, not an
     // unauthorized cross-company aggregation.
     const runtime=syncShadowSession(user,token,unit);
@@ -406,7 +441,7 @@ export function createMultiTenantServer({
       if(url.pathname.startsWith('/api/'))
         return await controlApi(req,res,url);
       // Only publicly served static files reach this branch.
-      return unitRuntime(1).srv.emit('request',req,res);
+      return unitRuntime(1,{staticOnly:true}).srv.emit('request',req,res);
     }catch(error){
       const status=error.status||(/Sessão|Credenciais/.test(error.message)?401:/Permissão/.test(error.message)?403:/UNIQUE constraint/.test(error.message)?409:400);
       console.error('[tenancy]',req.method,url.pathname.startsWith('/api/public/approval/')?'/api/public/approval/[redacted]':url.pathname,error.message);
