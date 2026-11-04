@@ -120,10 +120,29 @@ export function createAsyncWorkshopCatalog(port){
    ]);
    return port.first('SELECT * FROM technicians WHERE id=?',[technicianId]);
  }
+ async function updateTechnician(technicianId,input={}){
+  const key=id(technicianId);
+  const old=await port.first('SELECT * FROM technicians WHERE id=?',[key]);
+  if(!old)fail('Técnico não encontrado',404);
+  const userId=input.userId===undefined?old.user_id:
+    input.userId==null?null:id(input.userId);
+  if(userId&&!await port.first('SELECT id FROM users WHERE id=?',[userId]))
+    fail('Usuário vinculado não encontrado',404);
+  const name=input.name===undefined?old.name:clean(input.name);
+  if(!name||name.length>160)fail('Nome do técnico inválido');
+  await port.run(`UPDATE technicians SET
+    name=?,phone=?,specialty=?,user_id=?,active=?,updated_at=? WHERE id=?`,[
+    name,input.phone===undefined?old.phone:clean(input.phone),
+    input.specialty===undefined?old.specialty:clean(input.specialty),
+    userId,input.active===undefined?old.active:bool(input.active,old.active),
+    new Date().toISOString(),key
+  ]);
+  return port.first('SELECT * FROM technicians WHERE id=?',[key]);
+ }
  async function listTechnicians({includeInactive=false}={}){
    return port.all(`SELECT * FROM technicians WHERE (?=1 OR active=1)
      ORDER BY name,id`,[includeInactive?1:0]);
  }
  return Object.freeze({listCustomers,updateCustomer,listMachines,updateMachine,
-   createTechnician,listTechnicians});
+   createTechnician,listTechnicians,updateTechnician});
 }
