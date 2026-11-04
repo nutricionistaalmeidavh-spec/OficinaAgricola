@@ -46,7 +46,7 @@ export function verifyBackup(backupDir) {
   return manifest;
 }
 
-export function createBackup({ databasePath, uploadsPath, backupRoot, now = new Date() }) {
+export function createBackup({ databasePath, uploadsPath, backupRoot, now = new Date(), tenant = null }) {
   if (!existsSync(databasePath)) throw new Error('Banco não encontrado para backup');
   mkdirSync(backupRoot, { recursive: true });
   const stamp = now.toISOString().replace(/[:.]/g, '-');
@@ -64,7 +64,18 @@ export function createBackup({ databasePath, uploadsPath, backupRoot, now = new 
     } finally {source.close();}
     if (uploadsPath && existsSync(uploadsPath)) cpSync(uploadsPath, join(tempDir, 'uploads'), { recursive: true });
     const files = listFiles(tempDir).map(file => manifestEntry(tempDir, file));
-    const manifest = { version: 1, createdAt: now.toISOString(), files };
+    // Tenant ownership is metadata from the trusted registry, never a client
+    // field. Old generic backup calls remain unchanged when tenant is null.
+    let owner=null;
+    if(tenant!==null){
+      const companyId=Number(tenant.companyId),unitId=Number(tenant.unitId);
+      if(!Number.isSafeInteger(companyId)||companyId<1||
+         !Number.isSafeInteger(unitId)||unitId<1)
+        throw Error('Identidade de backup multiempresa inválida');
+      owner={companyId,unitId};
+    }
+    const manifest = { version: 1, createdAt: now.toISOString(), files,
+      ...(owner?{tenant:owner}:{}) };
     writeFileSync(join(tempDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
     renameSync(tempDir, backupDir);
     return { backupDir, manifest };
