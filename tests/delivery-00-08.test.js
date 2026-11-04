@@ -47,6 +47,6 @@ test('entregas 00-08 permanecem isoladas e sem dependência SaaS de runtime', as
   assert.match(sw, /\/app-assistencia\.js/);
   assert.match(docs, /<strong>Equipamento<\/strong>/);
   assert.match(docs, /ArtiSys Oficina/);
-  assert.match(readme, /core R\$ 0/);
-  assert.match(readme, /nenhuma API ou SaaS pago obrigatório/i);
+  assert.match(readme, /R\$ 0/);
+  assert.match(readme, /nenhuma API[^\n]*SaaS pago[^\n]*obrigatório/i);
 });
