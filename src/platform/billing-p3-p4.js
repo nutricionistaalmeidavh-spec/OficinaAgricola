@@ -138,7 +138,7 @@ export function createBillingService(port,{receivePayment,getPaymentSummary,prov
   const p=await port.first('SELECT * FROM billing_plans WHERE id=?',[text(id)]);
   if(!p)fail('Plano de cobrança não encontrado',404);
   return {...p,installments:await port.all(
-   'SELECT * FROM billing_installments WHERE plan_id=? ORDER BY installment_number',[p.id])};
+   'SELECT i.*,r.id AS refund_id,r.status AS refund_status FROM billing_installments i LEFT JOIN billing_refunds r ON r.installment_id=i.id WHERE i.plan_id=? ORDER BY i.installment_number',[p.id])};
  };
  const loadInstallment=async id=>{
   const row=await port.first(`SELECT i.*,p.work_order_id,p.method
@@ -288,6 +288,8 @@ export function createBillingService(port,{receivePayment,getPaymentSummary,prov
    fail('Repasse só pode ser conciliado após recebimento comprovado',409);
   const fee=Number(input.feeCents),gross=Number(installment.amount_cents);
   if(!Number.isSafeInteger(fee)||fee<0||fee>gross)fail('Taxa de operadora inválida');
+  if(await port.first("SELECT id FROM billing_refunds WHERE installment_id=? AND status<>'FAILED'",[installment.id]))
+   fail('Estorno externo em andamento impede conciliar repasse',409);
   const settledAt=isoDay(input.settledAt),requestId=key(input.requestId);
   const hash=digest({installmentId:installment.id,fee,settledAt});
   const previous=await port.first('SELECT * FROM billing_settlements WHERE request_id=?',[requestId]);
@@ -338,6 +340,8 @@ export function createBillingService(port,{receivePayment,getPaymentSummary,prov
   if(!receipt||receipt.reversed_at)fail('Recebimento não existe ou foi estornado',409);
   if(Number(entry.amount_cents)<=0||Number(entry.amount_cents)!==Number(receipt.amount_cents))
    fail('Valor de extrato não coincide com recebimento',409);
+  if(await port.first("SELECT id FROM billing_refunds WHERE receipt_id=? AND status<>'FAILED'",[receipt.id]))
+   fail('Estorno externo em andamento impede conciliação',409);
   if(entry.receipt_id!=null){
    if(Number(entry.receipt_id)===Number(receipt.id))return entry;
    fail('Lançamento já conciliado com outro recebimento',409);
@@ -389,7 +393,9 @@ export function createBillingService(port,{receivePayment,getPaymentSummary,prov
     JOIN customers c ON c.id=wo.customer_id
     WHERE r.reversed_at IS NULL AND NOT EXISTS(
       SELECT 1 FROM billing_bank_entries bank WHERE bank.receipt_id=r.id
-    ) ORDER BY r.received_at DESC,r.id DESC LIMIT ?`,[n]);
+    ) AND NOT EXISTS(SELECT 1 FROM billing_refunds refund
+      WHERE refund.receipt_id=r.id AND refund.status<>'FAILED')
+    ORDER BY r.received_at DESC,r.id DESC LIMIT ?`,[n]);
  }
  async function financeReport({asOf=new Date().toISOString().slice(0,10)}={}){
   const day=isoDay(asOf);
