@@ -45,6 +45,22 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null}=
    const order=path.match(/^\/v1\/orders\/([1-9]\d*)$/);
    if(order&&method==='GET')
      return json(await services.getWorkOrder(Number(order[1])));
+   const status=path.match(/^\/v1\/orders\/([1-9]\d*)\/status$/);
+   if(status&&method==='POST')
+     return json(await services.transitionWorkOrder({
+       ...await dataFrom(request),workOrderId:Number(status[1])
+     }));
+   const quote=path.match(/^\/v1\/orders\/([1-9]\d*)\/quote$/);
+   if(quote&&method==='PUT')
+     return json(await services.saveQuote({
+       ...await dataFrom(request),workOrderId:Number(quote[1])
+     }));
+   const approve=path.match(/^\/v1\/orders\/([1-9]\d*)\/quote\/approve$/);
+   if(approve&&method==='POST')
+     return json(await services.approveQuote({workOrderId:Number(approve[1])}));
+   if(path==='/v1/fiscal/drafts'&&method==='POST')
+     return json(await services.createFiscalDraft(await dataFrom(request)),201);
+
    if(path==='/v1/parts'&&method==='POST')
      return json(await services.createPart(await dataFrom(request)),201);
    if(path==='/v1/stock'&&method==='POST')
