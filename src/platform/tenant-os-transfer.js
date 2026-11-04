@@ -1,7 +1,7 @@
 import {nowIso,transaction} from '../db.js';
 import {createCustomer,createMachine} from '../services/catalog.js';
 import {createWorkOrder,transitionWorkOrder} from '../services/work-orders.js';
-import {requireUnitMembership} from './tenant-registry.js';
+import {requireUnitMembership,requireCompanyReportingAdmin} from './tenant-registry.js';
 
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 const id=value=>{const n=Number(value);if(!Number.isSafeInteger(n)||n<1)fail('Identificador inválido');return n;};
@@ -250,4 +250,16 @@ export function getTenantTransferDossier({registryDb,unitRuntime,actorUserId,tra
    sourceOrder,quote,quoteItems,receipts,paymentEvents,stockConsumptions,stockMovements,
    expenses,fiscalDocuments,attachments,checklists,schedule,maintenance,statusHistory,changeHistory
  };
+}
+
+export function listTenantOrderTransfers({registryDb,actorUserId,companyId}){
+ const company=id(companyId);
+ requireCompanyReportingAdmin(registryDb,actorUserId,company);
+ ensureRegistry(registryDb);
+ return registryDb.prepare(`SELECT id AS transferId,company_id AS companyId,
+   source_unit_id AS sourceUnitId,target_unit_id AS targetUnitId,
+   source_work_order_id AS sourceWorkOrderId,target_work_order_id AS targetWorkOrderId,
+   status,legal_basis AS legalBasis,record_reference AS recordReference,
+   created_at AS createdAt,completed_at AS completedAt
+   FROM tenant_order_transfers WHERE company_id=? ORDER BY id DESC LIMIT 100`).all(company);
 }
