@@ -252,6 +252,36 @@ export function createMultiTenantServer({
       });
       return res.end(bytes);
     }
+    const transferFiscalXml=path.match(/^\/api\/tenancy\/os-transfer\/(\d+)\/fiscal\/(\d+)\/xml$/);
+    if(transferFiscalXml&&method==='GET'){
+      // The CNPJ of the issuer and fiscal protocol stay legally attached
+      // to the SOURCE unit. Never recreate invoices in the destination.
+      const dossier=getTenantTransferDossier({
+        registryDb,unitRuntime,actorUserId:user.id,transferId:positive(transferFiscalXml[1])
+      });
+      const fiscalId=positive(transferFiscalXml[2]);
+      if(!dossier.fiscalDocuments.some(doc=>doc.id===fiscalId))
+        throw httpError('Documento fiscal não pertence à OS de origem',404);
+      const original=unitRuntime(dossier.originUnitId).db.prepare(`
+        SELECT id,kind,status,authorized_xml FROM fiscal_documents
+        WHERE id=? AND origin_type='OS' AND origin_id=?`
+      ).get(fiscalId,dossier.sourceWorkOrderId);
+      if(!original)throw httpError('Documento fiscal de origem não encontrado',404);
+      if(!['AUTORIZADA','AUTORIZADA_HOMOLOGACAO'].includes(original.status)||
+          typeof original.authorized_xml!=='string'||!original.authorized_xml.startsWith('<'))
+        throw httpError('XML fiscal autorizado ainda indisponível',409);
+      const xml=Buffer.from(original.authorized_xml,'utf8');
+      if(xml.length>8*1024*1024)throw httpError('XML fiscal excede limite',413);
+      res.writeHead(200,{
+        'Content-Type':'application/xml; charset=utf-8',
+        'Content-Length':String(xml.length),
+        'Content-Disposition':'attachment; filename="Fiscal-'+fiscalId+'.xml"',
+        'Cache-Control':'private, no-store',
+        'Content-Security-Policy':'sandbox',
+        'X-Content-Type-Options':'nosniff'
+      });
+      return res.end(xml);
+    }
     const transferDossier=path.match(/^\/api\/tenancy\/os-transfer\/(\d+)\/dossier$/);
     if(transferDossier&&method==='GET'){
       return json(res,200,getTenantTransferDossier({
