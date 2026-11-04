@@ -434,6 +434,14 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
      return json(await services.createPart(await dataFrom(request)),201);
    if(path==='/v1/stock'&&method==='POST')
      return json(await services.postStockMovement(await dataFrom(request)),201);
+   if(path==='/v1/payment-intents/capabilities'&&method==='GET')
+     return json(services.getCapabilities());
+   if(path==='/v1/payment-intents'&&method==='POST')
+     return json(await services.createIntent(await dataFrom(request,16384)),201);
+   const intent=path.match(/^\/v1\/payment-intents\/([a-f0-9]{32})$/);
+   if(intent&&method==='GET')return json(await services.getIntent(intent[1]));
+   const intentSync=path.match(/^\/v1\/payment-intents\/([a-f0-9]{32})\/sync$/);
+   if(intentSync&&method==='POST')return json(await services.syncIntent(intentSync[1]));
    if(path==='/v1/payments'&&method==='POST')
      return json(await services.receivePayment(await dataFrom(request)),201);
    const orderReceipts=path.match(/^\/v1\/orders\/([1-9]\d*)\/receipts$/);
