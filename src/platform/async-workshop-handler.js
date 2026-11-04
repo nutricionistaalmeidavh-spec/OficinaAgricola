@@ -67,20 +67,54 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
      return json(await services.listTechnicians({includeInactive:true}));
    if(path==='/v1/technicians'&&method==='POST')
      return json(await services.createTechnician(await dataFrom(request)),201);
+   if(path==='/v1/orders'&&method==='GET')
+     return json(await services.listWorkOrders({
+       search:u.searchParams.get('search')||'',
+       status:u.searchParams.get('status')||'',
+       scope:u.searchParams.get('scope')||'',
+       limit:u.searchParams.get('limit')||200,
+       offset:u.searchParams.get('offset')||0
+     }));
+   if(path==='/v1/orders/page'&&method==='GET')
+     return json(await services.listWorkOrdersPage({
+       search:u.searchParams.get('search')||'',
+       status:u.searchParams.get('status')||'',
+       scope:u.searchParams.get('scope')||'',
+       limit:u.searchParams.get('limit')||60,
+       cursor:u.searchParams.get('cursor')
+     }));
    if(path==='/v1/orders'&&method==='POST')
      return json(await services.createWorkOrder(await dataFrom(request)),201);
    const order=path.match(/^\/v1\/orders\/([1-9]\d*)$/);
+   if(order&&method==='PATCH')
+     return json(await services.updateWorkOrder(Number(order[1]),await dataFrom(request)));
    if(order&&method==='GET')
      return json(await services.getWorkOrder(Number(order[1])));
+   const orderHistory=path.match(/^\/v1\/orders\/([1-9]\d*)\/history$/);
+   if(orderHistory&&method==='GET')
+     return json(await services.getWorkOrderHistory(Number(orderHistory[1])));
+   const duplicate=path.match(/^\/v1\/orders\/([1-9]\d*)\/duplicate$/);
+   if(duplicate&&method==='POST')
+     return json(await services.duplicateWorkOrder(Number(duplicate[1]),await dataFrom(request)),201);
    const status=path.match(/^\/v1\/orders\/([1-9]\d*)\/status$/);
    if(status&&method==='POST')
      return json(await services.transitionWorkOrder({
        ...await dataFrom(request),workOrderId:Number(status[1])
      }));
    const quote=path.match(/^\/v1\/orders\/([1-9]\d*)\/quote$/);
+   if(quote&&method==='GET')
+     return json(await services.getQuote(Number(quote[1])));
    if(quote&&method==='PUT')
      return json(await services.saveQuote({
        ...await dataFrom(request),workOrderId:Number(quote[1])
+     }));
+   const submit=path.match(/^\/v1\/orders\/([1-9]\d*)\/quote\/submit$/);
+   if(submit&&method==='POST')
+     return json(await services.submitQuote({workOrderId:Number(submit[1])}));
+   const reject=path.match(/^\/v1\/orders\/([1-9]\d*)\/quote\/reject$/);
+   if(reject&&method==='POST')
+     return json(await services.rejectQuote({
+       ...await dataFrom(request),workOrderId:Number(reject[1])
      }));
    const approve=path.match(/^\/v1\/orders\/([1-9]\d*)\/quote\/approve$/);
    if(approve&&method==='POST')
