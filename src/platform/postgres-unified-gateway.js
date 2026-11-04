@@ -71,6 +71,8 @@ export function createPostgresUnifiedGateway({
   try{
    assertPostgresSameOrigin(request);
    const u=new URL(request.url),path=u.pathname,method=request.method.toUpperCase();
+   if(path==='/api/health'&&method==='GET')
+     return json({ok:true,engine:'postgres',operationalApiReady:true});
    if(isControl(path))return control(request,options);
    if(!path.startsWith('/api/'))return json({error:'Rota não encontrada'},404);
    const approval=path.match(/^\/api\/public\/approval\/([a-f0-9]{64})$/);
