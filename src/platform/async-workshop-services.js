@@ -151,6 +151,9 @@ export function createAsyncWorkshopServices(port){
        fail('Identificador de pagamento já utilizado para outra operação',409);
      return previous;
    }
+   const cash=await port.first("SELECT id FROM cash_sessions WHERE status='ABERTO' ORDER BY id DESC LIMIT 1");
+   if(method.toUpperCase()==='DINHEIRO'&&!cash)
+     fail('Abra o caixa para receber em dinheiro',409);
    const receiptId=id(),eventId=id(),at=iso();
    const insert=select(`INSERT INTO receipts(
      id,work_order_id,amount_cents,method,received_at,request_id,request_payload_hash
@@ -162,16 +165,26 @@ export function createAsyncWorkshopServices(port){
        AND wo.quote_total_cents-
          COALESCE((SELECT SUM(r.amount_cents) FROM receipts r
            WHERE r.work_order_id=wo.id AND r.reversed_at IS NULL),0)>=?
-   ) ON CONFLICT(request_id) DO NOTHING`,[
+   ) ON CONFLICT DO NOTHING`,[
      receiptId,workOrderId,amount,method,at,requestId,fingerprint,workOrderId,amount
    ]);
    const event=select(`INSERT INTO payment_events(
-     id,source_type,source_id,event_type,amount_cents,method,created_at
-   ) SELECT ?,'OS_RECEIPT',?,'PAID',?,?,? FROM receipts WHERE id=?`,[
-     eventId,receiptId,amount,method,at,receiptId
+     id,source_type,source_id,event_type,amount_cents,method,cash_session_id,created_at
+   ) SELECT ?,'OS_RECEIPT',?,'PAID',?,?,?,? FROM receipts WHERE id=?`,[
+     eventId,receiptId,amount,method,cash?.id??null,at,receiptId
    ]);
+   const cashMovement=cash?select(`INSERT INTO cash_movements(
+     id,cash_session_id,receipt_id,type,amount_cents,payment_method,note,created_at
+   ) SELECT ?,CASE WHEN
+       (SELECT status FROM cash_sessions WHERE id=?)='ABERTO'
+       THEN ? ELSE -1 END,?,'VENDA',?,?,?,?
+     FROM receipts WHERE id=?`,[
+       id(),cash.id,cash.id,receiptId,amount,method,
+       'Recebimento OS '+workOrderId,at,receiptId
+     ]):null;
+   const writeCommands=[insert,event,...(cashMovement?[cashMovement]:[])];
    if(port.engine!=='postgres'){
-     const output=await atomic(port,[insert,event]);
+     const output=await atomic(port,writeCommands);
      if(changes(output[0])!==1){
        // D1 batch is atomic but an identical replay may have won the race
        // after the original preflight read. Never duplicate the payment event.
@@ -196,9 +209,15 @@ export function createAsyncWorkshopServices(port){
          fail('Identificador de pagamento já utilizado para outra operação',409);
        return stored;
      }
+     if(cash){
+       const opened=await tx.first(
+         "SELECT id FROM cash_sessions WHERE id=? AND status='ABERTO' FOR UPDATE",[cash.id]);
+       if(!opened)fail('Caixa foi fechado durante o recebimento',409);
+     }
      const output=await tx.run(insert.sql,insert.params);
      if(changes(output)!==1)fail('Saldo insuficiente ou orçamento não aprovado',409);
      await tx.run(event.sql,event.params);
+     if(cashMovement)await tx.run(cashMovement.sql,cashMovement.params);
      return tx.first('SELECT * FROM receipts WHERE id=?',[receiptId]);
    });
  }
@@ -216,13 +235,15 @@ export function createAsyncWorkshopServices(port){
        ON r.work_order_id=wo.id
      WHERE q.approval_status='APROVADO' AND wo.status<>'CANCELADA'
        AND q.approved_at BETWEEN ? AND ?`,[from,to]);
+   const pos=await port.first(`SELECT COALESCE(SUM(total_cents),0) total
+     FROM sales WHERE status='CONCLUIDA' AND created_at BETWEEN ? AND ?`,[from,to]);
    const payments=await port.first(`SELECT COALESCE(SUM(amount_cents),0) total
      FROM payment_events WHERE created_at BETWEEN ? AND ?`,[from,to]);
    const expense=await port.first(`SELECT COALESCE(SUM(amount_cents),0) total
      FROM expenses WHERE paid_at IS NOT NULL AND paid_at BETWEEN ? AND ?`,[from,to]);
    const receivedCents=serial(payments.total),expensesCents=serial(expense.total);
    return {
-     invoicedCents:serial(invoiced.total),
+     invoicedCents:serial(invoiced.total)+serial(pos.total),
      receivedCents,pendingCents:serial(pending.total),expensesCents,
      resultCents:receivedCents-expensesCents
    };
