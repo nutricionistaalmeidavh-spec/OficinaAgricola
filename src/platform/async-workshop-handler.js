@@ -459,6 +459,8 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
      return json(await services.listStatements({limit:u.searchParams.get('limit')||100}));
    if(path==='/v1/billing/statements'&&method==='POST')
      return json(await services.importStatement(await dataFrom(request,16384)),201);
+   if(path==='/v1/billing/statements/import'&&method==='POST')
+     return json(await services.importStatementFile(await dataFrom(request,1150000)),201);
    const billingMatch=path.match(/^\/v1\/billing\/statements\/([a-f0-9]{32})\/match$/);
    if(billingMatch&&method==='POST'){
      const payload=await dataFrom(request,16384);
@@ -466,6 +468,18 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
    }
    if(path==='/v1/billing/reminders/prepare'&&method==='POST')
      return json(await services.prepareReminders(await dataFrom(request,16384)));
+   if(path==='/v1/billing/reminders/run'&&method==='POST')
+     return json(await services.dispatchReminders(await dataFrom(request,16384)));
+   if(path==='/v1/billing/reminders'&&method==='GET')
+     return json(await services.listReminders({limit:u.searchParams.get('limit')||100}));
+   const billingRefund=path.match(/^\/v1\/billing\/installments\/([a-f0-9]{32})\/refund$/);
+   if(billingRefund&&method==='POST')
+     return json(await services.requestExternalRefund(billingRefund[1],await dataFrom(request,16384)));
+   const refundView=path.match(/^\/v1\/billing\/refunds\/([a-f0-9]{32})(\/sync)?$/);
+   if(refundView&&method==='GET'&&!refundView[2])
+     return json(await services.getExternalRefund(refundView[1]));
+   if(refundView&&method==='POST'&&refundView[2])
+     return json(await services.syncExternalRefund(refundView[1]));
    if(path==='/v1/payment-intents/capabilities'&&method==='GET')
      return json(services.getCapabilities());
    if(path==='/v1/payment-intents'&&method==='POST')
