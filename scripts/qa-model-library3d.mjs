@@ -28,6 +28,16 @@ async function waitHealth(){
 }
 let browser=null,context=null,page=null;
 const browserErrors=[];
+async function captureWebGL(filename){
+  const png=await page.evaluate(async()=>{
+    const viewer=await import('/model-viewer.js');
+    return viewer.snapshotViewer();
+  });
+  if(typeof png!=='string'||!png.startsWith('data:image/png;base64,'))throw new Error('PNG ausente');
+  const bytes=Buffer.from(png.split(',')[1],'base64');
+  if(bytes.length<4000||bytes.subarray(0,8).toString('hex')!=='89504e470d0a1a0a')throw new Error('PNG WebGL inválido');
+  await writeFile(path.join(output,filename),bytes);
+}
 try{
   await waitHealth();
   browser=await chromium.launch({headless:true,args:[
@@ -96,10 +106,10 @@ try{
   await page.mouse.down();
   await page.mouse.move(rect.x+rect.width*.75,rect.y+rect.height*.45,{steps:8});
   await page.mouse.up();
-  await page.screenshot({path:path.join(output,'02-uno-3d-360.png'),fullPage:true});
+  await captureWebGL('02-uno-3d-360.png');
   if(viewportName==='desktop'){
     await page.locator('#ml-paint').fill('#2B5C8A');
-    await page.screenshot({path:path.join(output,'03-uno-pintura-experimental.png'),fullPage:true});
+    await captureWebGL('03-uno-pintura-experimental.png');
   }
   await page.locator('#modalClose').click();
   await page.locator('#modal').waitFor({state:'hidden'});
@@ -132,7 +142,7 @@ try{
     const wheels=await page.locator('#ml-viewer-stage').getAttribute('data-generated-wheels');
     if(wheels!=='4')throw new Error(assetId+': rodas reais incompletas: '+(await page.locator('#ml-viewer-message').textContent()));
     await page.locator('#ml-viewer-stage canvas').waitFor({state:'visible'});
-    await page.screenshot({path:path.join(output,'04-'+assetId+'-rodas-3d.png'),fullPage:true});
+    await captureWebGL('04-'+assetId+'-rodas-3d.png');
     await page.locator('#modalClose').click();
     await page.locator('#modal').waitFor({state:'hidden'});
   }
