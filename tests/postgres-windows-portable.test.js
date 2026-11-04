@@ -12,10 +12,12 @@ function fixture(){
  const resources=join(root,'resources'),bundle=join(resources,'postgresql');
  mkdirSync(join(bundle,'bin'),{recursive:true});
  mkdirSync(join(bundle,'share'),{recursive:true});
- const files=['bin/initdb.exe','bin/pg_ctl.exe','bin/postgres.exe','bin/psql.exe','share/postgres.bki'];
+ const files=['bin/initdb.exe','bin/pg_ctl.exe','bin/postgres.exe','bin/psql.exe',
+  'share/postgres.bki','share/locale/en@boldquot/LC_MESSAGES/gettext-runtime.mo'];
  const hashes={};
  for(const file of files){
    const content=Buffer.from('test portable binary '+file);
+   mkdirSync(join(bundle,...file.split('/').slice(0,-1)),{recursive:true});
    writeFileSync(join(bundle,...file.split('/')),content);
    hashes[file]=createHash('sha256').update(content).digest('hex');
  }
@@ -31,6 +33,24 @@ test('portable PostgreSQL refuses missing/modified or spoofed bundles',()=>{
    writeFileSync(join(f.bundle,'bin','postgres.exe'),'malicious');
    assert.equal(verifyPostgresWindowsBundle({resourcesPath:f.resources,platform:'win32',arch:'x64'}).valid,false);
    assert.equal(verifyPostgresWindowsBundle({resourcesPath:f.resources,platform:'linux',arch:'x64'}).valid,false);
+ }finally{rmSync(f.root,{recursive:true,force:true});}
+});
+
+test('PostgreSQL Windows bundle accepts official gettext locale variants but rejects traversal',()=>{
+ const f=fixture();
+ try{
+   const original=JSON.parse(readFileSync(join(f.bundle,'postgresql-bundle.json'),'utf8'));
+   const valid=verifyPostgresWindowsBundle({
+     resourcesPath:f.resources,platform:'win32',arch:'x64'
+   });
+   assert.equal(valid.valid,true,valid.reason);
+   assert.equal(valid.files,f.files.length);
+   original.files['share/locale/../../escape.mo']='0'.repeat(64);
+   writeFileSync(join(f.bundle,'postgresql-bundle.json'),JSON.stringify(original));
+   const rejected=verifyPostgresWindowsBundle({
+     resourcesPath:f.resources,platform:'win32',arch:'x64'
+   });
+   assert.equal(rejected.valid,false,'relative traversal remains prohibited');
  }finally{rmSync(f.root,{recursive:true,force:true});}
 });
 test('first launch provisions private PostgreSQL 16 cluster without npm or network and never rotates owner password',async()=>{
