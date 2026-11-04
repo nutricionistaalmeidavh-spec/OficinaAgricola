@@ -164,6 +164,17 @@ export function createMultiTenantServer({
       return json(res,200,changeUnitMembership(registryDb,user.id,await readJson(req)));
     if(path==='/api/tenancy/memberships'&&method==='GET')
       return json(res,200,listUnitMembers(registryDb,user.id,positive(url.searchParams.get('unitId'))));
+    if(path==='/api/tenancy/shareable-parts'&&method==='GET'){
+      const source=requireUnitMembership(registryDb,user.id,positive(url.searchParams.get('unitId')));
+      if(source.role!=='ADMIN')throw httpError('Administração da unidade é necessária',403);
+      const search=String(url.searchParams.get('search')||'').trim();
+      if(search.length>80)throw httpError('Busca excede 80 caracteres',400);
+      const term='%'+search+'%';
+      const rows=unitRuntime(source.id).db.prepare(
+        'SELECT id,sku,description FROM parts WHERE active=1 AND (sku LIKE ? OR description LIKE ?) ORDER BY id DESC LIMIT 100'
+      ).all(term,term);
+      return json(res,200,{parts:rows,limit:100});
+    }
     if(path==='/api/tenancy/share-part'&&method==='POST'){
       const body=await readJson(req);
       return json(res,200,sharePartCatalog({registryDb,unitRuntime,actorUserId:user.id,...body}));
