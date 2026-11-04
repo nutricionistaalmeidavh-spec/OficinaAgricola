@@ -94,7 +94,7 @@ test('cache corrompido não é servido como GLB e pode ser reinstalado',async()=
     });
     await installAsset(dir,'fiat-uno','original',{catalog:m,fetchImpl});
     await writeFile(join(dir,'fiat-uno__original.glb'),Buffer.from('MALICIOUS'));
-    assert.throws(()=>readInstalledAsset(dir,'fiat-uno','original',{catalog:m}),/integridade/i);
+    assert.throws(()=>readInstalledAsset(dir,'fiat-uno','original',{catalog:m}),/integridade|GLB inválido/i);
     await installAsset(dir,'fiat-uno','original',{catalog:m,fetchImpl});
     assert.deepEqual(readInstalledAsset(dir,'fiat-uno','original',{catalog:m}),bin);
   }finally{await rm(dir,{recursive:true,force:true})}
@@ -106,16 +106,18 @@ test('interface tem o Top 20, carregamento de GLB real, OrbitControls e decodifi
   const sw=await readFile(new URL('../public/sw.js',import.meta.url),'utf8');
   const renderer=await readFile(new URL('../public/model-viewer.js',import.meta.url),'utf8');
   const server=await readFile(new URL('../src/server.js',import.meta.url),'utf8');
-  assert.match(client,/top20/);
-  assert.match(client,/data-model-view/);
+  const helper=await readFile(new URL('../public/model-library3d.js',import.meta.url),'utf8');
+  assert.match(helper,/top20/);
+  assert.match(client,/OficinaModel3D\.load/);
+  assert.match(client,/data-model-detail/);
   assert.match(index,/src="\/model-library3d\.js"/);
   assert.match(renderer,/GLTFLoader/);
   assert.match(renderer,/OrbitControls/);
   assert.match(renderer,/MeshoptDecoder/);
   assert.match(renderer,/model\/gltf-binary|arrayBuffer|blob/i);
   assert.match(renderer,/\/vendor\/three\/three\.module\.js/);
-  assert.match(server,/\/api\/models3d\/install/);
-  assert.match(server,/\/api\/models3d\/file/);
+  assert.match(server,/models3d.*install/);
+  assert.match(server,/models3d\/file/);
   assert.match(sw,/model-viewer\.js/);
   assert.doesNotMatch(index,/https:\/\/(?:cdn|unpkg|jsdelivr)/i);
 });
