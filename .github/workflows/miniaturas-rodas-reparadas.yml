@@ -1,0 +1,72 @@
+name: Miniaturas GLB reais — Ka, Fox e Palio (feature isolada)
+
+on:
+  push:
+    branches: [feat/oficina-3d-rodas-curadas-20261104]
+    paths:
+      - .github/workflows/miniaturas-rodas-reparadas.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: miniaturas-reparadas-3d
+  cancel-in-progress: false
+
+jobs:
+  thumbnails:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout do ArtiSys Oficina
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Copiar previews reais com origem e commit fixos
+        shell: bash
+        run: |
+          set -euo pipefail
+          REF=0bf77d508b02df9889bda4b9c403119fbd83774f
+          BASE="https://raw.githubusercontent.com/nutricionistaalmeidavh-spec/assetscarros3d/$REF/curadoria/miniaturas-rodas"
+          mkdir -p public/carros3d/thumbs
+          for id in ford-ka vw-fox fiat-palio; do
+            curl --fail --location --silent --show-error --retry 3 "$BASE/$id-frente.png" -o "public/carros3d/thumbs/$id.png"
+          done
+      - name: Validar integridade e assinatura PNG de 700 x 480
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object public/carros3d/thumbs/ford-ka.png)" = 75c7db1b94118a73e8c13680cd1d99f7ffe2a8ce
+          test "$(git hash-object public/carros3d/thumbs/vw-fox.png)" = e53eadd43b6effd54dac14b0a3cc2d49a9ae0a96
+          test "$(git hash-object public/carros3d/thumbs/fiat-palio.png)" = 8fddac223fe68284f59f56c6a01c86be96af75f0
+          python3 - <<'PY'
+          import struct
+          from pathlib import Path
+          for id in ('ford-ka','vw-fox','fiat-palio'):
+              p=Path('public/carros3d/thumbs')/(id+'.png')
+              d=p.read_bytes()
+              assert d[:8]==b'\x89PNG\r\n\x1a\n'
+              assert struct.unpack('>II',d[16:24])==(700,480)
+              print(id,len(d),'bytes')
+          PY
+      - name: Testar manifestos e segurança de download 3D
+        run: |
+          node --test tests/model-library3d.test.js tests/model-library-p0.test.js
+      - name: Registrar somente três miniaturas na branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/carros3d/thumbs/ford-ka.png public/carros3d/thumbs/vw-fox.png public/carros3d/thumbs/fiat-palio.png
+          if ! git diff --cached --quiet; then
+            git commit -m "assets: miniaturas reais corrigidas de Ka, Fox e Palio"
+            for attempt in 1 2 3; do
+              git fetch origin feat/oficina-3d-rodas-curadas-20261104
+              git rebase FETCH_HEAD
+              if git push origin HEAD:feat/oficina-3d-rodas-curadas-20261104; then exit 0; fi
+              sleep 5
+            done
+            exit 1
+          fi
