@@ -163,14 +163,14 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
    ]};
    const event={sql:`INSERT INTO fiscal_events(
      id,document_id,event_type,details_json,created_at
-   ) VALUES(? ,?,'TRANSMISSAO_INICIADA',?,?)`,params:[
-     nextId(),doc.id,JSON.stringify({
+   ) VALUES(?,?,?,?,?)`,params:[
+     nextId(),doc.id,'TRANSMISSAO_INICIADA',JSON.stringify({
        attemptId,provider:providerName,issuerSnapshotHash:sha(JSON.stringify(issuer))
      }),at
    ]};
    if(port.engine==='d1'){
      const rows=await port.batch([update,{
-       sql:event.sql.replace('VALUES(? ,?,?,?,?)','SELECT ?,?,?,?,? WHERE changes()=1'),
+       sql:event.sql.replace('VALUES(?,?,?,?,?)','SELECT ?,?,?,?,? WHERE changes()=1'),
        params:event.params
      }]);
      if(changed(rows[0])!==1)fail('Documento fiscal já em processamento',409);
