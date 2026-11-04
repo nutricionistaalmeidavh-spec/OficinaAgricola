@@ -42,7 +42,8 @@ O adaptador ACBr local e DLLs Windows não representam homologação real. A emi
 - Formulários principais devem usar `/api/customers/page`, `/api/machines/page` e `/api/parts/page` com limite e busca remota, sem carregar tabelas enormes na abertura.
 - Seleções preservam IDs canônicos e guardam opção previamente escolhida. Ao trocar cliente, equipamento anterior deve ser limpo.
 - Benchmarks disponíveis: `npm run db:benchmark -- --size=1000`, `10000` e `100000` em ambiente isolado. Validar p50/p95 e memória no hardware alvo, sem limiar universal arbitrário.
-- Rotas legadas permanecem para compatibilidade, mas os demais seletores de agenda, edição, duplicação e venda precisam de auditoria adicional antes de afirmar cobertura integral.
+- Nesta branch, formulários de abertura, edição e duplicação de OS, cadastro de equipamento, agenda e vendas de balcão passaram a consultar clientes, veículos, peças e OS por busca paginada; a venda preserva saldo/preço e a chave idempotente original.
+- Rotas integrais antigas continuam disponíveis por compatibilidade. Histórico de alterações, alguns formulários secundários e catálogo de serviços ainda exigem auditoria e eventual paginação antes de afirmar cobertura integral da interface.
 
 ## P3 · gate de aceite e distribuição
 
