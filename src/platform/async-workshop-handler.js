@@ -284,6 +284,24 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
      }));
    if(path==='/v1/technical-references'&&method==='POST')
      return json(await services.createTechnicalReference(await dataFrom(request)),201);
+   const attachments=path.match(/^\/v1\/orders\/([1-9]\d*)\/attachments$/);
+   if(attachments&&method==='GET')
+     return json(await services.listAttachments(Number(attachments[1])));
+   if(attachments&&method==='POST')
+     return json(await services.saveAttachment(Number(attachments[1]),
+       await dataFrom(request)),201);
+   const attachmentDownload=path.match(/^\/v1\/attachments\/([1-9]\d*)\/file$/);
+   if(attachmentDownload&&method==='GET'){
+     const row=await services.getAttachment(Number(attachmentDownload[1]));
+     const bytes=await services.readAttachment(row.id);
+     const filename=String(row.original_name||'anexo').replace(/[^A-Za-z0-9._ -]/g,'_').slice(0,120);
+     return new Response(bytes,{status:200,headers:{
+       'Content-Type':row.mime_type,
+       'Content-Disposition':'attachment; filename="'+filename+'"',
+       'Content-Length':String(bytes.length),'Cache-Control':'no-store',
+       'X-Content-Type-Options':'nosniff'
+     }});
+   }
    if(path==='/v1/parts'&&method==='GET')
      return json(await services.listParts({
        search:u.searchParams.get('search')||'',
