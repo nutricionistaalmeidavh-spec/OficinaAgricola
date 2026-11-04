@@ -10,10 +10,8 @@ foreach($file in @('postgresql-bundle.json','bin\initdb.exe','bin\pg_ctl.exe','b
  if (-not (Test-Path (Join-Path $bundle $file))) {throw "PostgreSQL não embarcado: $file"}
 }
 $originalLocal=$env:LOCALAPPDATA
-$originalMode=$env:OFICINA_POSTGRES_DESKTOP_MODE
 $root=Join-Path $env:RUNNER_TEMP 'artisys-postgres-first-install'
 $env:LOCALAPPDATA=$root
-$env:OFICINA_POSTGRES_DESKTOP_MODE='enabled'
 $process=$null
 function Start-Officina {
  $script:process=Start-Process -FilePath $app -PassThru
@@ -85,5 +83,4 @@ try{
 }finally{
  Stop-Officina
  $env:LOCALAPPDATA=$originalLocal
- $env:OFICINA_POSTGRES_DESKTOP_MODE=$originalMode
 }
