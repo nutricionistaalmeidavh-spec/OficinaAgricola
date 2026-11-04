@@ -108,11 +108,12 @@ test('interface tem o Top 20, carregamento de GLB real, OrbitControls e decodifi
   const server=await readFile(new URL('../src/server.js',import.meta.url),'utf8');
   assert.match(client,/top20/);
   assert.match(client,/data-model-view/);
-  assert.match(index,/type="importmap"/);
+  assert.match(index,/src="\/model-library3d\.js"/);
   assert.match(renderer,/GLTFLoader/);
   assert.match(renderer,/OrbitControls/);
   assert.match(renderer,/MeshoptDecoder/);
   assert.match(renderer,/model\/gltf-binary|arrayBuffer|blob/i);
+  assert.match(renderer,/\/vendor\/three\/three\.module\.js/);
   assert.match(server,/\/api\/models3d\/install/);
   assert.match(server,/\/api\/models3d\/file/);
   assert.match(sw,/model-viewer\.js/);
