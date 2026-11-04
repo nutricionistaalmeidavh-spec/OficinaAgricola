@@ -1,55 +1,51 @@
-# Oficina — P3 Cobranças e P4 Financeiro (dependências opcionais)
+# Oficina — P3/P4: parcelamento e financeiro sem provedor obrigatório
 
-## Status
-Implementação de desenvolvimento na PR #37, empilhada na PR #36 e PR #32. **Não fazer merge ou publicar antes de CI, QA visual e integração de provedor real.**
+## Arquitetura e custos
+O núcleo de pagamentos do Oficina é **R$ 0, open source e self-hosted**, com
+livro canônico `receipts`/`payment_events`. Nenhum banco, gateway, API externa
+ou contrato comercial é obrigatório para operar o parcelamento e o financeiro.
+SQLite local e PostgreSQL self-hosted usam o mesmo contrato; D1 é opcional.
 
-### P3 — parcelamento + cobrança
-- Núcleo obrigatório **R$ 0 / open source / self-hosted** com plano por OS e parcelas (1–24), centavos exatos e vencimentos mensais.
-- Sem duplicar receita: `billing_plans` e `billing_installments` são obrigações futuras; o saldo recebido só é alterado pelo serviço canônico `receivePayment`.
-- Um plano por OS, por enquanto; o valor deve corresponder ao saldo integral pendente. Novos planos após alterações da OS, cancelamentos parciais ou renegociações ainda precisam de fluxo próprio.
-- Modalidade `MANUAL`: operador FINANCEIRO/ADMIN confirma recebimento **depois** da conferência bancária/caixa. Modos `BOLETO` e `PAYMENT_LINK` só funcionam se um provedor for explicitamente habilitado.
-- `PAYMENT_LINK` do Asaas nesta implementação é a URL `invoiceUrl` de **uma cobrança individual** em `POST /v3/payments` (`billingType=UNDEFINED`), não o recurso de link reutilizável `POST /v3/paymentLinks`.
-- Nunca usar o status retornado pelo navegador para liquidar cobrança; `syncInstallment` valida ID, referência, cliente, forma e valor diretamente com o provedor. Para Asaas a baixa conservadora ocorre apenas em `RECEIVED`, não em `CONFIRMED`.
-- Em erros de rede, o Asaas é consultado por `externalReference` antes de criar novamente; concorrência e falhas ambíguas de emissão ainda exigem testes de homologação. Não ativar produção sem revisar possíveis duplicidades.
+Não existe integração comercial de boleto/link ativa nesta branch.
+Os métodos `BOLETO` e `PAYMENT_LINK` permanecem apenas como extensão genérica
+**desativada por padrão**. Nenhum provedor pago substituiu o removido.
+A interface só exibe esses métodos quando o servidor expõe um adaptador habilitado
+para a unidade. Não há dependência silenciosa ou cobrança automática.
 
-### Configuração opcional Asaas, por empresa/unidade
-Por padrão, nenhuma integração Asaas está habilitada. O core funciona sem conta e sem API. Crie um arquivo JSON **privado, fora do repositório**, por exemplo `/etc/oficina/asaas.json`, com permissões restritas:
+## P3 — parcelamento e cobrança
+- Um plano por OS aprovada, de 1 a 24 parcelas, com datas mensais e centavos exatos.
+- Plano de cobrança não é receita: a baixa ocorre apenas em `receivePayment`.
+- O total parcelado deve corresponder ao saldo aprovado e ainda pendente.
+- `MANUAL`: colaborador autorizado confirma o recebimento **após conferência real**
+  no banco/caixa; confirmação explícita e idempotência obrigatórias.
+- `BOLETO` e `PAYMENT_LINK`: contrato `providers[method]` com
+  `create({requestId,workOrderId,amountCents,dueDate})` e
+  `status(reference,{requestId,workOrderId})`, sem implementação externa embutida.
+- Cobranças externas exigem referência, valor e estado autenticados pelo provedor.
+  Jamais aceitar um `PAID` fornecido pelo navegador.
+- Emissão externa tem estado `READY` → `ISSUING` → `ISSUED`, com trava de
+  concorrência e recuperação somente mediante consulta ao provedor. Falha
+  ambígua nunca provoca repetição silenciosa do POST.
+- Após confirmação externa, o lançamento financeiro usa chave idempotente,
+  preservando saldo e histórico canônicos.
 
-```json
-{
-  "1/1": {
-    "environment": "sandbox",
-    "apiKey": "CHAVE_SANDBOX_PRIVADA_DA_UNIDADE",
-    "customers": {
-      "12": "cus_ID_DO_CLIENTE_JA_CADASTRADO_NO_ASAAS"
-    }
-  }
-}
-```
+## P4 — financeiro self-hosted
+- Importação **manual por lançamento** de extrato, com conta, ID externo,
+  data, valor e descrição; reimportar com dados divergentes é proibido.
+- Conciliação de extrato selecionando recebimento existente por OS e valor.
+  Associar um lançamento **não cria uma segunda receita**.
+- Taxas, repasses brutos/líquidos e data do repasse associados à parcela recebida,
+  sem modificar a receita bruta no livro canônico.
+- Relatórios de parcelas pagas, pendentes, vencidas, taxas, repasses e extratos
+  conciliados. O relatório financeiro geral continua incluindo vendas e OS.
+- Recibos/PDF existentes continuam gerados pelo módulo canônico de documentos.
+- Lembretes apenas como registros `DRAFT` locais, sem envio automático,
+  WhatsApp, SMS ou e-mail.
+- Estorno de parcela manual reabre o título com uma nova tentativa auditável.
+  Recebimentos de cobrança externa, extrato já conciliado ou repasse
+  registrado bloqueiam estorno local sem o fluxo de reconciliação necessário.
 
-`1/1` significa empresa/unidade do registro canônico; `12` é o ID local do cliente da OS; `cus_...` é o ID preexistente do cliente **na mesma conta** Asaas. Esta versão não cria automaticamente clientes Asaas. Uma OS de cliente não mapeado não pode emitir cobrança externa.
-
-No servidor:
-```bash
-TENANCY_ASAAS_CONFIG_FILE=/etc/oficina/asaas.json
-npm start
-# ou npm run start:multi
-# ou npm run start:postgres:unified (configuração PG opt-in já preparada)
-```
-
-Somente `sandbox` é habilitado sem aprovação explícita. Em produção deve-se configurar `environment: "production"` **e** `productionApproved: true`, além de chave correspondente à produção, após homologação. Nenhum segredo vai para o navegador, os commits, o PDF ou os logs. Os valores e URLs de terceiros são tarifados pelo provedor, nunca requisitos silenciosos.
-
-**Operação:** abra uma OS aprovada com saldo a receber → **Parcelar / Boleto / Link** → escolha quantidade e primeiro vencimento → salvar. Para boleto/link, clique em **Emitir cobrança** na parcela e entregue ao cliente o link HTTPS retornado pelo provedor. Clique em **Consultar** para confirmar; a mesma parcela não pode dar duas baixas no caixa.
-
-### P4 — financeiro
-- **Conciliação bancária manual auditável**: registre cada lançamento de extrato com identificador externo e valor em centavos; o mesmo lançamento não pode ser importado com dados divergentes; associe a um recebimento real selecionando a OS. Conciliação NÃO registra nova receita.
-- **Taxas e repasses**: lançamentos por parcela paga em `billing_settlements` com bruto, taxa, líquido, dia do repasse e requestId idempotente. Não alteram o valor bruto recebido canônico.
-- **Relatórios**: total recebido **pelos parcelamentos**, saldo pendente, vencido, taxa total, repasses conciliados e extratos pareados. O relatório geral do financeiro continua fonte de verdade para todo o negócio (incluindo vendas balcão e recebimentos avulsos).
-- **Recibos/PDF**: continuam no módulo canônico de documentos da OS; não são substituídos por notas fiscais ou extratos.
-- **Lembretes**: botão `Preparar lembretes` gera registros `DRAFT` idempotentes no banco; **não envia e-mails, SMS ou WhatsApp**. Disparo automático requer um transportador configurado, opt-in por oficina e observância das preferências de contato. Nenhum serviço pago é obrigatório.
-- **Estornos de cobranças externas**: bloqueados internamente até existir devolução/estorno confirmado pelo provedor; chargeback, reversão bancária e reconcilição retrospectiva ainda exigem fluxo de exceção.
-
-### APIs autenticadas
+## APIs autenticadas (FINANCEIRO/ADMIN)
 ```text
 GET  /api/billing/capabilities
 POST /api/billing/plans
@@ -67,14 +63,18 @@ POST /api/billing/statements/:entryId/match
 POST /api/billing/reminders/prepare
 ```
 
-Todas exigem sessão e FINANCEIRO/ADMIN tanto no servidor local quanto nos proxies PG/D1, com isolamento já garantido pelo runtime de unidades.
+## Liberação
+1. `npm run lint`, `npm test`, `npm run build`, `npm run test:e2e`.
+2. PostgreSQL real e D1 local com migrations, isolamento entre unidades,
+   conciliação e concorrência de recebimentos.
+3. QA visual e Windows clean install; operação offline sem qualquer gateway,
+   além de backup/restauração.
+4. Qualquer adaptador externo futuro exige decisão explícita, homologação,
+   configuração privada por oficina e testes de falha/estorno.
+5. PR #37 depende da PR #36, que depende da PR #32.
+   **Nenhum merge ou deploy automático antes de todos os gates verdes.**
 
-### Gates para merge
-1. `npm run lint` e `npm test` (inclusive testes P3/P4/Asaas/segurança).
-2. `npm run build` e `npm run test:e2e`; testes HTTP/UI e QA visual com estados pendentes e liquidados.
-3. PostgreSQL 16 real e D1 Workerd com schema e operações P3/P4, inclusive concorrência.
-4. Windows clean install, teste de offline sem gateway, restauração, backup e recuperação após timeout na emissão Asaas.
-5. Homologação real de provedor opcional, registros de reconciliação, estornos e chargebacks antes de ativar produção.
-6. CI verde no SHA final; aprovação de PR #32 e #36 primeiro. **NÃO MERGEAR** automaticamente.
-
-**Limitações:** envio de mensagens e importação OFX/CSV em lote ainda não disponíveis; o extrato é registrado por lançamento. Nenhum fornecedor externo é obrigatório para parcelamento e gestão financeira internos.
+### Limites atuais
+Não há emissão operacional de boleto/link sem integração externa, nem importação
+OFX/CSV em lote, nem envio automático de mensagens, nem estorno externo.
+O parcelamento e a conciliação manuais permanecem disponíveis sem mensalidade.
