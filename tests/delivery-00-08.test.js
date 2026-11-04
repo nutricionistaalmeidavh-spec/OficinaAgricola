@@ -25,7 +25,9 @@ test('entregas 00-08 permanecem isoladas e sem dependência SaaS de runtime', as
   assert.deepEqual(Object.keys(pkg.dependencies),['pg']);
   assert.equal(pkg.devDependencies, undefined);
   assert.match(env, /PORT=3344/);
-  assert.match(env, /DATABASE_PATH=/);
+  assert.match(env, /OFICINA_POSTGRES_REGISTRY_URL=/);
+  assert.match(env, /OFICINA_POSTGRES_OPERATIONS_URL=/);
+  assert.doesNotMatch(env, /DATABASE_PATH=|OFICINA_DATABASE_ENGINE=sqlite/);
   assert.ok(builder.includes('appId: com.artisys.oficina'));
   assert.match(start, /createAssistenciaServer/);
 
