@@ -90,7 +90,7 @@ test('async D1 quote approval and fiscal draft preserve original amounts and ide
   const fiscal=await ws.createFiscalDraft({originType:'OS',originId:os.id,kind:'NFE',requestId:'d1-fiscal-001'});
   const again=await ws.createFiscalDraft({originType:'OS',originId:os.id,kind:'NFE',requestId:'d1-fiscal-001'});
   assert.equal(fiscal.id,again.id);
-  assert.equal(fiscal.amount_cents,2800);
+  assert.equal(fiscal.amount_cents,2857,'proportional discount allocation must close exact cents');
   assert.equal(fiscal.status,'RASCUNHO');
   assert.equal((await port.all('SELECT * FROM fiscal_events WHERE document_id=?',[fiscal.id])).length,1);
   assert.equal((await port.all('SELECT * FROM fiscal_documents')).length,1);
