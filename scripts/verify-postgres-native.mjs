@@ -21,6 +21,22 @@ try{
  await migrateAsyncTenantStore(port);
  await migrateAsyncTenantStore(port);
  const service=createAsyncWorkshopServices(port);
+ const nativeAdmin=await service.bootstrapAdmin({
+  username:'pg-admin',name:'PG Admin',password:'PostgresScrypt#2026'
+ });
+ const nativeLogin=await service.login({
+  username:'pg-admin',password:'PostgresScrypt#2026'
+ });
+ assert.equal(nativeLogin.user.id,nativeAdmin.id);
+ assert.equal((await service.validateSession(nativeLogin.token)).role,'ADMIN');
+ const nativeClerk=await service.createUser({
+  username:'pg-clerk',name:'Cashier',password:'PostgresCashier#2026',
+  role:'ATENDIMENTO'
+ },nativeLogin.token);
+ assert.equal(nativeClerk.role,'ATENDIMENTO');
+ await service.logout(nativeLogin.token);
+ await assert.rejects(service.validateSession(nativeLogin.token),/Sessão inválida/);
+
  const customer=await service.createCustomer({name:'QA Native PostgreSQL'});
  assert.equal(customer.name,'QA Native PostgreSQL');
  const machine=await service.createMachine({
