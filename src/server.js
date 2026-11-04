@@ -20,6 +20,7 @@ import {listDiagnosticAdapters} from './services/diagnostics.js';
 import {executeDiagnosticWorker,isLocalHardwareRequest} from './platform/diagnostic-hardware.js';
 import { createPart, listParts, listPartsPage,  updatePart, addInventoryMovement, consumePart, reverseWorkOrderPart, listWorkOrderParts, lowStockParts } from './services/inventory.js';
 import { createScheduleEvent, listSchedule, listSchedulePage,  updateScheduleEvent, createChecklistTemplate, getChecklistTemplate, listChecklistTemplates, createWorkOrderChecklist, listWorkOrderChecklists, saveAttachment, listAttachments } from './services/operations.js';
+import { saveRemoteAttachment, readRemoteAttachment } from './platform/remote-attachments.js';
 import { addReceipt, reverseReceipt, listReceipts, getPaymentSummary, createExpense, updateExpense, listExpenses, listExpensesPage,  financeSummary } from './services/finance.js';
 import { dashboardData } from './services/dashboard.js';
 import { getOperationalReport } from './services/reports.js';
@@ -67,7 +68,7 @@ function requireVersion(body){
  return version;
 }
 
-function createRouter({db,storageDir,diagnosticRunner=executeDiagnosticWorker}){
+function createRouter({db,storageDir,objectStore=null,diagnosticRunner=executeDiagnosticWorker}){
   const r=new Router(); const add=(m,p,roles,h,o)=>r.add(m,p,roles,h,o);
   add('GET','/api/health',null,()=>({ok:true}),{publicRoute:true});
   add('GET','/api/setup/status',null,()=>({required:isSetupRequired(db)}),{publicRoute:true});
@@ -160,7 +161,17 @@ function createRouter({db,storageDir,diagnosticRunner=executeDiagnosticWorker}){
   add('POST','/api/work-orders/:id/checklists',ROLE_TECH,({params,body})=>createWorkOrderChecklist(db,int(params.id),int(body.templateId),body.responses||[]));
   add('GET','/api/work-orders/:id/attachments',ROLE_ALL,({params})=>listAttachments(db,int(params.id)));
   add('POST','/api/work-orders/:id/attachments',ROLE_TECH,({params,body})=>saveAttachment(db,int(params.id),{...body,storageDir}));
-  add('GET','/api/attachments/:id/file',ROLE_ALL,({params})=>{const a=db.prepare('SELECT * FROM attachments WHERE id=?').get(int(params.id));if(!a)throw new Error('Anexo não encontrado');const root=resolve(storageDir),file=resolve(root,a.relative_path);if(file!==root&&!file.startsWith(root+sep))throw new Error('Caminho de anexo inválido');if(!existsSync(file))throw new Error('Arquivo de anexo não encontrado');return {__binary:readFileSync(file),mimeType:a.mime_type,filename:a.original_name}});
+  add('GET','/api/attachments/:id/file',ROLE_ALL,async({params})=>{
+    const a=db.prepare('SELECT * FROM attachments WHERE id=?').get(int(params.id));
+    if(!a)throw new Error('Anexo não encontrado');
+    if(a.relative_path.startsWith('s3:')){
+      return {__binary:await readRemoteAttachment(a,objectStore),mimeType:a.mime_type,filename:a.original_name};
+    }
+    const root=resolve(storageDir),file=resolve(root,a.relative_path);
+    if(file!==root&&!file.startsWith(root+sep))throw new Error('Caminho de anexo inválido');
+    if(!existsSync(file))throw new Error('Arquivo de anexo não encontrado');
+    return {__binary:readFileSync(file),mimeType:a.mime_type,filename:a.original_name};
+  });
 
   add('GET','/api/work-orders/:id/payment',ROLE_ALL,({params})=>getPaymentSummary(db,int(params.id)));
   add('GET','/api/work-orders/:id/receipts',ROLE_ALL,({params})=>listReceipts(db,int(params.id)));
@@ -216,14 +227,32 @@ function serveStatic(req,res,path){
   res.writeHead(200,{'Content-Type':MIME[extname(file)]||'application/octet-stream','Cache-Control':rel==='index.html'?'no-cache':'public, max-age=3600'});res.end(readFileSync(file));return true;
 }
 
-export function createAppServer({db=openDatabase(),storageDir=process.env.STORAGE_DIR||'./storage/uploads',eventRuntime=null,fiscalProvider=null,diagnosticRunner=executeDiagnosticWorker}={}){
-  migrate(db); const router=createRouter({db,storageDir,diagnosticRunner});
+export function createAppServer({db=openDatabase(),storageDir=process.env.STORAGE_DIR||'./storage/uploads',eventRuntime=null,fiscalProvider=null,objectStore=null,diagnosticRunner=executeDiagnosticWorker}={}){
+  migrate(db); const router=createRouter({db,storageDir,objectStore,diagnosticRunner});
   return createServer(async(req,res)=>{
     const url=new URL(req.url||'/','http://localhost'); const route=router.match(req.method||'GET',url.pathname);
     hardenHttpResponse(res,req);
     try{
       assertSecureNetwork(req);
       assertSameOrigin(req);
+      // S3 is async: upload before committing metadata, but never await while
+      // inside a synchronous SQLite transaction. Local/disk mode is unchanged.
+      const attachmentUpload=objectStore&&req.method==='POST'
+        ?url.pathname.match(/^\/api\/work-orders\/(\d+)\/attachments$/):null;
+      if(attachmentUpload){
+        const user=validateSession(db,tokenFrom(req));
+        roleGuard(user,ROLE_TECH);
+        const body=await readJson(req);
+        const workOrderId=int(attachmentUpload[1]);
+        const data=await saveRemoteAttachment(db,workOrderId,{
+          ...body,requestId:body.requestId??req.headers['idempotency-key']
+        },{objectStore,onPersist:row=>enqueueHttpEvent(db,'POST',url.pathname,row,{
+          requestId:body.requestId??req.headers['idempotency-key'],actorId:user.id
+        })});
+        if(eventRuntime)void dispatchOutbox(db,eventRuntime,100,{respectBackoff:true})
+          .catch(e=>console.error('[outbox]',e.message));
+        return json(res,200,data);
+      }
       // Transmissão fiscal faz I/O externo; nunca manter transação SQLite aberta durante a rede.
       // Rotas assíncronas são separadas do envelopamento HTTP de comandos síncronos.
       const fiscalAction=(req.method==='POST')?url.pathname.match(/^\/api\/fiscal\/(\d+)\/(submit|reconcile)$/):null;
