@@ -19,6 +19,13 @@ process.env.EVENT_LOG_PATH ||= './data/oficina-events.jsonl';
 process.env.PORT ||= '3344';
 
 const db = openDatabase();
+// A legacy process must never bypass the multiempresa registry, even when the
+// original SQLite database has valid old sessions. Migrate back from a verified
+// backup before downgrading the runtime.
+if(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='tenant_registry_link'").get()){
+  db.close();
+  throw new Error('Banco vinculado ao modo multiempresa: use npm run start:multi. Modo legado bloqueado para não ignorar permissões.');
+}
 migrate(db);
 migrateAssistencia(db);
 seed(db);
