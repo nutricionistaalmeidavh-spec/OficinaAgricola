@@ -20,7 +20,7 @@ export function tenantSchemaName(unit,{prefix='oficina'}={}){
 }
 export function createPostgresTenantRuntimeFactory({
  Pool,connectionString,registry,serviceToken,allowProvision=false,
- schemaPrefix='oficina',objectStoreForUnit=null,localStorageRoot=null
+ schemaPrefix='oficina',objectStoreForUnit=null,localStorageRoot=null,paymentOptionsForUnit=null
 }={}){
  if(typeof Pool!=='function'||typeof connectionString!=='string'||!connectionString.trim())
    throw Error('PostgreSQL exige pool e URL operacional explícitos');
@@ -74,7 +74,9 @@ export function createPostgresTenantRuntimeFactory({
        :localStorageRoot?createLocalTenantObjectStore({
           root:localStorageRoot,companyId:unit.companyId,unitId:unit.id
         }):null;
-     const services=createAsyncWorkshopServices(port,{objectStore});
+     const paymentOptions=typeof paymentOptionsForUnit==='function'
+       ?paymentOptionsForUnit(unit):{};
+     const services=createAsyncWorkshopServices(port,{objectStore,paymentOptions});
      const nativeHandler=createAsyncWorkshopHandler({
        services,
        serviceToken,
