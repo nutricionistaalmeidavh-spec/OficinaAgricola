@@ -122,6 +122,31 @@ test('HTTP isolation: company and unit records, member roles and revoked access'
   assert.equal(repeat.status,200);
   assert.equal(repeat.data.targetPartId,shared.data.targetPartId,'retries do not duplicate catalog entries');
   assert.equal(repeat.data.created,false);
+  // Real HTTP transfer between two authorized branches: only canonical ledgers move stock.
+  const entered=await request('POST','/api/inventory/movements',{
+    partId:sharedSource.data.id,type:'ENTRADA',quantity:5,requestId:'stock-http-initial'
+  },second);
+  assert.equal(entered.status,200,JSON.stringify(entered.data));
+  const transferBody={sourceUnitId:second,targetUnitId:unit.data.id,sourcePartId:sharedSource.data.id,quantity:2,requestId:'stock-http-001'};
+  assert.equal((await request('POST','/api/tenancy/stock-transfer',{...transferBody,targetUnitId:1})).status,403,
+    'stock transfer between separate companies must be forbidden');
+  const transfer=await request('POST','/api/tenancy/stock-transfer',transferBody);
+  assert.equal(transfer.status,200,JSON.stringify(transfer.data));
+  assert.equal(transfer.data.status,'COMPLETED');
+  const duplicate=await request('POST','/api/tenancy/stock-transfer',transferBody);
+  assert.equal(duplicate.status,200);
+  assert.equal(duplicate.data.created,false);
+  assert.equal(duplicate.data.transferId,transfer.data.transferId);
+  assert.equal((await request('POST','/api/tenancy/stock-transfer',{...transferBody,quantity:3})).status,409);
+  const sourceAfter=(await request('GET','/api/parts',undefined,second)).data.find(x=>x.sku==='SHARED-001');
+  const destinationAfter=(await request('GET','/api/parts',undefined,unit.data.id)).data.find(x=>x.sku==='SHARED-001');
+  assert.equal(sourceAfter.quantity,3);
+  assert.equal(destinationAfter.quantity,2);
+  const transfers=await request('GET','/api/tenancy/stock-transfers?companyId='+newCompany.data.id);
+  assert.equal(transfers.status,200);
+  assert.equal(transfers.data.transfers[0].status,'COMPLETED');
+  assert.equal((await request('POST','/api/tenancy/stock-transfer/retry',{transferId:transfer.data.transferId})).data.status,'COMPLETED');
+
   // Customer sharing is opt-in and purpose-bound, with a legal basis reference.
   const shareCustomerBody={sourceUnitId:second,targetUnitId:unit.data.id,customerId:bAgain.data[0].id,legalBasis:'CONTRATO',recordReference:'OS-COMPARTILHADA-2026-001'};
   assert.equal((await request('POST','/api/tenancy/share-customer',{...shareCustomerBody,recordReference:''})).status,400,'evidence reference required');
@@ -153,6 +178,8 @@ test('HTTP isolation: company and unit records, member roles and revoked access'
     'body actorUserId must never impersonate a platform admin');
   assert.equal((await request('POST','/api/tenancy/share-customer',{...shareCustomerBody,actorUserId:1},unit.data.id,staffToken)).status,403,
     'customer sharing must not allow client-controlled actor identity');
+  assert.equal((await request('POST','/api/tenancy/stock-transfer',{...transferBody,actorUserId:1},unit.data.id,staffToken)).status,403,
+    'stock transfer must not trust actorUserId from JSON');
   const revocation=await request('PATCH','/api/tenancy/memberships',{unitId:unit.data.id,userId:member.data.id,role:'TECNICO',active:false});
   assert.equal(revocation.status,200);
   assert.equal((await request('GET','/api/customers',undefined,unit.data.id,staffToken)).status,403);
