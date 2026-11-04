@@ -8,12 +8,14 @@ import { startMultiTenantBackupSchedule } from './platform/tenant-backup.js';
 import { createS3BackupClient } from './platform/s3-backup.js';
 import { loadTenantFiscalConfigs } from './platform/tenant-fiscal.js';
 
-// Explicit backend selection. Never pretend that D1/R2/PostgreSQL are active
-// while writing user data to an unrelated SQLite database.
+// Database remains canonical SQLite until PostgreSQL/D1 parity is proven.
+// Primary attachments may explicitly switch from local disk to private S3.
 const databaseEngine=String(process.env.OFICINA_DATABASE_ENGINE||'sqlite').toLowerCase();
 const objectsEngine=String(process.env.OFICINA_OBJECT_STORAGE||'disk').toLowerCase();
-if(databaseEngine!=='sqlite'||objectsEngine!=='disk')
-  throw new Error('Motor solicitado não disponível neste runtime: use sqlite + disk ou implemente o adaptador antes de iniciar');
+if(databaseEngine!=='sqlite'||!['disk','s3'].includes(objectsEngine))
+  throw new Error('Backend não disponível: use OFICINA_DATABASE_ENGINE=sqlite e storage disk ou s3');
+if(objectsEngine==='s3'&&!process.env.OFICINA_ATTACHMENT_S3_ENDPOINT)
+  throw new Error('Storage S3 selecionado sem endpoint explícito');
 const legacyDatabasePath=resolveDatabasePath();
 const legacyStorageDir=resolveStoragePath({databasePath:legacyDatabasePath});
 const registryPath=resolve(process.env.TENANCY_REGISTRY_PATH || join(dirname(legacyDatabasePath),'oficina-registry.sqlite'));
@@ -26,7 +28,19 @@ const tls=process.env.HTTPS_CERT_FILE&&process.env.HTTPS_KEY_FILE?{
   key:readFileSync(process.env.HTTPS_KEY_FILE)
 }:null;
 const tenantFiscalConfigs=loadTenantFiscalConfigs(process.env.TENANCY_FISCAL_CONFIG_FILE);
-const server=createMultiTenantServer({registryDb,legacyDb,legacyDatabasePath,legacyStorageDir,tenantsRoot,tls,tenantFiscalConfigs});
+const objectStoreForUnit=objectsEngine==='s3'?(unit=>createS3BackupClient({
+  endpoint:process.env.OFICINA_ATTACHMENT_S3_ENDPOINT,
+  bucket:process.env.OFICINA_ATTACHMENT_S3_BUCKET,
+  region:process.env.OFICINA_ATTACHMENT_S3_REGION||'us-east-1',
+  accessKeyId:process.env.OFICINA_ATTACHMENT_S3_ACCESS_KEY_ID,
+  secretAccessKey:process.env.OFICINA_ATTACHMENT_S3_SECRET_ACCESS_KEY,
+  prefix:(process.env.OFICINA_ATTACHMENT_S3_PREFIX||'oficina-attachments')+
+    '/company-'+unit.companyId+'/unit-'+unit.id
+})):null;
+const server=createMultiTenantServer({
+  registryDb,legacyDb,legacyDatabasePath,legacyStorageDir,tenantsRoot,tls,
+  tenantFiscalConfigs,objectStoreForUnit
+});
 const {host,port}=resolveServerConfig(process.env);
 // Remote copies are opt-in, while SQLite + local disk remain canonical and free.
 const backupS3Endpoint=String(process.env.OFICINA_BACKUP_S3_ENDPOINT||'').trim();
