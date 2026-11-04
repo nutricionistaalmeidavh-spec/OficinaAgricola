@@ -58,6 +58,7 @@ export function createMultiTenantServer({
   tls = null,
   tenantFiscalConfigs = {},
   tenantPaymentConfigs = {},
+  billingProvidersForUnit = null,
   objectStoreForUnit = null,
   unitServerFactory = createAssistenciaServer,
   nativeBackendForUnit = null,
@@ -103,7 +104,9 @@ export function createMultiTenantServer({
     // A unit-specific S3 namespace is derived from trusted registry IDs, never
     // from request headers or client-controlled JSON.
     const objectStore=objectStoreForUnit?objectStoreForUnit(unit):null;
-    const paymentOptions=resolveTenantPaymentOptions(unit,tenantPaymentConfigs);
+    const paymentOptions={...resolveTenantPaymentOptions(unit,tenantPaymentConfigs),
+      billingProviders:billingProvidersForUnit?.(unit,db)??{}
+    };
     const srv=unitServerFactory({db,storageDir,eventRuntime,tls:null,fiscalProviderOverride,objectStore,paymentOptions});
     const runtime={db,srv,unit,storageDir,objectStore,eventRuntime,owned:!isLegacy,
       fiscalConfigured:isLegacy||Boolean(scopedFiscalProvider)};
