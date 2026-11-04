@@ -53,7 +53,7 @@ test('early OS transfer preserves active work in target and closes original with
   assert.equal(retryTenantWorkOrderTransfer({...params,transferId:first.transferId}).status,'COMPLETED');
  }finally{s.close();}
 });
-test('OS transfer blocks cross-company, missing justification and orders with financial or attachments',()=>{
+test('OS transfer blocks cross-company and missing justification but preserves source expense ledger',()=>{
  const s=setup();try{
   const base={registryDb:s.registry,unitRuntime:s.unitRuntime,actorUserId:s.actor,
     sourceUnitId:s.company.unitId,targetUnitId:s.targetUnit.id,workOrderId:s.os.id,
@@ -62,9 +62,12 @@ test('OS transfer blocks cross-company, missing justification and orders with fi
   assert.throws(()=>transferTenantWorkOrder({...base,recordReference:''}),/referência/i);
   s.source.prepare(`INSERT INTO expenses(description,amount_cents,work_order_id,created_at,updated_at)
     VALUES('Peça',2000,?,'2026-01-01','2026-01-01')`).run(s.os.id);
-  assert.throws(()=>transferTenantWorkOrder(base),/vínculos|financeiros|anexos/i);
-  assert.equal(s.target.prepare('SELECT COUNT(*) n FROM work_orders').get().n,0);
-  assert.equal(s.source.prepare('SELECT status FROM work_orders WHERE id=?').get(s.os.id).status,'ENTRADA');
+  const result=transferTenantWorkOrder(base);
+  assert.equal(result.status,'COMPLETED');
+  assert.equal(s.target.prepare('SELECT COUNT(*) n FROM work_orders').get().n,1);
+  assert.equal(s.target.prepare('SELECT COUNT(*) n FROM expenses').get().n,0);
+  assert.equal(s.source.prepare('SELECT COUNT(*) n FROM expenses').get().n,1);
+  assert.equal(s.source.prepare('SELECT status FROM work_orders WHERE id=?').get(s.os.id).status,'TRANSFERIDA');
  }finally{s.close();}
 });
 test('OS transfer can preserve DIAGNOSTICO status and its creation audit trail',()=>{
