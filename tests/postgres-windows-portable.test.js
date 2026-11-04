@@ -41,12 +41,18 @@ test('first launch provisions private PostgreSQL 16 cluster without npm or netwo
    commands.push({program:executable.split(/[\\\\/]/).at(-1),args});
    if(executable.endsWith('initdb.exe')){
      mkdirSync(join(dataDir,'postgres','cluster'),{recursive:true});
-     writeFileSync(join(dataDir,'postgres','cluster','PG_VERSION'),'16\\n');
+     writeFileSync(join(dataDir,'postgres','cluster','PG_VERSION'),'16\n');
    }
  };
  const fakePool=class{
    constructor(opts){connections.push(opts); }
-   async query(sql){if(sql.includes('pg_database'))return {rows:[]};return {rows:[]};}
+   async query(sql){
+     if(sql.includes("current_setting('data_directory')"))return {rows:[{
+       data_dir:join(dataDir,'postgres','cluster'),server_port:'55627',username:'oficina_local_owner'
+     }]};
+     if(sql.includes('pg_database'))return {rows:[]};
+     return {rows:[]};
+   }
    async end(){}
  };
  const manager=createPortablePostgresController({
@@ -73,7 +79,7 @@ test('existing cluster missing credentials fails closed rather than resetting da
  const dataRoot=join(f.root,'profile');
  const cluster=join(dataRoot,'postgres','cluster');
  mkdirSync(cluster,{recursive:true});
- writeFileSync(join(cluster,'PG_VERSION'),'16\\n');
+ writeFileSync(join(cluster,'PG_VERSION'),'16\n');
  const manager=createPortablePostgresController({
    resourcesPath:f.resources,dataRoot,platform:'win32',arch:'x64',
    execute:async()=>{throw Error('Must not reinitialise');},
