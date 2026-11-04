@@ -40,6 +40,8 @@ test('PostgreSQL tenant schema uses identity columns and no SQLite-only syntax',
  assert.ok(sql.some(s=>s.includes('source_id BIGINT NOT NULL')),'payment events reference large entity IDs');
  assert.ok(sql.every(s=>!s.includes('AUTOINCREMENT')&&!s.includes('sqlite_master')));
  assert.ok(sql.some(s=>s.includes('CREATE TABLE IF NOT EXISTS fiscal_documents')));
+ assert.ok(sql.some(s=>s.includes('CREATE TABLE IF NOT EXISTS tenant_remote_upload_requests')),
+   'native S3 upload idempotency table must exist before any attachment operation');
  assert.ok(sql.some(s=>s.includes('CREATE SEQUENCE IF NOT EXISTS async_os_number_seq')),'PG must allocate order number without MAX race');
  assert.ok(sql.some(s=>s.includes('os_number BIGINT NOT NULL UNIQUE')),'sequence uses BIGINT OS numbers');
 });
