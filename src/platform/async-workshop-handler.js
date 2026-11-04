@@ -238,6 +238,37 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
    if(maintenance&&method==='POST')
      return json(await services.createServiceRecord(Number(maintenance[1]),
        await dataFrom(request)),201);
+   const lookupPlate=path.match(/^\/v1\/vehicles\/plate\/([A-Z0-9-]+)$/);
+   if(lookupPlate&&method==='GET')
+     return json(await services.lookupVehicleByPlate(lookupPlate[1]));
+   if(path==='/v1/crm/tasks'&&method==='GET')
+     return json(await services.listCrmTasks({
+       status:u.searchParams.get('status')||'PENDENTE',
+       limit:u.searchParams.get('limit')||200
+     }));
+   if(path==='/v1/crm/tasks'&&method==='POST')
+     return json(await services.createCrmTask(await dataFrom(request)),201);
+   const completeTask=path.match(/^\/v1\/crm\/tasks\/([1-9]\d*)\/complete$/);
+   if(completeTask&&method==='POST')
+     return json(await services.completeCrmTask(Number(completeTask[1]),
+       await dataFrom(request)));
+   if(path==='/v1/crm/maintenance/sync'&&method==='POST')
+     return json(await services.createMaintenanceCrmTasks(await dataFrom(request)));
+   if(path==='/v1/fleets'&&method==='GET')
+     return json(await services.listFleets());
+   if(path==='/v1/fleets'&&method==='POST')
+     return json(await services.createFleet(await dataFrom(request)),201);
+   const fleetVehicle=path.match(/^\/v1\/fleets\/([1-9]\d*)\/vehicles$/);
+   if(fleetVehicle&&method==='POST'){
+     const input=await dataFrom(request);
+     return json(await services.addFleetVehicle(Number(fleetVehicle[1]),input.machineId));
+   }
+   if(path==='/v1/technical-references'&&method==='GET')
+     return json(await services.listTechnicalReferences({
+       partId:u.searchParams.get('partId')||null
+     }));
+   if(path==='/v1/technical-references'&&method==='POST')
+     return json(await services.createTechnicalReference(await dataFrom(request)),201);
    if(path==='/v1/parts'&&method==='GET')
      return json(await services.listParts({
        search:u.searchParams.get('search')||'',
