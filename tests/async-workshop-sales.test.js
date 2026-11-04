@@ -38,7 +38,7 @@ test('one shared SQL sales engine keeps cash, stock, sales and payments canonica
   await assert.rejects(service.cancelSale({saleId:sale.id,reason:'Devolução duplicada'}),/cancelada/i);
   const closed=await service.closeCashSession({closingCents:5000});
   assert.equal(closed.status,'FECHADO');
-  await assert.rejects(service.createSale({...input,requestId:'new-sale'}),/caixa aberto/i);
+  await assert.rejects(service.createSale({...input,requestId:'new-sale'}),/Abra o caixa/i);
  }finally{db.close();}
 });
 test('shared SQL sales engine rejects insufficient aggregated stock before creating fiscal or payment entries',async()=>{
