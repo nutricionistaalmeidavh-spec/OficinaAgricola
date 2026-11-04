@@ -58,6 +58,14 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
    // the trusted gateway validates global session AND tenant membership.
    if(path==='/v1/internal/gateway-session'&&method==='POST')
      return json(await services.provisionGatewaySession(await dataFrom(request)));
+   const publicApproval=path.match(/^\/v1\/public\/approval\/([a-f0-9]{64})$/);
+   if(publicApproval&&method==='GET')
+     return json(await services.getApprovalProposal(publicApproval[1]));
+   if(publicApproval&&method==='POST')
+     return json(await services.resolveApproval(publicApproval[1],await dataFrom(request)));
+   const approvalLink=path.match(/^\/v1\/orders\/([1-9][0-9]*)\/quote\/approval-link$/);
+   if(approvalLink&&method==='POST')
+     return json(await services.createApprovalLink(Number(approvalLink[1]),await dataFrom(request)),201);
    if(path==='/v1/auth/bootstrap'&&method==='POST')
      return json(await services.bootstrapAdmin(await dataFrom(request)),201);
    if(path==='/v1/auth/login'&&method==='POST')
