@@ -24,8 +24,8 @@ export function dashboardData(db,{now=new Date(),role='ADMIN'}={}){
   counts.ENTREGUES_MES=Number(db.prepare("SELECT COUNT(*) n FROM work_orders WHERE status='ENTREGUE' AND delivered_at>=? AND delivered_at<?").get(start.toISOString(),nextMonth.toISOString()).n);
   const canReadFinance=['ADMIN','FINANCEIRO'].includes(role);
   const finance=canReadFinance?financeSummary(db,{from:start.toISOString(),to:end.toISOString()}):null;
-  const upcoming=listSchedule(db,{from:now.toISOString(),to:new Date(now.getTime()+30*24*60*60*1000).toISOString()}).slice(0,8);
+  const upcoming=listSchedule(db,{from:now.toISOString(),to:new Date(now.getTime()+30*24*60*60*1000).toISOString(),limit:8});
   const lowStock=lowStockParts(db);
   counts.ESTOQUE_CRITICO=lowStock.length;
-  return {...(finance?{finance}:{}),counts,board,upcoming,lowStock,maintenanceAlerts:listMaintenanceAlerts(db).slice(0,8)};
+  return {...(finance?{finance}:{}),counts,board,upcoming,lowStock,maintenanceAlerts:listMaintenanceAlerts(db,{limit:8})};
 }

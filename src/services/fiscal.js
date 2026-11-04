@@ -1,3 +1,4 @@
+import {selectPage} from '../platform/pagination.js';
 import {createHash,randomUUID} from 'node:crypto';
 import {nowIso,transaction} from '../db.js';
 import {getFiscalSettings,assertFiscalReady} from './fiscal-settings.js';
@@ -177,4 +178,13 @@ export async function reconcileFiscalDocument(db,id,{provider}={}){
   catch(error){markUncertain(db,id,error);throw error}
   transaction(db,()=>applyProviderResult(db,id,result,text(provider.name||'local')));
   return getFiscalDocument(db,id);
+}
+
+export function listFiscalDocumentsPage(db,{status='',limit=50,cursor=null}={}){
+  if(status&&!['RASCUNHO','INDETERMINADO','REJEITADA','AUTORIZADA','AUTORIZADA_HOMOLOGACAO','CANCELADA'].includes(status))
+    throw new Error('Estado fiscal inválido');
+  return selectPage(db,{from:'FROM fiscal_documents f',
+    select:'f.id,f.kind,f.origin_type,f.origin_id,f.status,f.amount_cents,f.snapshot_json,f.request_id,f.provider_name,f.access_key,f.protocol,f.fiscal_number,f.fiscal_series,f.last_error,f.environment,f.created_at,f.updated_at,f.authorized_at',
+    where:status?['f.status=?']:[],args:status?[status]:[],
+    sort:'f.id',id:'f.id',cursor,limit,scope:'fiscal'});
 }

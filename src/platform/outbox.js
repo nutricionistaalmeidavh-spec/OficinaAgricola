@@ -37,12 +37,14 @@ export function enqueueHttpEvent(db,method,path,data,{requestId=null,actorId=nul
    JSON.stringify(descriptor.payload),JSON.stringify({...descriptor.meta,actorId:actorId??null}),nowIso());
  return db.prepare('SELECT * FROM domain_outbox WHERE event_key=?').get(eventKey);
 }
-export function unpublishedOutbox(db,limit=100){
- return db.prepare('SELECT * FROM domain_outbox WHERE delivered_at IS NULL ORDER BY id LIMIT ?').all(limit);
+export function unpublishedOutbox(db,limit=100,{now=new Date().toISOString(),dueOnly=false,afterId=0}={}){
+ const size=Math.max(1,Math.min(500,Number(limit)||100));
+ return db.prepare('SELECT * FROM domain_outbox WHERE delivered_at IS NULL AND id>? AND (?=0 OR next_attempt_at IS NULL OR next_attempt_at<=?) ORDER BY id LIMIT ?')
+   .all(afterId,dueOnly?1:0,now,size);
 }
-async function dispatch(db,runtime,limit){
+async function dispatch(db,runtime,limit,{respectBackoff=false,afterId=0}={}){
  let delivered=0;
- const rows=unpublishedOutbox(db,limit);
+ const rows=unpublishedOutbox(db,limit,{dueOnly:respectBackoff,afterId});
  for(const row of rows){
    const event=createDomainEvent(row.event_type,JSON.parse(row.payload_json),{
      ...JSON.parse(row.meta_json),eventId:row.event_id,occurredAt:row.created_at
@@ -50,36 +52,40 @@ async function dispatch(db,runtime,limit){
    try{
      if(typeof runtime.deliver!=='function')throw new Error('Runtime sem entrega confirmada');
      await runtime.deliver(event);
-     db.prepare('UPDATE domain_outbox SET delivered_at=?,last_error=? WHERE id=? AND delivered_at IS NULL')
+     db.prepare('UPDATE domain_outbox SET delivered_at=?,next_attempt_at=NULL,last_error=? WHERE id=? AND delivered_at IS NULL')
        .run(nowIso(),'',row.id);
      delivered++;
    }catch(error){
-     db.prepare('UPDATE domain_outbox SET attempts=attempts+1,last_error=? WHERE id=?')
-       .run(String(error?.message||error).slice(0,500),row.id);
+     const retries=row.attempts+1;
+     const delayMs=Math.min(3600000,5000*Math.pow(2,Math.min(retries-1,10)));
+     const nextAttempt=new Date(Date.now()+delayMs).toISOString();
+     db.prepare('UPDATE domain_outbox SET attempts=attempts+1,last_error=?,next_attempt_at=? WHERE id=?')
+       .run(String(error?.message||error).slice(0,500),nextAttempt,row.id);
      // Reconhecer outros eventos mesmo se uma integração específica falhar.
    }
  }
- return delivered;
+ return {delivered,attempted:rows.length,lastId:rows.at(-1)?.id??afterId};
 }
-export function dispatchOutbox(db,runtime,limit=100){
+export function dispatchOutbox(db,runtime,limit=100,{respectBackoff=false}={}){
  if(!runtime)return Promise.resolve(0);
  if(inFlight.has(db)){
    reschedule.add(db);
    return inFlight.get(db);
  }
  const job=(async()=>{
-   let count=0;
+   let count=0,afterId=0;
    while(true){
-     const n=await dispatch(db,runtime,limit);
-     count+=n;
-     if(n<limit)break;
+     const {delivered,attempted,lastId}=await dispatch(db,runtime,limit,{respectBackoff,afterId});
+     afterId=lastId;
+     count+=delivered;
+     if(attempted<Math.max(1,Math.min(500,Number(limit)||100)))break;
    }
    return count;
  })().finally(()=>{
    inFlight.delete(db);
    if(reschedule.has(db)){
      reschedule.delete(db);
-     queueMicrotask(()=>void dispatchOutbox(db,runtime,limit).catch(()=>{}));
+     queueMicrotask(()=>void dispatchOutbox(db,runtime,limit,{respectBackoff:true}).catch(()=>{}));
    }
  });
  inFlight.set(db,job);

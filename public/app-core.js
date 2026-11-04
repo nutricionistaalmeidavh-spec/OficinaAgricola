@@ -359,6 +359,32 @@ function setContent(html){
   trackDirtyInputs(host);
 }
 
+// Progressive, cursor-based collections; never request every row for a list view.
+function showPagedLoadMore({cursor,loaded,total,onMore,label='Carregar mais'}){
+  const host=$('#content');
+  if(!host)return;
+  host.querySelector('#pagedLoadMore')?.remove();
+  if(!cursor)return;
+  const group=document.createElement('div');
+  group.id='pagedLoadMore';
+  group.className='action-row';
+  group.style.marginTop='12px';
+  group.style.justifyContent='space-between';
+  const status=document.createElement('small');
+  status.className='muted';
+  status.textContent=loaded+' de '+total+' registros carregados';
+  const button=document.createElement('button');
+  button.className='btn sm soft';
+  button.type='button';
+  button.textContent=label;
+  button.onclick=async()=>{
+    button.disabled=true;
+    try{await onMore();}catch(error){toast(error.message,true);button.disabled=false;}
+  };
+  group.append(status,button);
+  host.appendChild(group);
+}
+
 async function boot(){
   $('#today').textContent=new Date().toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'short'});
   try{

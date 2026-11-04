@@ -17,6 +17,8 @@
     "ci": "npm run lint && npm test && npm run build && npm run test:e2e",
     "db:migrate": "node src/migrate-assistencia.js",
     "db:seed": "node src/seed-assistencia.js",
-    "desktop:dist": "powershell -ExecutionPolicy Bypass -File scripts/build-electron.ps1"
+    "desktop:dist": "powershell -ExecutionPolicy Bypass -File scripts/build-electron.ps1",
+    "db:benchmark": "node scripts/benchmark-db.mjs",
+    "db:health": "node scripts/db-health.mjs"
   }
 }

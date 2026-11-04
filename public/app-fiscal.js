@@ -12,9 +12,9 @@ function fiscalDisplayTitle(doc){
  return kind+' · '+(doc.status==='RASCUNHO'?'Rascunho':String(doc.status||'Em processamento').replaceAll('_',' '));
 }
 
-async function renderFiscal(){
+async function renderFiscal({cursor=null,loaded=[]}={}){
   pageTitle('Fiscal','DOCUMENTOS E CONCILIAÇÃO');
-  const [docs,settings]=await Promise.all([api('/api/fiscal'),api('/api/fiscal/settings')]);
+  const [page,settings]=await Promise.all([api('/api/fiscal/page?limit=50'+(cursor?'&cursor='+encodeURIComponent(cursor):'')),api('/api/fiscal/settings')]);const docs=loaded.concat(page.items);
   const cards=docs.map(d=>{
     const origin=d.origin_type==='OS'?'OS':'Venda';
     const actions=d.status==='RASCUNHO'&&settings.enabled
@@ -40,6 +40,7 @@ async function renderFiscal(){
   $$('[data-fiscal-details]').forEach(b=>b.onclick=()=>showFiscalHistory(Number(b.dataset.fiscalDetails)).catch(e=>toast(e.message,true)));
   $$('[data-fiscal-submit]').forEach(b=>b.onclick=()=>fiscalAction(Number(b.dataset.fiscalSubmit),'submit'));
   $$('[data-fiscal-check]').forEach(b=>b.onclick=()=>fiscalAction(Number(b.dataset.fiscalCheck),'reconcile'));
+   showPagedLoadMore({cursor:page.nextCursor,loaded:docs.length,total:page.total,onMore:()=>renderFiscal({cursor:page.nextCursor,loaded:docs})});
 }
 
 function fiscalSettingsModal(current){
