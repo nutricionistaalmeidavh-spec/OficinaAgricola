@@ -10,13 +10,13 @@ const constantTimeToken=(actual,expected)=>{
   for(let i=0;i<size;i++)mismatch|=(actual.charCodeAt(i)||0)^(expected.charCodeAt(i)||0);
   return mismatch===0;
 };
-async function dataFrom(request){
+async function dataFrom(request,maxBytes=1048576){
  if(!String(request.headers.get('content-type')||'').toLowerCase().startsWith('application/json'))
    throw Object.assign(new Error('Corpo JSON obrigatório'),{status:415});
- if(Number(request.headers.get('content-length')||0)>1048576)
+ if(Number(request.headers.get('content-length')||0)>maxBytes)
    throw Object.assign(new Error('Requisição excede limite'),{status:413});
  const raw=await request.text();
- if(raw.length>1048576)throw Object.assign(new Error('Requisição excede limite'),{status:413});
+ if(new TextEncoder().encode(raw).byteLength>maxBytes)throw Object.assign(new Error('Requisição excede limite'),{status:413});
  let data;try{data=JSON.parse(raw);}catch{throw Object.assign(new Error('JSON inválido'),{status:400});}
  if(!data||typeof data!=='object'||Array.isArray(data))
    throw Object.assign(new Error('Objeto JSON obrigatório'),{status:400});
@@ -284,6 +284,24 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
      }));
    if(path==='/v1/technical-references'&&method==='POST')
      return json(await services.createTechnicalReference(await dataFrom(request)),201);
+   const attachments=path.match(/^\/v1\/orders\/([1-9]\d*)\/attachments$/);
+   if(attachments&&method==='GET')
+     return json(await services.listAttachments(Number(attachments[1])));
+   if(attachments&&method==='POST')
+     return json(await services.saveAttachment(Number(attachments[1]),
+       await dataFrom(request,7*1024*1024)),201);
+   const attachmentDownload=path.match(/^\/v1\/attachments\/([1-9]\d*)\/file$/);
+   if(attachmentDownload&&method==='GET'){
+     const row=await services.getAttachment(Number(attachmentDownload[1]));
+     const bytes=await services.readAttachment(row.id);
+     const filename=String(row.original_name||'anexo').replace(/[^A-Za-z0-9._ -]/g,'_').slice(0,120);
+     return new Response(bytes,{status:200,headers:{
+       'Content-Type':row.mime_type,
+       'Content-Disposition':'attachment; filename="'+filename+'"',
+       'Content-Length':String(bytes.length),'Cache-Control':'no-store',
+       'X-Content-Type-Options':'nosniff'
+     }});
+   }
    if(path==='/v1/parts'&&method==='GET')
      return json(await services.listParts({
        search:u.searchParams.get('search')||'',
