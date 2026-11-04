@@ -113,7 +113,7 @@ const completed=await request('POST','/v1/maintenance-plans/'+plan.id+'/complete
 assert.equal(completed.last_completed_at,'2026-11-04');
 assert.equal((await request('GET','/v1/machines/'+auto.id+'/maintenance')).length,1);
 const repeatMaintenance=await fetch(base+'/v1/maintenance-plans/'+plan.id+'/complete',{
- method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+ method:'POST',headers:{Authorization:'Bearer '+token,'X-Oficina-Session':personalSession,'Content-Type':'application/json'},
  body:JSON.stringify({performedAt:'2026-11-04'})
 });
 assert.equal(repeatMaintenance.status,409,'duplicate preventive completion must never double-book');
