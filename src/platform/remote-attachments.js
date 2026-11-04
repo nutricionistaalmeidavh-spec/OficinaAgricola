@@ -29,7 +29,7 @@ function decodeAttachment(input){
   if(raw.length>5*1024*1024)fail('Arquivo excede o limite permitido');
   return {raw,ext};
 }
-export async function saveRemoteAttachment(db,workOrderId,input,{objectStore}={}){
+export async function saveRemoteAttachment(db,workOrderId,input,{objectStore,onPersist=null}={}){
   if(!objectStore||typeof objectStore.putObject!=='function'||typeof objectStore.deleteObject!=='function')
     fail('Armazenamento remoto não configurado');
   const osId=Number(workOrderId);
@@ -72,7 +72,9 @@ export async function saveRemoteAttachment(db,workOrderId,input,{objectStore}={}
       const attachmentId=Number(inserted.lastInsertRowid);
       if(id)db.prepare('INSERT INTO tenant_remote_upload_requests(work_order_id,request_id,payload_hash,attachment_id) VALUES(?,?,?,?)')
         .run(osId,id,fingerprint,attachmentId);
-      return db.prepare('SELECT * FROM attachments WHERE id=?').get(attachmentId);
+      const row=db.prepare('SELECT * FROM attachments WHERE id=?').get(attachmentId);
+      if(onPersist)onPersist(row);
+      return row;
     });
   }catch(error){
     try{await objectStore.deleteObject({key});}
