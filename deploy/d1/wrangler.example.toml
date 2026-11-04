@@ -15,3 +15,10 @@ ASYNC_TENANT_UNIT_ID = "4"
 binding = "DB"
 database_name = "oficina-empresa-2-unidade-4"
 database_id = "00000000-0000-0000-0000-000000000000"
+
+# OPTIONAL private attachments using R2 (no R2 required to run D1 core).
+# Each object key is company-X/unit-Y/OS-ID/UUID.ext and has verified SHA-256.
+# For self-hosted PostgreSQL, prefer local OSS MinIO via S3 instead.
+# [[r2_buckets]]
+# binding = "OBJECTS"
+# bucket_name = "oficina-attachments-example"
