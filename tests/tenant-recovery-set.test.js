@@ -23,7 +23,8 @@ test('offline disaster-recovery preflight checks registry plus every tenant and 
   db.prepare('INSERT INTO fixture VALUES(?,?)').run(id,'Tenant '+id);
   db.close();
   return {companyId:id===3?2:1,unitId:id,archivePath:createBackup({
-   databasePath,uploadsPath:null,backupRoot:join(root,'archives',String(id)),now:date
+   databasePath,uploadsPath:null,backupRoot:join(root,'archives',String(id)),now:date,
+   tenant:{companyId:id===3?2:1,unitId:id}
   }).backupDir};
  });
  const plan=verifyTenantRecoverySet({registryArchive,unitArchives:units});
@@ -33,4 +34,8 @@ test('offline disaster-recovery preflight checks registry plus every tenant and 
  assert.equal(plan.requiresStoppedService,true);
  assert.throws(()=>verifyTenantRecoverySet({registryArchive,unitArchives:units.slice(0,2)}),/ausente/);
  assert.throws(()=>verifyTenantRecoverySet({registryArchive,unitArchives:[units[0],{...units[1],companyId:2},units[2]]}),/empresa/);
+ assert.throws(()=>verifyTenantRecoverySet({registryArchive,unitArchives:[
+  {...units[0],archivePath:units[1].archivePath},
+  {...units[1],archivePath:units[0].archivePath},units[2]
+ ]}),/identidade|unidade|empresa/i,'swapping tenant SQLite snapshots must fail even with correct catalog IDs');
 });
