@@ -31,7 +31,7 @@ test('Asaas nunca confunde CONFIRMED com repasse recebido nem valores incorretos
   transport:async(method,path,body)=> method==='GET'&&path.startsWith('/payments?')?{data:[]}:method==='POST'
    ?{id:'pay_1',externalReference:body.externalReference,customer:'cus_123',billingType:'BOLETO',
      value:11,invoiceUrl:'https://www.asaas.com/i/1'}
-   :{id:'pay_1',externalReference:'ref-1',value:11,status:'CONFIRMED'}});
+   :{id:'pay_1',externalReference:'ref-1',customer:'cus_123',billingType:'BOLETO',value:11,status:'CONFIRMED'}});
  await provider.create({requestId:'ref-1',amountCents:1100,workOrderId:1,dueDate:'2026-12-10'});
  assert.equal((await provider.status('pay_1',{requestId:'ref-1',workOrderId:1})).status,'PENDING');
  await assert.rejects(createAsaasBillingProvider({method:'BOLETO',resolveCustomer:async()=> 'cus_123',
