@@ -14,6 +14,10 @@ on:
       - 'scripts/build-diagnostic-bridge.ps1'
       - 'scripts/requirements-diagnostic-bridge.txt'
       - 'scripts/stage-fiscal-bundle.mjs'
+      - 'scripts/stage-postgres-windows.mjs'
+      - 'scripts/smoke-postgres-portable.ps1'
+      - 'src/platform/postgres-windows-bundle.js'
+      - 'src/platform/postgres-local-instance.js'
       - 'src/platform/fiscal-bundle.js'
       - 'public/**'
       - 'tests/**'
@@ -48,7 +52,7 @@ jobs:
       - name: Validar parser PowerShell antes da compilação nativa
         shell: pwsh
         run: |
-          foreach ($script in @('scripts/smoke-installer.ps1','scripts/build-acbr-native.ps1','scripts/build-electron.ps1','scripts/build-diagnostic-bridge.ps1')) {
+          foreach ($script in @('scripts/smoke-postgres-portable.ps1','scripts/smoke-installer.ps1','scripts/build-acbr-native.ps1','scripts/build-electron.ps1','scripts/build-diagnostic-bridge.ps1')) {
             $tokens = $null
             $errors = $null
             [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script).Path,[ref]$tokens,[ref]$errors) | Out-Null
@@ -107,8 +111,20 @@ jobs:
       - name: Build bundled diagnostic bridge
         shell: pwsh
         run: ./scripts/build-diagnostic-bridge.ps1
+      - name: Preparar binários PostgreSQL 16 OSS somente no builder
+        shell: pwsh
+        run: |
+          if (-not (Test-Path 'C:\Program Files\PostgreSQL\16\bin\initdb.exe')) {
+            choco install postgresql16 --version=16.15.5 -y --no-progress --params '/NoPath'
+            if ($LASTEXITCODE -ne 0) { throw 'Falha PostgreSQL 16 no builder Windows' }
+          }
+          node scripts/stage-postgres-windows.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Falha staging PostgreSQL Windows offline' }
       - name: Build Windows NSIS without publishing
         run: npx electron-builder --win nsis --x64 --publish never
       - name: Run fresh install and first-login smoke
         shell: pwsh
         run: ./scripts/smoke-installer.ps1
+      - name: Smoke PostgreSQL offline pós-instalação Windows (sem terminal do cliente)
+        shell: pwsh
+        run: ./scripts/smoke-postgres-portable.ps1

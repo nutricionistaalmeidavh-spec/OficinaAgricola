@@ -42,7 +42,11 @@ Write-Host '[9/10] Compilando ponte de diagnóstico autônoma...'
 & (Join-Path $PSScriptRoot 'build-diagnostic-bridge.ps1')
 if ($LASTEXITCODE -ne 0) { throw 'Ponte de diagnóstico não foi compilada.' }
 
-Write-Host '[10/10] Gerando instalador Electron Windows x64...'
+Write-Host '[10/11] Preparando PostgreSQL 16 OSS embarcado...'
+node scripts/stage-postgres-windows.mjs
+if ($LASTEXITCODE -ne 0) { throw 'Bundle PostgreSQL 16 não foi gerado.' }
+
+Write-Host '[11/11] Gerando instalador Electron Windows x64...'
 npx electron-builder --win nsis --x64 --publish never
 if ($LASTEXITCODE -ne 0) { throw 'Empacotamento Electron falhou.' }
 
