@@ -15,7 +15,7 @@ import { financeSummary } from '../services/finance.js';
 import { sharePartCatalog, shareCustomer } from './tenant-catalog-sharing.js';
 import { transferTenantStock, retryTenantStockTransfer, listTenantStockTransfers } from './tenant-stock-transfer.js';
 import { resolveTenantFiscalProvider, validateTenantFiscalConfigs } from './tenant-fiscal.js';
-import { transferTenantWorkOrder, retryTenantWorkOrderTransfer, getTenantTransferDossier } from './tenant-os-transfer.js';
+import { transferTenantWorkOrder, retryTenantWorkOrderTransfer, getTenantTransferDossier, listTenantOrderTransfers } from './tenant-os-transfer.js';
 import { seedDefaultChecklists, recoverOrphanAttachments } from '../services/operations.js';
 import { readRemoteAttachment } from './remote-attachments.js';
 import { createEventRuntime } from './event-runtime.js';
@@ -212,6 +212,12 @@ export function createMultiTenantServer({
       return json(res,200,sharePartCatalog({...body,registryDb,unitRuntime,actorUserId:user.id}));
     }
 
+    if(path==='/api/tenancy/os-transfers'&&method==='GET'){
+      const transfers=listTenantOrderTransfers({
+        registryDb,actorUserId:user.id,companyId:positive(url.searchParams.get('companyId'))
+      });
+      return json(res,200,{transfers});
+    }
     const transferAttachment=path.match(/^\/api\/tenancy\/os-transfer\/(\d+)\/attachments\/(\d+)\/file$/);
     if(transferAttachment&&method==='GET'){
       const dossier=getTenantTransferDossier({
