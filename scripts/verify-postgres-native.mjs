@@ -82,5 +82,19 @@ try{
  assert.equal(Number((await port.first('SELECT COUNT(*) n FROM receipts')).n),2);
  assert.equal(Number((await port.first('SELECT COUNT(*) n FROM payment_events')).n),2);
  assert.equal((await service.financeSummary()).receivedCents,2500);
- console.log('PostgreSQL 16 real: schema, OS, estoque e pagamento idempotente OK');
+ const session=await service.openCashSession({openingCents:3000,requestId:'pg-full-cash-open'});
+ const serviceItem=await service.createService({code:'PG-SERVICO-001',name:'Mão de obra',priceCents:800});
+ const sale=await service.createSale({cashSessionId:session.id,paymentMethod:'DINHEIRO',
+   items:[{partId:part.id,quantity:1},{serviceId:serviceItem.id,quantity:1}],
+   requestId:'pg-sale-001'});
+ assert.equal(sale.total_cents,6800);
+ assert.equal((await service.createSale({cashSessionId:session.id,paymentMethod:'DINHEIRO',
+   items:[{partId:part.id,quantity:1},{serviceId:serviceItem.id,quantity:1}],
+   requestId:'pg-sale-001'})).id,sale.id);
+ await service.cancelSale({saleId:sale.id,reason:'Devolução por QA'});
+ assert.equal((await service.getSale(sale.id)).status,'CANCELADA');
+ const cash=await service.cashSummary();
+ assert.equal(cash.movementTotalCents,0);
+ assert.equal((await service.closeCashSession({closingCents:3000})).status,'FECHADO');
+ console.log('PostgreSQL 16 real: schema, OS, orçamento, caixa, venda, estorno, estoque e pagamentos OK');
 }finally{await pool.end();}
