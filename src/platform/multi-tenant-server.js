@@ -388,8 +388,11 @@ export function createMultiTenantServer({
         'SELECT expires_at FROM sessions WHERE token_hash=? AND user_id=?'
       ).get(tokenDigest(token),user.id);
       if(!session)throw httpError('Sessão global inválida',401);
-      const maxBytes=method==='POST'&&/^\\/api\\/work-orders\\/\\d+\\/attachments$/.test(path)
-        ?7*1024*1024:1048576;
+      const parts=path.split('/');
+      const attachmentUpload=method==='POST'&&parts.length===5&&
+        parts[1]==='api'&&parts[2]==='work-orders'&&
+        /^[1-9][0-9]*$/.test(parts[3])&&parts[4]==='attachments';
+      const maxBytes=attachmentUpload?7*1024*1024:1048576;
       const body=['POST','PUT','PATCH'].includes(method)?await readJson(req,maxBytes):{};
       const answer=await nativeApiBridge({
         backend:nativeBackend,unit,user,globalToken:token,
@@ -401,7 +404,7 @@ export function createMultiTenantServer({
           'Cache-Control':'no-store'};
         if(answer.disposition)
           headers['Content-Disposition']=String(answer.disposition)
-            .replace(/[\\r\\n]/g,'').slice(0,220);
+            .replaceAll(String.fromCharCode(13),'').replaceAll(String.fromCharCode(10),'').slice(0,220);
         res.writeHead(answer.status,headers);
         res.end(answer.body);
       }else json(res,answer.status,answer.body);
