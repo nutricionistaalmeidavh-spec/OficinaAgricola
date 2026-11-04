@@ -34,7 +34,7 @@ import {lookupVehicleByPlate,createCrmTask,listCrmTasks,completeCrmTask,createMa
 
 const __dirname=fileURLToPath(new URL('.',import.meta.url));
 const publicDir=resolve(__dirname,'../public');
-const MIME={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.json':'application/json; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.ico':'image/x-icon'};
+const MIME={'.mjs':'text/javascript; charset=utf-8','.glb':'model/gltf-binary','.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.json':'application/json; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.ico':'image/x-icon'};
 const ROLE_ALL=['ADMIN','ATENDIMENTO','TECNICO','FINANCEIRO'];
 const ROLE_OFFICE=['ADMIN','ATENDIMENTO'];
 const ROLE_TECH=['ADMIN','ATENDIMENTO','TECNICO'];
