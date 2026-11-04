@@ -203,7 +203,7 @@ export function createMultiTenantServer({
         const value=url.searchParams.get(key);
         if(value===null)return fallback;
         const d=new Date(value);
-        if(!/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,3})?Z$/.test(value)||!Number.isFinite(d.getTime())||!d.toISOString().startsWith(value.slice(0,10)))
+        if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(value)||!Number.isFinite(d.getTime())||!d.toISOString().startsWith(value.slice(0,10)))
           throw httpError('Data '+key+' inválida: use ISO 8601 UTC',400);
         return d.toISOString();
       };
