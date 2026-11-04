@@ -35,7 +35,8 @@ export function createBillingFinanceExtensions({port,importStatement,prepareRemi
   return port.all('SELECT r.*,d.status AS delivery_status,d.recipient FROM billing_reminders r LEFT JOIN billing_reminder_delivery d ON d.reminder_id=r.id ORDER BY r.due_date DESC,r.id DESC LIMIT ?',[n]);
  }
  async function dispatchReminders({asOf,daysAhead=3}={}){
-  const prepared=await prepareReminders({asOf,daysAhead});
+  const localDay=new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo'}).format(new Date());
+  const prepared=await prepareReminders({asOf:asOf??localDay,daysAhead});
   if(typeof reminderSender!=='function')return {prepared:prepared.length,sent:0,disabled:true};
   const rows=await port.all("SELECT r.id,r.kind,r.due_date,i.amount_cents,wo.os_number,c.name AS customer_name,c.email AS customer_email FROM billing_reminders r JOIN billing_installments i ON i.id=r.installment_id JOIN billing_plans p ON p.id=i.plan_id JOIN work_orders wo ON wo.id=p.work_order_id JOIN customers c ON c.id=wo.customer_id WHERE r.status='DRAFT' AND i.status='PENDING' AND NOT EXISTS(SELECT 1 FROM billing_reminder_delivery d WHERE d.reminder_id=r.id) ORDER BY r.due_date,r.id LIMIT 50");
   let sent=0,unavailable=0,uncertain=0;
