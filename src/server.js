@@ -23,6 +23,7 @@ import { createScheduleEvent, listSchedule, listSchedulePage,  updateScheduleEve
 import { saveRemoteAttachment, readRemoteAttachment } from './platform/remote-attachments.js';
 import {createCommonDataAdapter} from './platform/common-data-adapter.js';
 import {createPaymentCollection} from './platform/payment-collection.js';
+import {createBillingService} from './platform/billing-p3-p4.js';
 import { addReceipt, reverseReceipt, listReceipts, getPaymentSummary, createExpense, updateExpense, listExpenses, listExpensesPage,  financeSummary } from './services/finance.js';
 import { dashboardData } from './services/dashboard.js';
 import { getOperationalReport } from './services/reports.js';
@@ -236,6 +237,11 @@ export function createAppServer({db=openDatabase(),storageDir=process.env.STORAG
     getPaymentSummary:workOrderId=>getPaymentSummary(db,workOrderId),
     ...(paymentOptions??{})
   });
+  const billing=createBillingService(createCommonDataAdapter({engine:'sqlite',db}),{
+    receivePayment:input=>addReceipt(db,input.workOrderId,input),
+    getPaymentSummary:workOrderId=>getPaymentSummary(db,workOrderId),
+    providers:paymentOptions?.billingProviders??{}
+  });
   return createServer(async(req,res)=>{
     const url=new URL(req.url||'/','http://localhost'); const route=router.match(req.method||'GET',url.pathname);
     hardenHttpResponse(res,req);
@@ -261,6 +267,32 @@ export function createAppServer({db=openDatabase(),storageDir=process.env.STORAG
         if(sync&&req.method==='POST')
           return json(res,200,await paymentIntents.syncIntent(sync[1]));
         return json(res,405,{error:'Método não permitido'});
+      }
+      if(url.pathname.startsWith('/api/billing/')){
+        const user=validateSession(db,tokenFrom(req));roleGuard(user,ROLE_FIN);
+        const method=req.method,path=url.pathname;
+        const body=method==='POST'?await readJson(req,16384):{};
+        const data={...body,requestId:body.requestId??req.headers['idempotency-key']};
+        const capture=pattern=>path.match(pattern);
+        let result;
+        if(method==='POST'&&path==='/api/billing/plans')result=await billing.createPlan(data);
+        else if(method==='GET'&&path==='/api/billing/capabilities')result=billing.capabilities();
+        else if(method==='GET'&&path==='/api/billing/report')result=await billing.financeReport({asOf:url.searchParams.get('asOf')||undefined});
+        else if(method==='GET'&&path==='/api/billing/statements')result=await billing.listStatements({limit:url.searchParams.get('limit')||100});
+        else if(method==='POST'&&path==='/api/billing/statements')result=await billing.importStatement(data);
+        else if(method==='POST'&&path==='/api/billing/settlements')result=await billing.recordSettlement(data);
+        else if(method==='POST'&&path==='/api/billing/reminders/prepare')result=await billing.prepareReminders(data);
+        else if(method==='GET'&&capture(/^\/api\/billing\/orders\/([1-9]\d*)\/plan$/))
+          result=await billing.getPlanForOrder(Number(capture(/^\/api\/billing\/orders\/([1-9]\d*)\/plan$/)[1]));
+        else if(method==='GET'&&capture(/^\/api\/billing\/plans\/([a-f0-9]{32})$/))
+          result=await billing.getPlan(capture(/^\/api\/billing\/plans\/([a-f0-9]{32})$/)[1]);
+        else if(method==='POST'&&capture(/^\/api\/billing\/installments\/([a-f0-9]{32})\/(activate|sync|manual)$/)){
+          const [,id,action]=capture(/^\/api\/billing\/installments\/([a-f0-9]{32})\/(activate|sync|manual)$/);
+          result=await (action==='activate'?billing.activateInstallment(id):action==='sync'?billing.syncInstallment(id):billing.confirmManual(id,data));
+        }else if(method==='POST'&&capture(/^\/api\/billing\/statements\/([a-f0-9]{32})\/match$/))
+          result=await billing.matchStatement(capture(/^\/api\/billing\/statements\/([a-f0-9]{32})\/match$/)[1],data.receiptId);
+        else return json(res,404,{error:'Rota financeira não encontrada'});
+        return json(res,200,result);
       }
       // S3 is async: upload before committing metadata, but never await while
       // inside a synchronous SQLite transaction. Local/disk mode is unchanged.
