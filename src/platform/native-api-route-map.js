@@ -45,6 +45,7 @@ const ROUTES=[
  'POST /api/work-orders/:id/quote/submit /v1/orders/:id/quote/submit OFFICE',
  'POST /api/work-orders/:id/quote/approve /v1/orders/:id/quote/approve OFFICE',
  'POST /api/work-orders/:id/quote/reject /v1/orders/:id/quote/reject OFFICE',
+ 'POST /api/work-orders/:id/quote/approval-link /v1/orders/:id/quote/approval-link OFFICE',
  'GET /api/parts /v1/parts ALL',
  'POST /api/parts /v1/parts OFFICE',
  'GET /api/parts/page /v1/parts/page ALL',
