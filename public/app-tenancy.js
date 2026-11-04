@@ -23,6 +23,7 @@ async function openTenantAdmin(){
       ${possibleCatalogSources.length?'<button type="button" class="btn" id="tenantShareCustomer">Compartilhar cliente</button>':''}
       ${possibleCatalogSources.length?'<button type="button" class="btn" id="tenantTransferStock">Transferir estoque</button>':''}
       ${possibleCatalogSources.length?'<button type="button" class="btn" id="tenantStockHistory">Transferências / retomar</button>':''}
+      ${possibleCatalogSources.length?'<button type="button" class="btn" id="tenantTransferOS">Transferir OS inicial</button>':''}
     </div>
     <div class="list">${units.map(u=>'<div class="list-item"><div><strong>'+esc(u.companyName)+' / '+esc(u.name)+'</strong><br><small>'+esc(u.code)+' · '+esc(u.role)+'</small></div></div>').join('')}</div>
   </div>`);
@@ -208,6 +209,46 @@ async function openTenantAdmin(){
         };
       }
     });
+  };
+
+  const transferOsBtn=$('#tenantTransferOS');
+  if(transferOsBtn)transferOsBtn.onclick=async()=>{
+    const requestId=newCommandId();
+    const options=possibleCatalogSources.map(u=>'<option value="'+u.id+'">'+esc(u.companyName)+' / '+esc(u.name)+'</option>').join('');
+    showModal('Transferir OS entre filiais',`<form class="form-stack">
+      <p class="muted">A transferência é auditada e permitida apenas para OS em Entrada ou Diagnóstico, sem pagamentos, fiscal, estoque consumido ou anexos. A OS original é encerrada e uma nova OS continua o serviço no destino.</p>
+      <label>Filial de origem<select id="osTransferSource" name="sourceUnitId">${options}</select></label>
+      <label>Filial de destino<select id="osTransferTarget" name="targetUnitId" required></select></label>
+      <label>OS a transferir<select id="osTransferOrder" name="workOrderId" required></select></label>
+      <label>Base legal<select name="legalBasis"><option value="CONTRATO">Execução de contrato</option><option value="CONSENTIMENTO">Consentimento</option><option value="LEGITIMO_INTERESSE">Legítimo interesse avaliado</option><option value="OBRIGACAO_LEGAL">Obrigação legal</option></select></label>
+      <label>Justificativa / referência<input name="recordReference" minlength="8" maxlength="120" required placeholder="Ex.: OS-TRANSFER-2026-001"></label>
+      <button class="btn primary" type="submit">Transferir OS inicial</button>
+    </form>`,async fd=>{
+      const data=formObj(fd);
+      const result=await api('/api/tenancy/os-transfer',{method:'POST',body:{
+        sourceUnitId:Number(data.sourceUnitId),targetUnitId:Number(data.targetUnitId),
+        workOrderId:Number(data.workOrderId),legalBasis:data.legalBasis,
+        recordReference:data.recordReference,requestId
+      }});
+      toast('OS transferida: novo número interno '+result.targetWorkOrderId+'. Histórico disponível na origem.');
+    });
+    const source=$('#osTransferSource'),target=$('#osTransferTarget'),orders=$('#osTransferOrder');
+    const load=async()=>{
+      const unit=managed.find(x=>String(x.id)===source.value);
+      target.replaceChildren();orders.replaceChildren();
+      for(const other of managed.filter(u=>u.companyId===unit.companyId&&u.id!==unit.id)){
+        const item=document.createElement('option');item.value=String(other.id);item.textContent=other.name;target.append(item);
+      }
+      const res=await api('/api/tenancy/transferable-orders?unitId='+encodeURIComponent(source.value));
+      for(const order of res.orders||[]){
+        const item=document.createElement('option');item.value=String(order.id);
+        item.textContent='#'+order.os_number+' · '+order.status+' · '+order.problem_reported;
+        orders.append(item);
+      }
+      if(!orders.options.length)toast('Nenhuma OS inicial transferível encontrada');
+    };
+    source.onchange=()=>void load().catch(err=>toast(err.message,true));
+    await load();
   };
   const edit=$('#editTenantMember');
   if(edit)edit.onclick=async()=>{
