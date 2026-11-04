@@ -77,6 +77,19 @@ export function createS3BackupClient({
     const {url,path}=urlFor(key);
     const size=statSync(filePath).size;
     const hash=await hashFile(filePath);
+    const remoteMatches=async()=>{
+      const head=await httpFetch(url,{
+        method:'HEAD',headers:signedHeaders({method:'HEAD',path,payloadHash:sha256('')}),
+        redirect:'error'
+      });
+      if(head.status===404)return false;
+      if(!head.ok)throw Error('Falha ao consultar backup remoto (HTTP '+head.status+')');
+      return head.headers.get('x-amz-meta-sha256')===hash&&
+        Number(head.headers.get('content-length'))===size;
+    };
+    // Avoid costly writes on the hourly retry if this immutable backup
+    // already exists remotely with the expected SHA-256 and exact size.
+    if(await remoteMatches())return {key,payloadSha256:hash,size,alreadyPresent:true};
     const body=createReadStream(filePath);
     let response;
     try{
@@ -86,14 +99,9 @@ export function createS3BackupClient({
       });
     }finally{body.destroy();}
     if(!response.ok)throw Error('Falha no upload do backup S3 (HTTP '+response.status+')');
-    const check=await httpFetch(url,{
-      method:'HEAD',headers:signedHeaders({method:'HEAD',path,payloadHash:sha256('')}),
-      redirect:'error'
-    });
-    if(!check.ok)throw Error('Falha ao verificar backup remoto (HTTP '+check.status+')');
-    if(check.headers.get('x-amz-meta-sha256')!==hash||Number(check.headers.get('content-length'))!==size)
+    if(!await remoteMatches())
       throw Error('Integridade do backup remoto não confirmada pelo storage');
-    return {key,payloadSha256:hash,size};
+    return {key,payloadSha256:hash,size,alreadyPresent:false};
   }
   return Object.freeze({putFile});
 }
