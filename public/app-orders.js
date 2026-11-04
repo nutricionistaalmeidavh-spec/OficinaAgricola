@@ -112,11 +112,11 @@ async function openWorkOrder(id){const safe=async p=>{try{return await api(p)}ca
  <div class="detail-grid"><div class="detail-block"><h3>Equipamento</h3><strong>${esc(os.machine_brand)} ${esc(os.machine_model)}</strong><p>${esc(os.problem_reported)}</p>${badge(os.status)}<p class="muted">Entrada: ${dt(os.entered_at)} · Técnico: ${esc(os.technician_name||'não definido')}</p></div><div class="detail-block"><h3>Ações de status</h3><div class="action-row">${(['ADMIN','ATENDIMENTO','TECNICO'].includes(state.user.role)?next:[]).map(s=>`<button class="btn ${s==='CANCELADA'?'danger':'soft'}" data-status="${s}">${s==='CANCELADA'?'Cancelar OS':s.replaceAll('_',' ')}</button>`).join('')||'<span class="muted">Sem avanço direto disponível.</span>'}</div></div></div>
  <div class="detail-grid" style="margin-top:14px"><div class="detail-block"><h3>Diagnóstico</h3><form id="diagnosisForm" class="form-stack"><textarea name="diagnosis" placeholder="Diagnóstico técnico" ${['ADMIN','ATENDIMENTO','TECNICO'].includes(state.user.role)?'':'readonly'}>${esc(os.diagnosis)}</textarea>${['ADMIN','ATENDIMENTO','TECNICO'].includes(state.user.role)?'<button class="btn sm" type="submit">Salvar diagnóstico</button>':''}</form></div><div class="detail-block"><h3>Documentos</h3><div class="action-row">${['work-order','quote','delivery','receipt'].map(k=>`<button class="btn sm" data-doc="${k}">${{ 'work-order':'OS',quote:'Orçamento',delivery:'Entrega',receipt:'Recibo'}[k]}</button>`).join('')}</div></div></div>
  <div class="detail-grid" style="margin-top:14px"><div class="detail-block"><h3>Orçamento</h3>${quote?`<p><strong>${money(quote.total_cents)}</strong> · ${badge(quote.approval_status)}</p><div class="list">${quote.items.map(i=>`<div>${esc(i.description)} — ${i.quantity} × ${money(i.unit_price_cents)}</div>`).join('')}</div>`:'<p class="muted">Ainda sem orçamento.</p>'}<div class="action-row" style="margin-top:10px">${['ADMIN','ATENDIMENTO'].includes(state.user.role)&&['DIAGNOSTICO','ORCAMENTO','REPROVADA'].includes(os.status)?'<button class="btn sm primary" id="quoteBtn">Criar/editar</button>':''}${['ADMIN','ATENDIMENTO'].includes(state.user.role)&&os.status==='ORCAMENTO'?'<button class="btn sm" id="submitQuote">Enviar aprovação</button><button class="btn sm soft" id="approveQuote">Aprovar agora</button>':''}${['ADMIN','ATENDIMENTO'].includes(state.user.role)&&os.status==='AGUARDANDO_APROVACAO'?'<button class="btn sm soft" id="approveQuote">Aprovar</button><button class="btn sm danger" id="rejectQuote">Reprovar</button>':''}</div></div>
- <div class="detail-block"><h3>Financeiro</h3><p>Total: <strong>${money(payment.totalCents)}</strong><br>Recebido: <strong>${money(payment.receivedCents)}</strong><br>Pendente: <strong>${money(payment.pendingCents)}</strong> · ${badge(payment.status)}</p>${payment.pendingCents>0&&['ADMIN','FINANCEIRO'].includes(state.user.role)?'<button class="btn sm primary" id="payBtn">Registrar pagamento</button>':''}<div class="list" style="margin-top:10px">${receipts.length?receipts.map(r=>`<div>${money(r.amount_cents)} · ${esc(r.method)} ${r.reversed_at?badge('ESTORNADO'):''}${!r.reversed_at&&['ADMIN','FINANCEIRO'].includes(state.user.role)?` <button type="button" class="btn danger sm" data-reverse-receipt="${r.id}">Estornar</button>`:''}</div>`).join(''):'<span class="muted">Sem recebimentos</span>'}</div></div></div>
+ <div class="detail-block"><h3>Financeiro</h3><p>Total: <strong>${money(payment.totalCents)}</strong><br>Recebido: <strong>${money(payment.receivedCents)}</strong><br>Pendente: <strong>${money(payment.pendingCents)}</strong> · ${badge(payment.status)}</p>${payment.pendingCents>0&&['ADMIN','FINANCEIRO'].includes(state.user.role)?'<div class="action-row"><button class="btn sm primary" id="payBtn">Registrar pagamento manual</button><button class="btn sm" id="collectBtn">Cobrar via Pix/maquininha</button></div>':''}<div class="list" style="margin-top:10px">${receipts.length?receipts.map(r=>`<div>${money(r.amount_cents)} · ${esc(r.method)} ${r.reversed_at?badge('ESTORNADO'):''}${!r.reversed_at&&['ADMIN','FINANCEIRO'].includes(state.user.role)?` <button type="button" class="btn danger sm" data-reverse-receipt="${r.id}">Estornar</button>`:''}</div>`).join(''):'<span class="muted">Sem recebimentos</span>'}</div></div></div>
  <div class="detail-grid" style="margin-top:14px"><div class="detail-block"><h3>Peças utilizadas</h3>${parts.length?parts.map(p=>`<div>${esc(p.description)} × ${p.quantity} ${p.reversed_at?badge('ESTORNADO'):''}${!p.reversed_at&&['ADMIN','ATENDIMENTO','TECNICO'].includes(state.user.role)?` <button type="button" class="btn danger sm" data-reverse-part="${p.id}">Estornar</button>`:''}</div>`).join(''):'<p class="muted">Nenhuma peça.</p>'}${['ADMIN','ATENDIMENTO','TECNICO'].includes(state.user.role)&&['APROVADA','EM_SERVICO'].includes(os.status)?'<button class="btn sm" id="partBtn" style="margin-top:10px">+ Adicionar peça</button>':''}</div><div class="detail-block"><h3>Checklists e fotos</h3><p>${checklists.length} checklist(s) · ${attachments.length} anexo(s)</p><div class="action-row">${['ADMIN','ATENDIMENTO','TECNICO'].includes(state.user.role)?'<button class="btn sm" id="checkBtn">+ Checklist</button><button class="btn sm" id="photoBtn">+ Foto/anexo</button>':''}</div></div></div>`);
  $$('[data-status]').forEach(b=>b.onclick=async()=>{try{let reason='';if(b.dataset.status==='CANCELADA'){const input=prompt('Motivo do cancelamento da OS:');if(!input?.trim())return;if(!confirm('Confirma o cancelamento da OS? Peças e recebimentos devem estar estornados.'))return;reason=input.trim()}await api(`/api/work-orders/${id}/status`,{method:'POST',body:{status:b.dataset.status,reason,expectedVersion:os.version,requestId:b.dataset.commandId||=(newCommandId())}});toast('Status atualizado');closeModal();await refreshCurrentPage()}catch(e){toast(e.message,true)}});if(['ADMIN','ATENDIMENTO','TECNICO'].includes(state.user.role))$('#diagnosisForm').onsubmit=async e=>{e.preventDefault();await api(`/api/work-orders/${id}`,{method:'PATCH',body:{diagnosis:new FormData(e.target).get('diagnosis'),expectedVersion:os.version}});if(modalSession)modalSession.dirty=false;toast('Diagnóstico salvo')};$$('[data-doc]').forEach(b=>b.onclick=()=>openDocument(id,b.dataset.doc));
  $$('[data-reverse-part]').forEach(b=>b.onclick=()=>{const note=prompt('Motivo do estorno da peça:');if(note?.trim())actionReload(`/api/work-orders/${id}/parts/${b.dataset.reversePart}/reverse`,{note:note.trim()},id)});$$('[data-reverse-receipt]').forEach(b=>b.onclick=()=>{const note=prompt('Motivo do estorno do recebimento:');if(note?.trim()&&confirm('Confirma o estorno financeiro?'))actionReload(`/api/work-orders/${id}/receipts/${b.dataset.reverseReceipt}/reverse`,{note:note.trim()},id)});
- const qb=$('#quoteBtn');if(qb)qb.onclick=()=>quoteModal(id,quote);const sq=$('#submitQuote');if(sq)sq.onclick=()=>actionReload(`/api/work-orders/${id}/quote/submit`,{},id);const aq=$('#approveQuote');if(aq)aq.onclick=()=>actionReload(`/api/work-orders/${id}/quote/approve`,{},id);const rq=$('#rejectQuote');if(rq)rq.onclick=()=>{const reason=prompt('Motivo da reprovação:');if(reason)actionReload(`/api/work-orders/${id}/quote/reject`,{reason},id)};const pb=$('#partBtn');if(pb)pb.onclick=()=>partModal(id,stock);const cb=$('#checkBtn');if(cb)cb.onclick=()=>checklistModal(id,templates);const ph=$('#photoBtn');if(ph)ph.onclick=()=>attachmentModal(id);const pay=$('#payBtn');if(pay)pay.onclick=()=>paymentModal(id,payment.pendingCents);await enhanceWorkOrderModal(id,os)}
+ const qb=$('#quoteBtn');if(qb)qb.onclick=()=>quoteModal(id,quote);const sq=$('#submitQuote');if(sq)sq.onclick=()=>actionReload(`/api/work-orders/${id}/quote/submit`,{},id);const aq=$('#approveQuote');if(aq)aq.onclick=()=>actionReload(`/api/work-orders/${id}/quote/approve`,{},id);const rq=$('#rejectQuote');if(rq)rq.onclick=()=>{const reason=prompt('Motivo da reprovação:');if(reason)actionReload(`/api/work-orders/${id}/quote/reject`,{reason},id)};const pb=$('#partBtn');if(pb)pb.onclick=()=>partModal(id,stock);const cb=$('#checkBtn');if(cb)cb.onclick=()=>checklistModal(id,templates);const ph=$('#photoBtn');if(ph)ph.onclick=()=>attachmentModal(id);const pay=$('#payBtn');if(pay)pay.onclick=()=>paymentModal(id,payment.pendingCents);const collect=$('#collectBtn');if(collect)collect.onclick=()=>collectionModal(id,payment.pendingCents);await enhanceWorkOrderModal(id,os)}
 const actionCommandIds=new Map();
 async function actionReload(path,body,id){
   const key=`${id}:${path}:${JSON.stringify(body)}`;
@@ -157,3 +157,72 @@ function paymentModal(id,pending){const requestId=globalThis.crypto?.randomUUID?
 async function openDocument(id,kind){try{const doc=await api(`/api/work-orders/${id}/documents/${kind}`,{raw:true});const url=URL.createObjectURL(new Blob([doc],{type:'text/html'}));window.open(url,'_blank','noopener');setTimeout(()=>URL.revokeObjectURL(url),60000)}catch(e){toast(e.message,true)}}
 
 
+
+ 
+// A cobrança não dá baixa enquanto estiver pendente. A fonte da verdade é o
+// comprovante registrado manualmente ou a consulta autenticada ao provedor.
+async function collectionModal(workOrderId,pendingCents){
+ const abilities=await api('/api/payment-intents/capabilities');
+ const methods=[
+  abilities.pixStatic&&['PIX_STATIC','Pix Copia e Cola (conferência manual)'],
+  abilities.pixApi&&['PIX_API','Pix automático (banco)'],
+  abilities.tef&&['TEF','Cartão via TEF'],
+  abilities.smartPos&&['SMART_POS','Maquininha integrada']
+ ].filter(Boolean);
+ if(!methods.length){
+  toast('Nenhum provedor configurado. Use o registro manual ou configure o Pix da oficina.',true);
+  return;
+ }
+ const requestId=newCommandId();
+ showModal('Nova cobrança da OS',`<form class="form-stack">
+  <p class="muted">Criar cobrança não significa pagamento recebido. O saldo só será baixado após confirmação.</p>
+  <label>Valor (R$)<input name="amount" type="number" min="0.01" step="0.01"
+   max="${pendingCents/100}" value="${pendingCents/100}" required></label>
+  <label>Meio de cobrança<select name="method">
+   ${methods.map(([value,label])=>`<option value="${value}">${esc(label)}</option>`).join('')}
+  </select></label>
+  <button class="btn primary" type="submit">Gerar cobrança</button>
+ </form>`,async fd=>{
+  const amountCents=Math.round(Number(fd.get('amount'))*100);
+  if(!Number.isSafeInteger(amountCents)||amountCents<=0||amountCents>pendingCents)
+   throw new Error('Informe um valor válido até o saldo pendente');
+  const intent=await api('/api/payment-intents',{method:'POST',body:{
+   workOrderId,amountCents,method:fd.get('method'),requestId
+  }});
+  showCollectionIntent(intent,workOrderId);
+ });
+}
+function showCollectionIntent(intent,workOrderId){
+ const staticPix=intent.method==='PIX_STATIC';
+ const payload=intent.pix_payload||'';
+ const name=staticPix?'Pix Copia e Cola':'Cobrança enviada ao provedor';
+ showModal(name,`<div class="form-stack">
+  <strong>${money(intent.amount_cents)}</strong>
+  <p class="muted">Situação: ${esc(intent.status)} — OS vinculada #${workOrderId}</p>
+  ${payload?`<label>Código Pix<input id="collectionPixPayload" readonly value="${esc(payload)}"></label><button type="button" class="btn sm" id="copyCollectionPix">Copiar Pix</button>`:''}
+  <p class="muted">${staticPix?
+    'Pix estático: confira o valor na sua conta bancária antes de usar Registrar pagamento manual. Esta cobrança não tem confirmação automática.':
+    'Após pagar no terminal ou no banco, consulte a situação. A confirmação é conferida diretamente com o provedor.'}</p>
+  ${staticPix?'':`<button type="button" class="btn primary" id="syncCollection">Consultar confirmação</button>`}
+  <button type="button" class="btn sm" id="backCollectionOrder">Voltar à OS</button>
+ </div>`);
+ const copy=$('#copyCollectionPix');
+ if(copy)copy.onclick=async()=>{
+  const field=$('#collectionPixPayload');
+  field.select();
+  try{await navigator.clipboard.writeText(field.value);toast('Pix copiado')}
+  catch{toast('Selecione e copie o código Pix')}
+ };
+ const sync=$('#syncCollection');
+ if(sync)sync.onclick=async()=>{
+  sync.disabled=true;
+  try{
+   const latest=await api('/api/payment-intents/'+intent.id+'/sync',{method:'POST',body:{}});
+   if(latest.status==='PAID'){
+    toast('Pagamento confirmado pelo provedor');await openWorkOrder(workOrderId);
+   }else{toast('Ainda sem confirmação de pagamento');showCollectionIntent(latest,workOrderId)}
+  }catch(error){toast(error.message,true);sync.disabled=false;}
+ };
+ const back=$('#backCollectionOrder');
+ if(back)back.onclick=()=>openWorkOrder(workOrderId).catch(error=>toast(error.message,true));
+}
