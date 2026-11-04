@@ -88,7 +88,7 @@ export async function mountViewer({id,variant='original',element,statusElement})
     if(variant==='repaired'){
       const expected=new Set(['ARTISYS_NEW_WHEEL_FL','ARTISYS_NEW_WHEEL_FR','ARTISYS_NEW_WHEEL_RL','ARTISYS_NEW_WHEEL_RR']);
       const found=new Set();
-      gltf.scene.traverse(node=>{if(expected.has(node.name)&&node.isMesh)found.add(node.name)});
+      gltf.scene.traverse(node=>{if(expected.has(node.name)){let hasMesh=false;node.traverse(child=>{if(child.isMesh)hasMesh=true});if(hasMesh)found.add(node.name)}});
       if(found.size!==4)throw new Error('Modelo de rodas reconstruídas incompleto: '+found.size+' de 4 rodas');
       element.dataset.generatedWheels=String(found.size);
     }else{
