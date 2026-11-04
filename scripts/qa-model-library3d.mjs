@@ -26,7 +26,7 @@ async function waitHealth(){
   }
   throw new Error('Servidor QA não iniciou');
 }
-let browser=null,context=null;
+let browser=null,context=null,page=null;
 const browserErrors=[];
 try{
   await waitHealth();
@@ -35,7 +35,7 @@ try{
     '--enable-unsafe-swiftshader','--disable-gpu-sandbox','--disable-dev-shm-usage'
   ]});
   context=await browser.newContext({viewport});
-  const page=await context.newPage();
+  page=await context.newPage();
   page.on('pageerror',e=>browserErrors.push(String(e.message||e)));
   page.on('response',r=>{if(r.status()>=400&&r.url().includes('/vendor/'))browserErrors.push('HTTP '+r.status()+' '+r.url())});
   await page.goto(base,{waitUntil:'domcontentloaded'});
@@ -95,6 +95,10 @@ try{
   },null,2));
   console.log('QA_GLTF_SUCCESS',viewportName,JSON.stringify(dim));
 }catch(err){
+  const viewerMessage=await page?.locator('#ml-viewer-message').textContent().catch(()=>null);
+  const modalVisible=await page?.locator('#modal').isVisible().catch(()=>null);
+  console.error('QA_GLTF_DEBUG',JSON.stringify({viewerMessage,modalVisible,browserErrors}));
+  await page?.screenshot({path:path.join(output,'FAIL-viewer.png'),fullPage:true}).catch(()=>{});
   console.error('QA_GLTF_FAILED',String(err.stack||err));
   throw err;
 }finally{
