@@ -28,6 +28,20 @@ const unauthorized=await fetch(base+'/v1/orders',{method:'POST',body:'{}'});
 assert.equal(unauthorized.status,401);
 await request('POST','/v1/migrate');
 await request('POST','/v1/migrate');
+const admin=await request('POST','/v1/auth/bootstrap',{
+ username:'d1-admin',name:'D1 Admin',password:'S3cureD1Password#2026'
+});
+assert.equal(admin.role,'ADMIN');
+const login=await request('POST','/v1/auth/login',{
+ username:'d1-admin',password:'S3cureD1Password#2026'
+});
+assert.equal(login.user.id,admin.id);
+assert.ok(login.token?.length>32);
+const tech=await request('POST','/v1/auth/users',{
+ username:'d1-tech',name:'D1 Technician',password:'S3cureTech#2026',
+ role:'TECNICO',sessionToken:login.token
+});
+assert.equal(tech.role,'TECNICO');
 const c=await request('POST','/v1/customers',{name:'D1 Cliente real'});
 const machine=await request('POST','/v1/machines',{customerId:c.id,type:'AUTOMOVEL',brand:'VW'});
 const os=await request('POST','/v1/orders',{customerId:c.id,machineId:machine.id,problemReported:'D1 QA'});
