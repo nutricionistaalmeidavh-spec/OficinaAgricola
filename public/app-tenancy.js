@@ -23,7 +23,8 @@ async function openTenantAdmin(){
       ${possibleCatalogSources.length?'<button type="button" class="btn" id="tenantShareCustomer">Compartilhar cliente</button>':''}
       ${possibleCatalogSources.length?'<button type="button" class="btn" id="tenantTransferStock">Transferir estoque</button>':''}
       ${possibleCatalogSources.length?'<button type="button" class="btn" id="tenantStockHistory">Transferências / retomar</button>':''}
-      ${possibleCatalogSources.length?'<button type="button" class="btn" id="tenantTransferOS">Transferir OS inicial</button>':''}
+      ${possibleCatalogSources.length?'<button type="button" class="btn" id="tenantTransferOS">Transferir OS</button>':''}
+      ${possibleCatalogSources.length?'<button type="button" class="btn" id="tenantOSHistory">Histórico de OS transferidas</button>':''}
     </div>
     <div class="list">${units.map(u=>'<div class="list-item"><div><strong>'+esc(u.companyName)+' / '+esc(u.name)+'</strong><br><small>'+esc(u.code)+' · '+esc(u.role)+'</small></div></div>').join('')}</div>
   </div>`);
@@ -216,13 +217,13 @@ async function openTenantAdmin(){
     const requestId=newCommandId();
     const options=possibleCatalogSources.map(u=>'<option value="'+u.id+'">'+esc(u.companyName)+' / '+esc(u.name)+'</option>').join('');
     showModal('Transferir OS entre filiais',`<form class="form-stack">
-      <p class="muted">A transferência é auditada e permitida apenas para OS em Entrada ou Diagnóstico, sem pagamentos, fiscal, estoque consumido ou anexos. A OS original é encerrada e uma nova OS continua o serviço no destino.</p>
+      <p class="muted">A OS de origem ficará marcada como TRANSFERIDA e uma nova OS continuará o atendimento no destino. Orçamentos, pagamentos, estoque consumido, notas fiscais e anexos anteriores permanecem legalmente na origem e poderão ser consultados no histórico auditado; não são duplicados.</p>
       <label>Filial de origem<select id="osTransferSource" name="sourceUnitId">${options}</select></label>
       <label>Filial de destino<select id="osTransferTarget" name="targetUnitId" required></select></label>
       <label>OS a transferir<select id="osTransferOrder" name="workOrderId" required></select></label>
       <label>Base legal<select name="legalBasis"><option value="CONTRATO">Execução de contrato</option><option value="CONSENTIMENTO">Consentimento</option><option value="LEGITIMO_INTERESSE">Legítimo interesse avaliado</option><option value="OBRIGACAO_LEGAL">Obrigação legal</option></select></label>
       <label>Justificativa / referência<input name="recordReference" minlength="8" maxlength="120" required placeholder="Ex.: OS-TRANSFER-2026-001"></label>
-      <button class="btn primary" type="submit">Transferir OS inicial</button>
+      <button class="btn primary" type="submit">Transferir OS</button>
     </form>`,async fd=>{
       const data=formObj(fd);
       const result=await api('/api/tenancy/os-transfer',{method:'POST',body:{
@@ -249,6 +250,63 @@ async function openTenantAdmin(){
     };
     source.onchange=()=>void load().catch(err=>toast(err.message,true));
     await load();
+  };
+
+  const osHistoryBtn=$('#tenantOSHistory');
+  if(osHistoryBtn)osHistoryBtn.onclick=()=>{
+    showModal('Histórico de transferências de OS',`<form class="form-stack">
+      <label>Empresa<select name="companyId">${companyOptions}</select></label>
+      <button class="btn primary" type="submit">Consultar histórico</button>
+    </form>`,async fd=>{
+      const companyId=Number(formObj(fd).companyId);
+      const result=await api('/api/tenancy/os-transfers?companyId='+companyId);
+      showModal('OS transferidas e dossiês',`<div class="form-stack">
+        <p class="muted">Os livros financeiros, fiscais, movimentos de estoque e os anexos originais permanecem na filial emissora. Este painel consulta as evidências sem duplicá-las.</p>
+        ${(result.transfers||[]).map(t=>'<div class="list-item"><div><strong>Transferência #'+t.transferId+' · '+esc(t.status)+'</strong><br><small>Unidade '+t.sourceUnitId+' → '+t.targetUnitId+' · OS origem '+t.sourceWorkOrderId+' → destino '+(t.targetWorkOrderId||'pendente')+'</small></div><button type="button" class="btn sm" data-os-dossier="'+t.transferId+'">Ver dossiê</button></div>').join('')||'<p class="muted">Nenhuma transferência encontrada.</p>'}
+      </div>`);
+      for(const btn of document.querySelectorAll('[data-os-dossier]')){
+        btn.onclick=async()=>{
+          const id=Number(btn.dataset.osDossier);
+          const dossier=await api('/api/tenancy/os-transfer/'+id+'/dossier');
+          const q=dossier.quote,received=(dossier.receipts||[]).filter(r=>!r.reversed_at)
+            .reduce((sum,r)=>sum+Number(r.amount_cents||0),0);
+          showModal('Dossiê OS transferida #'+id,`<div class="form-stack">
+            <p class="muted">Registro somente leitura. Documentos e lançamentos financeiros ficam na unidade ${dossier.originUnitId}, emissora original.</p>
+            <div class="grid two-col">
+              <div class="card"><strong>${esc(dossier.sourceOrder.status)}</strong><small>Situação na origem</small></div>
+              <div class="card"><strong>${money(q?.total_cents||0)}</strong><small>Orçamento original</small></div>
+              <div class="card"><strong>${money(received)}</strong><small>Recebimentos ativos</small></div>
+              <div class="card"><strong>${(dossier.stockConsumptions||[]).length}</strong><small>Consumos documentados</small></div>
+              <div class="card"><strong>${(dossier.fiscalDocuments||[]).length}</strong><small>Notas / rascunhos fiscais</small></div>
+              <div class="card"><strong>${(dossier.attachments||[]).length}</strong><small>Anexos da origem</small></div>
+            </div>
+            <strong>Documentos fiscais</strong>
+            ${(dossier.fiscalDocuments||[]).map(doc=>'<div class="list-item"><small>'+esc(doc.kind)+' #'+doc.id+' · '+esc(doc.status)+' · '+money(doc.amount_cents)+'</small></div>').join('')||'<p class="muted">Nenhum documento fiscal</p>'}
+            <strong>Anexos originais</strong>
+            ${(dossier.attachments||[]).map(att=>'<div class="list-item"><small>'+esc(att.original_name)+' · '+esc(att.category)+'</small><button class="btn sm" type="button" data-os-evidence="'+att.id+'">Baixar evidência</button></div>').join('')||'<p class="muted">Nenhum anexo</p>'}
+          </div>`);
+          for(const fileBtn of document.querySelectorAll('[data-os-evidence]')){
+            fileBtn.onclick=async()=>{
+              const attachmentId=Number(fileBtn.dataset.osEvidence);
+              const att=(dossier.attachments||[]).find(a=>a.id===attachmentId);
+              if(!att)return;
+              const path='/api/tenancy/os-transfer/'+id+'/attachments/'+attachmentId+'/file';
+              const response=await (window.localRuntime?.request||fetch)(path,{
+                method:'GET',headers:window.OficinaTenant?.headers()||{},credentials:'same-origin'
+              });
+              if(!response.ok)throw new Error('Falha ao baixar evidência autorizada');
+              const blob=await response.blob();
+              const temp=URL.createObjectURL(blob);
+              try{
+                const link=document.createElement('a');link.href=temp;
+                link.download=att.original_name||'evidencia';
+                document.body.append(link);link.click();link.remove();
+              }finally{setTimeout(()=>URL.revokeObjectURL(temp),500);}
+            };
+          }
+        };
+      }
+    });
   };
   const edit=$('#editTenantMember');
   if(edit)edit.onclick=async()=>{
