@@ -1,0 +1,68 @@
+name: Native D1 · Paridade local
+
+on:
+  push:
+    branches: [main, "feat/**"]
+    paths:
+      - "src/platform/async-**"
+      - "src/workers/d1-workshop.js"
+      - "scripts/verify-d1-native.mjs"
+      - ".github/workflows/native-d1-parity.yml"
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: native-d1-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  d1-native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      CI: "true"
+      ASYNC_BACKEND_SERVICE_TOKEN: d1-local-ephemeral-test-token-2026-11-04-a
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+          cache: npm
+      - name: Install core
+        run: npm ci
+      - name: Install local OSS Wrangler CLI for CI only
+        run: npm install --no-save --no-package-lock --ignore-scripts wrangler@4
+      - name: Create ephemeral local Wrangler configuration
+        shell: bash
+        run: |
+          cat > wrangler.toml <<'CONFIG'
+          name = "artisys-oficina-d1-parity-ci"
+          main = "src/workers/d1-workshop.js"
+          compatibility_date = "2026-11-01"
+          compatibility_flags = ["nodejs_compat"]
+          [vars]
+          ASYNC_BACKEND_SERVICE_TOKEN = "d1-local-ephemeral-test-token-2026-11-04-a"
+          [[d1_databases]]
+          binding = "DB"
+          database_name = "oficina-d1-ephemeral-ci"
+          database_id = "00000000-0000-4000-8000-000000000001"
+          CONFIG
+      - name: Launch local D1 Worker without Cloudflare account
+        shell: bash
+        run: |
+          ./node_modules/.bin/wrangler dev --local --ip 127.0.0.1 --port 8787 --log-level error > /tmp/oficina-d1-wrangler.log 2>&1 &
+          echo $! > /tmp/oficina-d1-wrangler.pid
+      - name: Verify native D1 transactions and workflow
+        run: |
+          node scripts/verify-d1-native.mjs || { cat /tmp/oficina-d1-wrangler.log; exit 1; }
+      - name: Stop local Wrangler runtime
+        if: always()
+        shell: bash
+        run: |
+          if [ -f /tmp/oficina-d1-wrangler.pid ]; then kill "$(cat /tmp/oficina-d1-wrangler.pid)" || true; fi
