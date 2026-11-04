@@ -1,4 +1,5 @@
 import {randomBytes,createHash} from 'node:crypto';
+import {assertTransition,calculateQuote} from '../domain.js';
 
 // Async canonical service layer for PostgreSQL and D1. Each command is
 // explicitly transactional on its backend; never delegate to legacy SQLite.
@@ -200,8 +201,197 @@ export function createAsyncWorkshopServices(port){
      resultCents:receivedCents-expensesCents
    };
  }
+ async function transitionWorkOrder({workOrderId,toStatus,expectedVersion,reason=''}={}){
+   const current=await getWorkOrder(workOrderId);
+   if(!Number.isSafeInteger(Number(expectedVersion))||Number(expectedVersion)!==Number(current.version))
+     fail('Conflito de versão: recarregue a OS',409);
+   assertTransition(current.status,toStatus);
+   const at=iso(),updated=select(`UPDATE work_orders SET status=?,version=version+1,
+      updated_at=? WHERE id=? AND version=? AND status=?`,[
+     toStatus,at,current.id,current.version,current.status
+   ]);
+   const history=select(`INSERT INTO work_order_status_history(
+      work_order_id,from_status,to_status,reason,changed_at
+     ) SELECT ?,?,?,?,? WHERE changes()=1`,[
+     current.id,current.status,toStatus,text(reason),at
+   ]);
+   if(port.engine==='d1'){
+     const results=await atomic(port,[updated,history]);
+     if(changes(results[0])!==1)fail('Conflito de versão durante mudança de estado',409);
+   }else await port.transaction(async tx=>{
+     const result=await tx.run(updated.sql,updated.params);
+     if(changes(result)!==1)fail('Conflito de versão durante mudança de estado',409);
+     await tx.run(`INSERT INTO work_order_status_history(
+       work_order_id,from_status,to_status,reason,changed_at
+     ) VALUES(?,?,?,?,?)`,[current.id,current.status,toStatus,text(reason),at]);
+   });
+   return getWorkOrder(current.id);
+ }
+ async function saveQuote({workOrderId,items=[],discountCents=0,notes=''}={}){
+   const order=await getWorkOrder(workOrderId);
+   if(!['DIAGNOSTICO','ORCAMENTO','REPROVADA'].includes(order.status))
+     fail('OS não permite orçamento neste estágio',409);
+   const old=await port.first('SELECT * FROM quotes WHERE work_order_id=?',[order.id]);
+   if(old?.approval_status==='APROVADO')fail('Orçamento aprovado não pode ser alterado',409);
+   if(!Array.isArray(items)||!items.length||items.length>100)fail('Itens de orçamento inválidos');
+   const list=items.map(item=>{
+     const kind=text(item.kind),description=text(item.description),quantity=Number(item.quantity);
+     const unitPriceCents=cents(item.unitPriceCents);
+     if(!new Set(['PECA','MAO_DE_OBRA','TERCEIRO']).has(kind)||!description||
+       !Number.isFinite(quantity)||quantity<=0||quantity>100000)
+       fail('Item de orçamento inválido');
+     return {kind,description,quantity,unitPriceCents,
+       totalCents:Math.round(quantity*unitPriceCents)};
+   });
+   const totals=calculateQuote(list,cents(discountCents)),at=iso();
+   const quoteId=old?numericId(old.id):id();
+   const update=select(`UPDATE work_orders SET status='ORCAMENTO',
+     version=version+1,updated_at=?
+     WHERE id=? AND version=? AND status IN ('DIAGNOSTICO','ORCAMENTO','REPROVADA')`,[
+     at,order.id,order.version
+   ]);
+   const upsert=select(`INSERT INTO quotes(
+     id,work_order_id,subtotal_cents,discount_cents,total_cents,
+     notes,approval_status,created_at,updated_at
+   ) VALUES(?,?,?,?,?,?,'RASCUNHO',?,?)
+   ON CONFLICT(work_order_id) DO UPDATE SET
+     subtotal_cents=excluded.subtotal_cents,
+     discount_cents=excluded.discount_cents,
+     total_cents=excluded.total_cents,notes=excluded.notes,
+     approval_status='RASCUNHO',updated_at=excluded.updated_at
+   WHERE quotes.approval_status<>'APROVADO'`,[
+     quoteId,order.id,totals.subtotalCents,totals.discountCents,
+     totals.totalCents,text(notes),at,at
+   ]);
+   const clear=select('DELETE FROM quote_items WHERE quote_id=?',[quoteId]);
+   const addLines=list.map(item=>select(`INSERT INTO quote_items(
+     id,quote_id,kind,description,quantity,unit_price_cents,total_cents
+   ) VALUES(?,?,?,?,?,?,?)`,[
+     id(),quoteId,item.kind,item.description,item.quantity,item.unitPriceCents,item.totalCents
+   ]));
+   if(port.engine==='d1'){
+     const result=await atomic(port,[update,upsert,clear,...addLines]);
+     if(changes(result[0])!==1||changes(result[1])!==1)
+       fail('Conflito de versão ou orçamento aprovado',409);
+   }else await port.transaction(async tx=>{
+     const updated=await tx.run(update.sql,update.params);
+     if(changes(updated)!==1)fail('Conflito de versão',409);
+     const saved=await tx.run(upsert.sql,upsert.params);
+     if(changes(saved)!==1)fail('Orçamento aprovado',409);
+     await tx.run(clear.sql,clear.params);
+     for(const command of addLines)await tx.run(command.sql,command.params);
+   });
+   return port.first('SELECT * FROM quotes WHERE work_order_id=?',[order.id]);
+ }
+ async function approveQuote({workOrderId}={}){
+   const os=await getWorkOrder(workOrderId);
+   if(!['ORCAMENTO','AGUARDANDO_APROVACAO'].includes(os.status))
+     fail('OS não está em orçamento',409);
+   const quote=await port.first('SELECT * FROM quotes WHERE work_order_id=?',[os.id]);
+   if(!quote||!['RASCUNHO','AGUARDANDO'].includes(quote.approval_status))
+     fail('Orçamento não pode ser aprovado',409);
+   const at=iso();
+   const orderUpdate=select(`UPDATE work_orders SET status='APROVADA',
+     quote_total_cents=?,version=version+1,updated_at=?
+     WHERE id=? AND version=? AND status IN ('ORCAMENTO','AGUARDANDO_APROVACAO')`,[
+     quote.total_cents,at,os.id,os.version
+   ]);
+   const quoteUpdate=select(`UPDATE quotes SET approval_status='APROVADO',
+     approved_at=?,updated_at=? WHERE id=? AND approval_status IN ('RASCUNHO','AGUARDANDO')`,[
+     at,at,quote.id
+   ]);
+   if(port.engine==='d1'){
+     const result=await atomic(port,[
+       orderUpdate,quoteUpdate,
+       select(`INSERT INTO work_order_status_history(work_order_id,from_status,to_status,reason,changed_at)
+         SELECT ?,?,'APROVADA','Orçamento aprovado',? WHERE changes()=1`,[
+         os.id,os.status,at
+       ])
+     ]);
+     if(changes(result[0])!==1||changes(result[1])!==1)
+       fail('Conflito na aprovação do orçamento',409);
+   }else await port.transaction(async tx=>{
+     const changed=await tx.run(orderUpdate.sql,orderUpdate.params);
+     if(changes(changed)!==1)fail('Conflito de versão',409);
+     const saved=await tx.run(quoteUpdate.sql,quoteUpdate.params);
+     if(changes(saved)!==1)fail('Conflito de orçamento',409);
+     await tx.run(`INSERT INTO work_order_status_history(work_order_id,from_status,to_status,reason,changed_at)
+       VALUES(?,?,'APROVADA','Orçamento aprovado',?)`,[
+       os.id,os.status,at
+     ]);
+   });
+   return port.first('SELECT * FROM quotes WHERE id=?',[quote.id]);
+ }
+ function fiscalNetLines(items,discountCents){
+   const gross=items.reduce((sum,item)=>sum+Number(item.total_cents),0);
+   if(!Number.isSafeInteger(gross)||gross<=0||!Number.isSafeInteger(Number(discountCents))||
+      Number(discountCents)<0||Number(discountCents)>gross)fail('Totais fiscais inválidos');
+   const shares=items.map((item,index)=>{
+     const raw=Number(item.total_cents)*discountCents/gross;
+     return {index,discount:Math.floor(raw),fraction:raw-Math.floor(raw)};
+   });
+   let remaining=discountCents-shares.reduce((sum,x)=>sum+x.discount,0);
+   const order=[...shares].sort((a,b)=>b.fraction-a.fraction||a.index-b.index);
+   for(let i=0;i<remaining;i++)order[i%order.length].discount++;
+   return items.map((item,index)=>({
+     sourceItemId:item.id,kind:item.kind,description:item.description,
+     quantity:item.quantity,unitPriceCents:item.unit_price_cents,
+     subtotalCents:item.total_cents,discountCents:shares[index].discount,
+     totalCents:item.total_cents-shares[index].discount
+   }));
+ }
+ async function createFiscalDraft({originType='OS',originId,kind,requestId}={}){
+   const origin=text(originType).toUpperCase(),type=text(kind).toUpperCase();
+   if(origin!=='OS'||!['NFE','NFSE'].includes(type))
+     fail('O backend async inicial permite somente rascunho fiscal da OS',409);
+   const orderId=numericId(originId),request=text(requestId);
+   if(!request||request.length>128)fail('Identificador fiscal obrigatório');
+   const byRequest=await port.first('SELECT * FROM fiscal_documents WHERE request_id=?',[request]);
+   if(byRequest){
+     if(byRequest.origin_type!==origin||Number(byRequest.origin_id)!==orderId||byRequest.kind!==type)
+       fail('Identificador fiscal já usado em outra operação',409);
+     return byRequest;
+   }
+   const existing=await port.first(`SELECT * FROM fiscal_documents
+     WHERE origin_type=? AND origin_id=? AND kind=?`,[origin,orderId,type]);
+   if(existing)return existing;
+   const os=await getWorkOrder(orderId);
+   const quote=await port.first(`SELECT * FROM quotes
+     WHERE work_order_id=? AND approval_status='APROVADO'`,[orderId]);
+   if(!quote||Number(os.quote_total_cents)!==Number(quote.total_cents))
+     fail('Orçamento fiscal da OS não aprovado ou divergente',409);
+   const items=await port.all('SELECT * FROM quote_items WHERE quote_id=? ORDER BY id',[quote.id]);
+   if(items.some(i=>i.kind==='TERCEIRO'))fail('Serviço de terceiro requer classificação tributária',409);
+   const lines=fiscalNetLines(items,Number(quote.discount_cents))
+     .filter(i=>type==='NFE'?i.kind==='PECA':i.kind==='MAO_DE_OBRA');
+   if(!lines.length)fail('Nenhum item correspondente ao tipo fiscal');
+   const amount=lines.reduce((sum,l)=>sum+Number(l.totalCents),0);
+   if(!Number.isSafeInteger(amount)||amount<=0)fail('Valor fiscal inválido');
+   const snapshot=JSON.stringify({
+     originType:origin,originId:orderId,originNumber:os.os_number,
+     approvedAt:quote.approved_at,
+     kind:type,lines,customer:JSON.parse(os.snapshot_customer),
+     machine:JSON.parse(os.snapshot_machine)
+   });
+   const hash=createHash('sha256').update(snapshot).digest('hex');
+   const documentId=id(),eventId=id(),at=iso();
+   const insert=select(`INSERT INTO fiscal_documents(
+     id,kind,origin_type,origin_id,status,amount_cents,snapshot_json,
+     snapshot_hash,request_id,created_at,updated_at
+   ) VALUES(?,?,?,?,'RASCUNHO',?,?,?,?,?,?)`,[
+     documentId,type,origin,orderId,amount,snapshot,hash,request,at,at
+   ]);
+   const event=select(`INSERT INTO fiscal_events(
+     id,document_id,event_type,details_json,created_at
+   ) VALUES(?,?,'CRIADO',?,?)`,[
+     eventId,documentId,JSON.stringify({snapshotHash:hash}),at
+   ]);
+   await atomic(port,[insert,event]);
+   return port.first('SELECT * FROM fiscal_documents WHERE id=?',[documentId]);
+ }
  return Object.freeze({
    createCustomer,createMachine,createWorkOrder,getWorkOrder,
-   createPart,postStockMovement,receivePayment,financeSummary
+   createPart,postStockMovement,receivePayment,financeSummary,
+   transitionWorkOrder,saveQuote,approveQuote,createFiscalDraft
  });
 }
