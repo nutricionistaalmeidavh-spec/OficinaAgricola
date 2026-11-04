@@ -74,3 +74,36 @@ test('staging import refuses local attachment metadata without moving bytes and 
   assert.equal(await port.first('SELECT * FROM async_tenant_identity'),null);
  }finally{source.close();target.close();}
 });
+
+test('staging import verifies actual R2/MinIO bytes, not only attachment metadata',async()=>{
+ const source=openDatabase(':memory:'),target=openDatabase(':memory:');
+ try{
+  migrate(source);migrateAssistencia(source);
+  const at=new Date().toISOString();
+  source.prepare('INSERT INTO customers(name,created_at,updated_at) VALUES(?,?,?)')
+   .run('X',at,at);
+  source.prepare('INSERT INTO machines(customer_id,type,created_at,updated_at) VALUES(1,?,?,?)')
+   .run('AUTOMOVEL',at,at);
+  source.prepare(`INSERT INTO work_orders(os_number,customer_id,machine_id,entered_at,
+    problem_reported,snapshot_customer,snapshot_machine,created_at,updated_at)
+    VALUES(1,1,1,?,'OS','{}','{}',?,?)`).run(at,at,at);
+  const key='1/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.png';
+  source.prepare(`INSERT INTO attachments(work_order_id,category,mime_type,
+    original_name,relative_path,size_bytes,created_at)
+    VALUES(1,'DIAGNOSTICO','image/png','foto.png',?,5,?)`)
+   .run('s3:'+key,at);
+  const port=testD1(target);
+  await migrateAsyncTenantStore(port,{seed:false});
+  await assert.rejects(importCanonicalSqliteTenant({sourceDb:source,targetPort:port,
+   companyId:3,unitId:4}),/storage|anexos|objectStore/i);
+  assert.equal(await port.first('SELECT * FROM async_tenant_identity'),null);
+  const transfer=await importCanonicalSqliteTenant({sourceDb:source,targetPort:port,
+   companyId:3,unitId:4,
+   objectStore:{async getObject({key:received,maxBytes}){
+     assert.equal(received,key);assert.ok(maxBytes>=5);return Buffer.from('12345');
+   }}
+  });
+  assert.equal(transfer.verified,true);
+  assert.equal((await port.first('SELECT * FROM attachments')).relative_path,'s3:'+key);
+ }finally{source.close();target.close();}
+});
