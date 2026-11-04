@@ -155,7 +155,7 @@ export function createAsyncWorkshopServices(port){
        AND wo.quote_total_cents-
          COALESCE((SELECT SUM(r.amount_cents) FROM receipts r
            WHERE r.work_order_id=wo.id AND r.reversed_at IS NULL),0)>=?
-   )`,[
+   ) ON CONFLICT(request_id) DO NOTHING`,[
      receiptId,workOrderId,amount,method,at,requestId,fingerprint,workOrderId,amount
    ]);
    const event=select(`INSERT INTO payment_events(
@@ -165,16 +165,35 @@ export function createAsyncWorkshopServices(port){
    ]);
    if(port.engine==='d1'){
      const output=await atomic(port,[insert,event]);
-     if(changes(output[0])!==1)fail('Saldo insuficiente ou orçamento não aprovado',409);
-   }else await port.transaction(async tx=>{
-     // Lock the OS row to serialize concurrent receipts against approved total.
+     if(changes(output[0])!==1){
+       // D1 batch is atomic but an identical replay may have won the race
+       // after the original preflight read. Never duplicate the payment event.
+       const stored=await port.first('SELECT * FROM receipts WHERE request_id=?',[requestId]);
+       if(stored){
+         if(stored.request_payload_hash!==fingerprint)
+           fail('Identificador de pagamento já utilizado para outra operação',409);
+         return stored;
+       }
+       fail('Saldo insuficiente ou orçamento não aprovado',409);
+     }
+     return port.first('SELECT * FROM receipts WHERE id=?',[receiptId]);
+   }
+   return port.transaction(async tx=>{
+     // Lock the OS row BEFORE the second idempotency check. Concurrent
+     // payments for the same OS cannot both pass an old balance snapshot.
      const os=await tx.first('SELECT id FROM work_orders WHERE id=? FOR UPDATE',[workOrderId]);
      if(!os)fail('OS não encontrada',404);
+     const stored=await tx.first('SELECT * FROM receipts WHERE request_id=?',[requestId]);
+     if(stored){
+       if(stored.request_payload_hash!==fingerprint)
+         fail('Identificador de pagamento já utilizado para outra operação',409);
+       return stored;
+     }
      const output=await tx.run(insert.sql,insert.params);
      if(changes(output)!==1)fail('Saldo insuficiente ou orçamento não aprovado',409);
      await tx.run(event.sql,event.params);
+     return tx.first('SELECT * FROM receipts WHERE id=?',[receiptId]);
    });
-   return port.first('SELECT * FROM receipts WHERE id=?',[receiptId]);
  }
  async function financeSummary({from='1970-01-01T00:00:00.000Z',to='2999-12-31T23:59:59.999Z'}={}){
    const invoiced=await port.first(`SELECT COALESCE(SUM(q.total_cents),0) total
