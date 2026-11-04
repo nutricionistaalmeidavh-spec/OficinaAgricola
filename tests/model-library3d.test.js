@@ -152,7 +152,7 @@ test('Ka Fox Palio incluem uma variante experimental de rodas reparadas sem perd
     assert.ok(record?.variants?.repaired?.sha256,'Variante rodas não cadastrada para '+id);
     assert.equal(record.variants.repaired.experimental,true);
     assert.equal(record.review_status,'PENDENTE_REVISAO_VISUAL');
-    assert.match(resolveEntry(manifest,id,'repaired').path,new RegExp('^curadoria/rodas-reparadas/'+id+'-rodas\\\\.glb$'));
+    assert.equal(resolveEntry(manifest,id,'repaired').path,'curadoria/rodas-reparadas/'+id+'-rodas.glb');
     assert.match(assetUrl(resolveEntry(manifest,id,'repaired')),/curadoria\/rodas-reparadas\/.+-rodas\.glb$/);
   }
   const hashes={
