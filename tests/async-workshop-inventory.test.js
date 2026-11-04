@@ -28,6 +28,12 @@ test('common inventory consumes OS part only after approval and safely reverses 
    requestId:'consumo-001'});
   assert.equal(used.id,replay.id);
   assert.equal((await ws.getPart(part.id)).quantity,1);
+  const historyCount=db.prepare('SELECT COUNT(*) n FROM inventory_movements').get().n;
+  await assert.rejects(ws.consumePart({workOrderId:os.id,partId:part.id,quantity:9,
+   requestId:'consumo-sem-estoque'}),/Estoque insuficiente/);
+  assert.equal((await ws.getPart(part.id)).quantity,1);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM inventory_movements').get().n,historyCount);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM work_order_parts').get().n,1);
   assert.equal((await ws.listWorkOrderParts(os.id)).length,1);
   assert.equal((await ws.lowStockParts()).length,1);
   const stock=await ws.reconcileStock(part.id);assert.equal(stock.difference,0);
