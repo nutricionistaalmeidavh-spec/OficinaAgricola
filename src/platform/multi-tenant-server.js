@@ -14,6 +14,7 @@ import { createApprovalLink, createMaintenanceCrmTasks } from '../services/marke
 import { financeSummary } from '../services/finance.js';
 import { sharePartCatalog, shareCustomer } from './tenant-catalog-sharing.js';
 import { transferTenantStock, retryTenantStockTransfer, listTenantStockTransfers } from './tenant-stock-transfer.js';
+import { resolveTenantFiscalProvider, validateTenantFiscalConfigs } from './tenant-fiscal.js';
 import { seedDefaultChecklists, recoverOrphanAttachments } from '../services/operations.js';
 import { createEventRuntime } from './event-runtime.js';
 import { dispatchOutbox } from './outbox.js';
@@ -51,6 +52,7 @@ export function createMultiTenantServer({
   legacyStorageDir = process.env.STORAGE_DIR || './storage/uploads',
   tenantsRoot = './data/oficina-tenants',
   tls = null,
+  tenantFiscalConfigs = {},
   unitServerFactory = createAssistenciaServer
 } = {}) {
   migrate(legacyDb);
@@ -59,6 +61,7 @@ export function createMultiTenantServer({
   if(legacyOtherUnitOrders)
     throw httpError('Banco legado já contém OS de várias unidades. Migração segura das OS e seus vínculos é obrigatória antes de ativar o modo multiempresa.',409);
   migrateTenantRegistry(registryDb,legacyDb);
+  validateTenantFiscalConfigs(tenantFiscalConfigs);
   const root=resolve(tenantsRoot);
   const cache=new Map();
   function unitRuntime(unitId) {
@@ -77,8 +80,15 @@ export function createMultiTenantServer({
     recoverOrphanAttachments(db,storageDir);
     const auditPath=isLegacy?(process.env.EVENT_LOG_PATH || join(dirname(resolve(legacyDatabasePath)),'oficina-events.jsonl')):join(dir,'events.jsonl');
     const eventRuntime=createEventRuntime({auditPath});
-    const srv=unitServerFactory({db,storageDir,eventRuntime,tls:null});
-    const runtime={db,srv,unit,storageDir,eventRuntime,owned:!isLegacy};
+    const configPresent=Object.hasOwn(tenantFiscalConfigs,String(unit.companyId));
+    const scopedFiscalProvider=configPresent
+      ?resolveTenantFiscalProvider({companyId:unit.companyId,configs:tenantFiscalConfigs}):null;
+    // Legacy can still use the existing single-company local provider,
+    // but never leak process-wide credentials into an unrelated unit.
+    const fiscalProviderOverride=isLegacy&&!configPresent?undefined:scopedFiscalProvider;
+    const srv=unitServerFactory({db,storageDir,eventRuntime,tls:null,fiscalProviderOverride});
+    const runtime={db,srv,unit,storageDir,eventRuntime,owned:!isLegacy,
+      fiscalConfigured:isLegacy||Boolean(scopedFiscalProvider)};
     cache.set(id,runtime);
     return runtime;
   }
@@ -266,10 +276,11 @@ export function createMultiTenantServer({
     // This endpoint intentionally returns the current unit's report, not an
     // unauthorized cross-company aggregation.
     const runtime=syncShadowSession(user,token,unit);
-    // Fiscal provider credentials are process-wide in the legacy runtime.
-    // Never allow an independent company to emit using the wrong certificate.
-    if(unit.companyId!==1 && /^\/api\/fiscal\/\d+\/(submit|reconcile)$/.test(path))
-      throw httpError('Emissão fiscal multiempresa requer provedor fiscal isolado por empresa e homologação',409);
+    // Reject transmission without an explicitly scoped provider; the legacy
+    // unit is the only unit permitted to inherit the historical process env.
+    if(/^\/api\/fiscal\/\d+\/(submit|reconcile)$/.test(path)
+       &&!unitRuntime(unit.id).fiscalConfigured)
+      throw httpError('Emissão fiscal da empresa não configurada: configure um emissor isolado',409);
     if(method==='POST'&&/^\/api\/work-orders\/\d+\/quote\/approval-link$/.test(path)){
       if(!['ADMIN','ATENDIMENTO'].includes(unit.role))throw httpError('Permissão insuficiente',403);
       const id=positive(path.split('/')[3]);
