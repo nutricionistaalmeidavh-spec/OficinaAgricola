@@ -1,3 +1,4 @@
+import {requestPayloadLimit} from './billing-http-limits.js';
 import {createCommonDataAdapter} from './common-data-adapter.js';
 import {createBillingService} from './billing-p3-p4.js';
 import {addReceipt,getPaymentSummary,reverseReceipt} from '../services/finance.js';
@@ -400,11 +401,7 @@ export function createMultiTenantServer({
         'SELECT expires_at FROM sessions WHERE token_hash=? AND user_id=?'
       ).get(tokenDigest(token),user.id);
       if(!session)throw httpError('Sessão global inválida',401);
-      const parts=path.split('/');
-      const attachmentUpload=method==='POST'&&parts.length===5&&
-        parts[1]==='api'&&parts[2]==='work-orders'&&
-        /^[1-9][0-9]*$/.test(parts[3])&&parts[4]==='attachments';
-      const maxBytes=attachmentUpload?7*1024*1024:1048576;
+      const maxBytes=requestPayloadLimit(method,path);
       const body=['POST','PUT','PATCH'].includes(method)?await readJson(req,maxBytes):{};
       const answer=await nativeApiBridge({
         backend:nativeBackend,unit,user,globalToken:token,
