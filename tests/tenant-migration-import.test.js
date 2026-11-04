@@ -115,3 +115,21 @@ test('staging import verifies actual R2/MinIO bytes, not only attachment metadat
   assert.equal((await port.first('SELECT * FROM attachments')).relative_path,'s3:'+key);
  }finally{source.close();target.close();}
 });
+
+test('empty target preflight also checks native-only runtime tables absent in older SQLite sources',async()=>{
+ const source=openDatabase(':memory:'),target=openDatabase(':memory:');
+ try{
+  migrate(source);migrateAssistencia(source);
+  const port=testD1(target);
+  await migrateAsyncTenantStore(port,{seed:false});
+  assert.equal(source.prepare("SELECT COUNT(*) n FROM sqlite_master WHERE name='tenant_remote_upload_requests'").get().n,0);
+  target.exec('PRAGMA foreign_keys=OFF');
+  target.prepare(`INSERT INTO tenant_remote_upload_requests(
+    work_order_id,request_id,payload_hash,attachment_id
+  ) VALUES(999,'foreign-tenant','other-company',888)`).run();
+  target.exec('PRAGMA foreign_keys=ON');
+  await assert.rejects(importCanonicalSqliteTenant({sourceDb:source,targetPort:port,
+   companyId:5,unitId:6}),/destino não está vazio|outro tenant/i);
+  assert.equal(await port.first('SELECT * FROM async_tenant_identity'),null);
+ }finally{source.close();target.close();}
+});
