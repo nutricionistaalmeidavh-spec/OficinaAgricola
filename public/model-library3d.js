@@ -106,26 +106,39 @@
       if(!busy&&!preserveMessage&&!stageElement.querySelector('canvas'))message.textContent=ready?'Modelo disponível offline neste servidor':'Modelo ainda não instalado neste servidor';
     }
     async function preview(){
-      if(!installed[variant]||busy)return;
+      if(!installed[variant]){message.textContent='Instale ou importe esta versão antes de visualizar.';return}
+      if(busy){message.textContent='A operação anterior ainda está sendo concluída.';return}
       const targetVariant=variant;
-      busy=true;updateControls();
+      busy=true;
+      stageElement.dataset.viewerState='loading';
+      updateControls();
+      message.textContent='Preparando visualização 3D...';
       try{
         const mod=await import('/model-viewer.js');
         if(!stageElement.isConnected)return;
         viewer=await mod.mountViewer({id:target.id,variant:targetVariant,element:stageElement,statusElement:message});
+        stageElement.dataset.viewerState=viewer?'ready':'cancelled';
       }catch(error){
-        if(stageElement.isConnected)message.textContent='Falha na visualização: '+(error.message||error);
+        if(stageElement.isConnected){
+          stageElement.dataset.viewerState='error';
+          message.textContent='Falha na visualização: '+(error.message||error);
+        }
       }finally{busy=false;if(stageElement.isConnected)updateControls({preserveMessage:true})}
     }
     select.addEventListener('change',()=>{
-      import('/model-viewer.js').then(mod=>mod.closeViewer()).catch(()=>{});
+      // Limpeza síncrona: um import() pendente poderia fechar a nova visualização.
+      viewer?.dispose?.();viewer=null;
+      stageElement.dataset.viewerState='idle';
       stageElement.replaceChildren();
       const blank=document.createElement('div');
       blank.className='ml-viewer-empty';blank.textContent='Escolha a opção para abrir esta versão em 3D.';
       stageElement.appendChild(blank);
       updateControls();
     });
-    openBtn.addEventListener('click',()=>{void preview()});
+    openBtn.addEventListener('click',()=>{
+      stageElement.dataset.viewerClicked='true';
+      void preview();
+    });
     if(installBtn){
       installBtn.addEventListener('click',async()=>{
         if(busy)return;
