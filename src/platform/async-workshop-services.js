@@ -80,7 +80,7 @@ export function createAsyncWorkshopServices(port){
        id,os_number,customer_id,machine_id,entered_at,problem_reported,
        diagnosis,technician_id,estimated_delivery,priority,internal_notes,
        status,snapshot_customer,snapshot_machine,created_at,updated_at
-     ) VALUES(?,(SELECT COALESCE(MAX(os_number),0)+1 FROM work_orders),?,?,?,?,?,?,?,?,?,'ENTRADA',?,?,?,?)`,fields),
+     ) VALUES(?,${port.engine==='postgres'?"nextval('async_os_number_seq')":'(SELECT COALESCE(MAX(os_number),0)+1 FROM work_orders)'},?,?,?,?,?,?,?,?,?,'ENTRADA',?,?,?,?)`,fields),
     select(`INSERT INTO work_order_status_history(
        work_order_id,from_status,to_status,reason,changed_at
      ) VALUES(?,NULL,'ENTRADA','Abertura da OS',?)`,[workOrderId,at]),
