@@ -13,7 +13,7 @@ const inflight=new Map();
 export const manifest=JSON.parse(readFileSync(DATA_FILE,'utf8'));
 const SHA=/^[a-f0-9]{64}$/;
 const GIT_REF=/^[a-f0-9]{40}$/;
-const FILE=/^(?:assets\/[a-z0-9-]+\.glb|curadoria\/restaurados\/[a-z0-9-]+-restaurado\.glb|curadoria\/geometria\/[a-z0-9-]+-rodas\.glb)$/;
+const FILE=/^(?:assets\/[a-z0-9-]+\.glb|curadoria\/restaurados\/[a-z0-9-]+-restaurado\.glb|curadoria\/(?:geometria|rodas-reparadas)\/[a-z0-9-]+-rodas\.glb)$/;
 const SAFE_ID=/^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export function validateCatalog(catalog=manifest){
@@ -32,7 +32,7 @@ export function validateCatalog(catalog=manifest){
         throw new Error('Fonte de GLB inválida');
       if(kind==='original'&&!variant.path.startsWith('assets/'))throw new Error('Variante original fora de assets/');
       if(kind==='restored'&&!variant.path.startsWith('curadoria/restaurados/'))throw new Error('Variante restaurada fora da curadoria');
-      if(kind==='repaired'&&(!variant.path.startsWith('curadoria/geometria/')||variant.experimental!==true))throw new Error('Rodas reparadas devem ser experimentais e vir da curadoria geométrica');
+      if(kind==='repaired'&&(!(/^curadoria\/(?:geometria|rodas-reparadas)\//.test(variant.path))||variant.experimental!==true))throw new Error('Rodas reparadas devem ser experimentais e vir da curadoria geométrica');
     }
   }
   return catalog;
