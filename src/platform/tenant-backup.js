@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createBackup, verifyBackup, restoreBackup } from './backup.js';
 import { validateBackupRestoration } from './backup-scheduler.js';
+import { mirrorVerifiedTenantBackups } from './s3-backup.js';
 
 const ARCHIVE=/^20\d{2}-\d{2}-\d{2}T[0-9-]+Z-[0-9a-f]{8}$/i;
 function archiveRecords(root){
@@ -61,14 +62,23 @@ export function runMultiTenantBackupCycle({
 }
 export function startMultiTenantBackupSchedule(options){
   let stopped=false,busy=false;
-  const run=()=>{
+  const run=async()=>{
     if(stopped||busy)return;busy=true;
-    try{const result=runMultiTenantBackupCycle(options);
-      console.info('[tenancy-backup]',result.filter(x=>x.created).length,'backups verificados');
-    }catch(error){console.error('[tenancy-backup] Falha:',error.message);}
-    finally{busy=false;}
+    try{
+      const result=runMultiTenantBackupCycle(options);
+      console.info('[tenancy-backup]',result.filter(x=>x.created).length,'backups locais verificados');
+      if(options.s3BackupClient){
+        const mirrored=await mirrorVerifiedTenantBackups({
+          records:result,backupRoot:options.backupRoot,client:options.s3BackupClient
+        });
+        console.info('[tenancy-backup-remote]',mirrored.length,'arquivos de backup completos');
+      }
+    }catch(error){
+      // Never delete or weaken local backups when the optional remote fails.
+      console.error('[tenancy-backup] Falha:',error.message);
+    }finally{busy=false;}
   };
-  const initial=setImmediate(run);
-  const timer=setInterval(run,3600000);timer.unref?.();
+  const initial=setImmediate(()=>void run());
+  const timer=setInterval(()=>void run(),3600000);timer.unref?.();
   return ()=>{stopped=true;clearImmediate(initial);clearInterval(timer);};
 }
