@@ -5,6 +5,7 @@ import { openDatabase } from './db.js';
 import { createMultiTenantServer } from './platform/multi-tenant-server.js';
 import { resolveServerConfig, listLanUrls } from './platform/network.js';
 import { startMultiTenantBackupSchedule } from './platform/tenant-backup.js';
+import { createS3BackupClient } from './platform/s3-backup.js';
 
 // Explicit backend selection. Never pretend that D1/R2/PostgreSQL are active
 // while writing user data to an unrelated SQLite database.
@@ -25,10 +26,21 @@ const tls=process.env.HTTPS_CERT_FILE&&process.env.HTTPS_KEY_FILE?{
 }:null;
 const server=createMultiTenantServer({registryDb,legacyDb,legacyDatabasePath,legacyStorageDir,tenantsRoot,tls});
 const {host,port}=resolveServerConfig(process.env);
+// Remote copies are opt-in, while SQLite + local disk remain canonical and free.
+const backupS3Endpoint=String(process.env.OFICINA_BACKUP_S3_ENDPOINT||'').trim();
+const s3BackupClient=backupS3Endpoint?createS3BackupClient({
+  endpoint:backupS3Endpoint,
+  bucket:process.env.OFICINA_BACKUP_S3_BUCKET,
+  region:process.env.OFICINA_BACKUP_S3_REGION||'us-east-1',
+  accessKeyId:process.env.OFICINA_BACKUP_S3_ACCESS_KEY_ID,
+  secretAccessKey:process.env.OFICINA_BACKUP_S3_SECRET_ACCESS_KEY,
+  prefix:process.env.OFICINA_BACKUP_S3_PREFIX||'oficina-backups'
+}):null;
 const stopMultiBackup=startMultiTenantBackupSchedule({
   registryDb,registryPath,legacyDatabasePath,legacyStorageDir,tenantsRoot,
   backupRoot:resolve(process.env.BACKUP_ROOT||join(dirname(legacyDatabasePath),'backups-multiempresa')),
-  retention:Number(process.env.BACKUP_RETENTION||7)
+  retention:Number(process.env.BACKUP_RETENTION||7),
+  s3BackupClient
 });
 server.listen(port,host,()=>{
   console.info('ArtiSys Oficina multiempresa em '+(tls?'https':'http')+'://'+host+':'+port);
