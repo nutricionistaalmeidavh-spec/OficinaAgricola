@@ -14,6 +14,9 @@ import {createMaintenanceCrmTasks} from './services/market-parity.js';
 import {startBackupSchedule} from './platform/backup-scheduler.js';
 import { listLanUrls, resolveServerConfig } from './platform/network.js';
 
+if(String(process.env.OFICINA_DATABASE_ENGINE||'sqlite').toLowerCase()!=='sqlite'||
+   String(process.env.OFICINA_OBJECT_STORAGE||'disk').toLowerCase()!=='disk')
+  throw new Error('Provedores alternativos exigem npm run start:multi; modo legado não pode ignorar configuração de backend');
 process.env.DATABASE_PATH = resolveDatabasePath();
 process.env.STORAGE_DIR = resolveStoragePath({databasePath:process.env.DATABASE_PATH});
 process.env.EVENT_LOG_PATH ||= './data/oficina-events.jsonl';
