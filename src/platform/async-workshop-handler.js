@@ -198,6 +198,40 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
      return json(await services.cancelSale({
        ...await dataFrom(request),saleId:Number(saleCancel[1])
      }));
+   if(path==='/v1/parts'&&method==='GET')
+     return json(await services.listParts({
+       search:u.searchParams.get('search')||'',
+       includeInactive:u.searchParams.get('includeInactive')==='1'
+     }));
+   if(path==='/v1/parts/page'&&method==='GET')
+     return json(await services.listPartsPage({
+       search:u.searchParams.get('search')||'',
+       includeInactive:u.searchParams.get('includeInactive')==='1',
+       cursor:u.searchParams.get('cursor'),limit:u.searchParams.get('limit')||50
+     }));
+   if(path==='/v1/parts/low-stock'&&method==='GET')
+     return json(await services.lowStockParts());
+   const part=path.match(/^\/v1\/parts\/([1-9]\d*)$/);
+   if(part&&method==='GET')
+     return json(await services.getPart(Number(part[1])));
+   if(part&&method==='PATCH')
+     return json(await services.updatePart(Number(part[1]),await dataFrom(request)));
+   const reconcilePart=path.match(/^\/v1\/parts\/([1-9]\d*)\/reconcile$/);
+   if(reconcilePart&&method==='GET')
+     return json(await services.reconcileStock(Number(reconcilePart[1])));
+   const osParts=path.match(/^\/v1\/orders\/([1-9]\d*)\/parts$/);
+   if(osParts&&method==='GET')
+     return json(await services.listWorkOrderParts(Number(osParts[1])));
+   if(osParts&&method==='POST')
+     return json(await services.consumePart({
+       ...await dataFrom(request),workOrderId:Number(osParts[1])
+     }),201);
+   const reversePart=path.match(/^\/v1\/orders\/([1-9]\d*)\/parts\/([1-9]\d*)\/reverse$/);
+   if(reversePart&&method==='POST')
+     return json(await services.reverseWorkOrderPart({
+       ...await dataFrom(request),workOrderId:Number(reversePart[1]),
+       itemId:Number(reversePart[2])
+     }));
    if(path==='/v1/parts'&&method==='POST')
      return json(await services.createPart(await dataFrom(request)),201);
    if(path==='/v1/stock'&&method==='POST')
