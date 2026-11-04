@@ -1,3 +1,4 @@
+import {createLocalTenantObjectStore} from './local-tenant-object-store.js';
 import {createCommonDataAdapter} from './common-data-adapter.js';
 import {createAsyncWorkshopServices} from './async-workshop-services.js';
 import {createAsyncWorkshopHandler} from './async-workshop-handler.js';
@@ -18,7 +19,7 @@ export function tenantSchemaName(unit,{prefix='oficina'}={}){
 }
 export function createPostgresTenantRuntimeFactory({
  Pool,connectionString,registry,serviceToken,allowProvision=false,
- schemaPrefix='oficina',objectStoreForUnit=null
+ schemaPrefix='oficina',objectStoreForUnit=null,localStorageRoot=null
 }={}){
  if(typeof Pool!=='function'||typeof connectionString!=='string'||!connectionString.trim())
    throw Error('PostgreSQL exige pool e URL operacional explícitos');
@@ -66,7 +67,10 @@ export function createPostgresTenantRuntimeFactory({
      }
      await assertAsyncTenantIdentity(port,{companyId:unit.companyId,unitId:unit.id});
      const objectStore=typeof objectStoreForUnit==='function'
-       ?await objectStoreForUnit(unit):null;
+       ?await objectStoreForUnit(unit)
+       :localStorageRoot?createLocalTenantObjectStore({
+          root:localStorageRoot,companyId:unit.companyId,unitId:unit.id
+        }):null;
      const handler=createAsyncWorkshopHandler({
        services:createAsyncWorkshopServices(port,{objectStore}),
        serviceToken,
