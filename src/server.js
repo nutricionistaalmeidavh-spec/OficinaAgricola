@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import {installAsset,importLocalAsset,readInstalledAsset,listStatuses} from './services/model-library3d.js';
 import { readFileSync, existsSync, statSync } from 'node:fs';
 import { join, resolve, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -33,7 +34,7 @@ import {lookupVehicleByPlate,createCrmTask,listCrmTasks,completeCrmTask,createMa
 
 const __dirname=fileURLToPath(new URL('.',import.meta.url));
 const publicDir=resolve(__dirname,'../public');
-const MIME={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.json':'application/json; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.ico':'image/x-icon'};
+const MIME={'.mjs':'text/javascript; charset=utf-8','.glb':'model/gltf-binary','.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.json':'application/json; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.ico':'image/x-icon'};
 const ROLE_ALL=['ADMIN','ATENDIMENTO','TECNICO','FINANCEIRO'];
 const ROLE_OFFICE=['ADMIN','ATENDIMENTO'];
 const ROLE_TECH=['ADMIN','ATENDIMENTO','TECNICO'];
@@ -67,6 +68,7 @@ function requireVersion(body){
 }
 
 function createRouter({db,storageDir,diagnosticRunner=executeDiagnosticWorker}){
+  const model3dDir=resolve(storageDir,'../models3d');
   const r=new Router(); const add=(m,p,roles,h,o)=>r.add(m,p,roles,h,o);
   add('GET','/api/health',null,()=>({ok:true}),{publicRoute:true});
   add('GET','/api/setup/status',null,()=>({required:isSetupRequired(db)}),{publicRoute:true});
@@ -74,6 +76,13 @@ function createRouter({db,storageDir,diagnosticRunner=executeDiagnosticWorker}){
   add('POST','/api/auth/login',null,({req,body})=>loginHttp(db,body.username,body.password,{remoteAddress:req.socket.remoteAddress}),{publicRoute:true});
   add('POST','/api/auth/logout',ROLE_ALL,({token})=>{logout(db,token);return {ok:true}});
   add('GET','/api/auth/me',ROLE_ALL,({user})=>user);
+  // GLBs ficam fora do executável e fora do banco. Somente usuários autenticados
+  // podem lê-los; a instalação é exclusiva do administrador.
+  add('GET','/api/models3d/status',ROLE_ALL,()=>({models:listStatuses(model3dDir)}));
+  add('GET','/api/models3d/file/:id/:variant',ROLE_ALL,({params})=>({
+    __binary:readInstalledAsset(model3dDir,params.id,params.variant),
+    mimeType:'model/gltf-binary',filename:params.id+'-'+params.variant+'.glb'
+  }));
 
   add('GET','/api/company',ROLE_ALL,()=>getCompanySettings(db));
   add('PATCH','/api/company',['ADMIN'],({body})=>updateCompanySettings(db,body));
@@ -217,6 +226,29 @@ export function createAppServer({db=openDatabase(),storageDir=process.env.STORAG
     try{
       assertSecureNetwork(req);
       assertSameOrigin(req);
+      // Instalação dos GLBs é I/O externo e NÃO entra em transação SQLite.
+      // Repositório e commit são fixos no manifesto com SHA-256; sem CDN em execução.
+      const modelInstall=req.method==='POST'?url.pathname.match(/^\/api\/models3d\/install\/([a-z0-9-]+)\/(original|restored|repaired)$/):null;
+      const modelImport=req.method==='POST'?url.pathname.match(/^\/api\/models3d\/import\/([a-z0-9-]+)\/(original|restored|repaired)$/):null;
+      if(modelInstall||modelImport){
+        const user=validateSession(db,tokenFrom(req));roleGuard(user,['ADMIN']);
+        const id=(modelInstall||modelImport)[1],variant=(modelInstall||modelImport)[2];
+        const root=resolve(storageDir,'../models3d');
+        if(modelInstall){
+          await readJson(req,2048);
+          const data=await installAsset(root,id,variant);
+          return json(res,200,data);
+        }
+        if(!String(req.headers['content-type']||'').startsWith('application/octet-stream'))
+          throw new Error('Envie um arquivo GLB binário');
+        let bytes=0; const chunks=[];
+        for await(const chunk of req){
+          bytes+=chunk.length;
+          if(bytes>25*1024*1024)throw new Error('GLB excede 25 MB');
+          chunks.push(chunk);
+        }
+        return json(res,200,await importLocalAsset(root,id,variant,Buffer.concat(chunks,bytes)));
+      }
       // Transmissão fiscal faz I/O externo; nunca manter transação SQLite aberta durante a rede.
       // Rotas assíncronas são separadas do envelopamento HTTP de comandos síncronos.
       const fiscalAction=(req.method==='POST')?url.pathname.match(/^\/api\/fiscal\/(\d+)\/(submit|reconcile)$/):null;

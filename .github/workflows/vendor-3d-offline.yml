@@ -1,0 +1,113 @@
+name: Empacotar dependências e miniaturas 3D offline (branch)
+
+on:
+  push:
+    branches: [feat/visualizador3d-top20-20261103]
+    paths:
+      - .github/workflows/vendor-3d-offline.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vendor-3d-offline
+  cancel-in-progress: false
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout da feature isolada
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Node open source
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Obter Three.js e Meshopt em versões fixas (somente build)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/artisys-3d-vendor
+          npm install --prefix /tmp/artisys-3d-vendor --no-fund --no-audit --ignore-scripts --save-exact three@0.186.1 meshoptimizer@1.2.0
+          SRC=/tmp/artisys-3d-vendor/node_modules
+          mkdir -p public/vendor/three/addons/loaders public/vendor/three/addons/controls public/vendor/three/addons/utils public/vendor/licenses
+          cp "$SRC/three/build/three.module.js" public/vendor/three/three.module.js
+          cp "$SRC/three/build/three.core.js" public/vendor/three/three.core.js
+          cp "$SRC/three/examples/jsm/loaders/GLTFLoader.js" public/vendor/three/addons/loaders/GLTFLoader.js
+          cp "$SRC/three/examples/jsm/controls/OrbitControls.js" public/vendor/three/addons/controls/OrbitControls.js
+          cp "$SRC/three/examples/jsm/utils/BufferGeometryUtils.js" public/vendor/three/addons/utils/BufferGeometryUtils.js
+          cp "$SRC/three/examples/jsm/utils/SkeletonUtils.js" public/vendor/three/addons/utils/SkeletonUtils.js
+          cp "$SRC/meshoptimizer/meshopt_decoder.mjs" public/vendor/meshopt_decoder.mjs
+          cp "$SRC/three/LICENSE" public/vendor/licenses/three-LICENSE.txt
+          cp "$SRC/meshoptimizer/LICENSE.md" public/vendor/licenses/meshoptimizer-LICENSE.md
+      - name: Reescrever imports internos para caminhos locais (sem importmap ou CDN)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          root=Path("public/vendor/three/addons")
+          for path in root.rglob("*.js"):
+              s=path.read_text(encoding="utf-8")
+              s,n=re.subn(r"from\s+(['\"])three\1", "from '/vendor/three/three.module.js'", s)
+              path.write_text(s,encoding="utf-8")
+              print(path, "imports reescritos",n)
+          PY
+          node --check public/vendor/three/three.core.js
+          node --check public/vendor/three/three.module.js
+          node --check public/vendor/three/addons/loaders/GLTFLoader.js
+          node --check public/vendor/three/addons/controls/OrbitControls.js
+          node --check public/vendor/three/addons/utils/SkeletonUtils.js
+          node --check public/vendor/meshopt_decoder.mjs
+          if grep -R "from 'three'" public/vendor/three/addons; then exit 1; fi
+      - name: Trazer thumbnails 3D reais por commit fixo da biblioteca ArtiSys
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p public/carros3d/thumbs
+          REF=8fd10593b8804618478dc5d9dc6cb739196c18d5
+          BASE="https://raw.githubusercontent.com/nutricionistaalmeidavh-spec/assetscarros3d/$REF/curadoria"
+          for id in fiat-uno fiat-palio fiat-strada chevrolet-corsa vw-fusca ford-fiesta chevrolet-onix chevrolet-celta ford-ka vw-saveiro vw-fox vw-voyage; do
+            folder=miniaturas
+            case "$id" in fiat-uno|fiat-palio|chevrolet-corsa|ford-ka|vw-fox) folder=miniaturas-restauradas ;; esac
+            curl --fail --location --silent --show-error --retry 3 "$BASE/$folder/$id-frente.png" -o "public/carros3d/thumbs/$id.png"
+          done
+          python3 - <<'PY'
+          from pathlib import Path
+          files=list(Path("public/carros3d/thumbs").glob("*.png"))
+          assert len(files)==12, len(files)
+          for file in files:
+              assert file.read_bytes().startswith(b"\x89PNG\r\n\x1a\n"), file
+          print("12 miniaturas reais verificadas (sem download em runtime).")
+          PY
+      - name: Validar recursos locais antes de registrar
+        run: |
+          test -s public/vendor/three/three.core.js
+          test -s public/vendor/meshopt_decoder.mjs
+          test -s public/vendor/three/addons/loaders/GLTFLoader.js
+          test -s public/vendor/three/addons/controls/OrbitControls.js
+          test -s public/vendor/licenses/three-LICENSE.txt
+          test -s public/vendor/licenses/meshoptimizer-LICENSE.md
+          node --test tests/model-library3d.test.js tests/model-library-p0.test.js
+      - name: Commitar assets vendorizados somente na branch isolada
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/vendor/ public/carros3d/thumbs/
+          if ! git diff --cached --quiet; then
+            git commit -m "assets: empacotar Three.js Meshopt e 12 miniaturas GLB offline"
+            for attempt in 1 2 3; do
+              git fetch origin feat/visualizador3d-top20-20261103
+              git rebase FETCH_HEAD
+              if git push origin HEAD:feat/visualizador3d-top20-20261103; then exit 0; fi
+              sleep 5
+            done
+            exit 1
+          fi

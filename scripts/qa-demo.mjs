@@ -66,10 +66,17 @@ try{
   // P0 biblioteca 3D: cards locais, busca, categorias e acesso por menu mobile.
   await navigateQa(page,'model-library');
   await page.locator('#ml-grid .ml-card').first().waitFor({state:'visible'});
-  if(await page.locator('#ml-grid .ml-card').count()!==24)
-    throw new Error('Biblioteca 3D: paginação inicial não exibe 24 veículos');
-  if(!(await page.locator('#ml-count').textContent()).includes('532'))
-    throw new Error('Biblioteca 3D: catálogo local não contém 532 veículos');
+  if(await page.locator('#ml-grid .ml-card').count()!==20)
+    throw new Error('Biblioteca 3D: os 20 veículos prioritários não aparecem');
+  if(!(await page.locator('#ml-count').textContent()).includes('20'))
+    throw new Error('Biblioteca 3D: Top 20 não foi aplicado');
+  await page.locator('.ml-card[data-model-id="volkswagen-gol"] [data-model-detail]').click();
+  await page.locator('#modalBody .ml-not-available').filter({hasText:'Golf Mk1'}).waitFor({state:'visible'});
+  await page.locator('#modalClose').click();
+  await page.locator('#ml-priority-only').uncheck();
+  const allModels=Number.parseInt((await page.locator('#ml-count').textContent())||'0',10);
+  if(allModels<532)throw new Error('Biblioteca 3D: catálogo completo indisponível');
+  await page.locator('#ml-priority-only').check();
   await page.screenshot({path:path.join(outputDir,'01b-biblioteca-3d.png'),fullPage:true});
   await page.locator('#ml-brand').selectOption('Fiat');
   await page.locator('#ml-search').fill('Uno');

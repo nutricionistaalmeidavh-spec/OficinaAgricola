@@ -1,0 +1,60 @@
+name: QA E2E real — Biblioteca 3D Top20 (desktop e mobile)
+
+on:
+  push:
+    branches: [feat/visualizador3d-top20-20261103]
+    paths:
+      - .github/workflows/qa-top20-3d.yml
+      - public/model-viewer.js
+      - public/model-library3d.js
+      - public/model-library.js
+      - public/vendor/**
+      - public/sw.js
+      - src/platform/session-http.js
+      - scripts/qa-model-library3d.mjs
+      - tests/model-library3d.test.js
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qa-visualizador3d-top20
+  cancel-in-progress: false
+
+jobs:
+  preview:
+    strategy:
+      fail-fast: false
+      matrix:
+        viewport: [desktop, mobile]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout da branch de feature com dependências vendorizadas
+        uses: actions/checkout@v4
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+          cache: npm
+      - name: Dependências de QA (não utilizadas em produção)
+        run: |
+          npm ci
+          npm install --no-save --package-lock=false playwright@1.62.1
+          npx playwright install --with-deps chromium
+      - name: Ambiente isolado do Oficina
+        run: |
+          rm -rf .qa3d
+          DATABASE_PATH=.qa3d/oficina.sqlite STORAGE_DIR=.qa3d/uploads EVENT_LOG_PATH=.qa3d/events.jsonl NODE_ENV=development node scripts/seed-qa-demo.mjs
+      - name: Instalar GLB real e testar WebGL e persistência offline
+        run: |
+          node scripts/qa-model-library3d.mjs "${{ matrix.viewport }}" "$PWD/qa-artifacts"
+      - name: Salvar evidências de console, imagens e estado do GLB
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: biblioteca-3d-${{ matrix.viewport }}-${{ github.run_number }}
+          path: qa-artifacts/
+          if-no-files-found: warn
+          retention-days: 14
