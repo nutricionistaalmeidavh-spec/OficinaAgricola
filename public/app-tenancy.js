@@ -9,6 +9,8 @@ async function openTenantAdmin(){
   const companies=[...new Map(managed.map(u=>[u.companyId,{id:u.companyId,name:u.companyName}])).values()];
   const unitOptions=managed.map(u=>'<option value="'+u.id+'">'+esc(u.companyName)+' / '+esc(u.name)+'</option>').join('');
   const companyOptions=companies.map(c=>'<option value="'+c.id+'">'+esc(c.name)+'</option>').join('');
+  const possibleCatalogSources=managed.filter(u=>managed.some(v=>v.companyId===u.companyId&&v.id!==u.id));
+  const money=cents=>(Number(cents||0)/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
   showModal('Empresas e unidades',`<div class="form-stack">
     <p class="muted">Cada unidade possui banco de dados e anexos isolados. O acesso depende do vínculo do usuário.</p>
     <div class="field-row">
@@ -17,6 +19,7 @@ async function openTenantAdmin(){
       ${managed.length?'<button type="button" class="btn" id="addTenantMember">+ Vincular usuário</button>':''}
       ${managed.length?'<button type="button" class="btn" id="editTenantMember">Alterar acessos</button>':''}
       ${managed.length?'<button type="button" class="btn" id="tenantCompanySummary">Resumo da empresa</button>':''}
+      ${possibleCatalogSources.length?'<button type="button" class="btn" id="tenantSharePart">Compartilhar catálogo</button>':''}
     </div>
     <div class="list">${units.map(u=>'<div class="list-item"><div><strong>'+esc(u.companyName)+' / '+esc(u.name)+'</strong><br><small>'+esc(u.code)+' · '+esc(u.role)+'</small></div></div>').join('')}</div>
   </div>`);
@@ -49,16 +52,55 @@ async function openTenantAdmin(){
       const result=await api('/api/tenancy/company-summary?companyId='+id);
       const numbers=result.totals;
       showModal('Operação consolidada',`<div class="form-stack">
-        <p class="muted">Somente dados operacionais da empresa selecionada. Sem consolidação fiscal ou financeira.</p>
+        <p class="muted">Somente unidades da empresa selecionada. Consolidação gerencial pelo livro financeiro canônico, sem substituir emissão fiscal ou contabilidade.</p>
         <div class="grid two-col">
           <div class="card"><strong>${numbers.customers}</strong><small> Clientes por unidade</small></div>
           <div class="card"><strong>${numbers.workOrders}</strong><small> Ordens de serviço</small></div>
           <div class="card"><strong>${numbers.openOrders}</strong><small> OS abertas</small></div>
           <div class="card"><strong>${numbers.parts}</strong><small> Cadastros de peças</small></div>
+          <div class="card"><strong>${money(numbers.finance.receivedCents)}</strong><small> Recebimentos</small></div>
+          <div class="card"><strong>${money(numbers.finance.expensesCents)}</strong><small> Despesas pagas</small></div>
+          <div class="card"><strong>${money(numbers.finance.pendingCents)}</strong><small> A receber</small></div>
+          <div class="card"><strong>${money(numbers.finance.resultCents)}</strong><small> Resultado caixa</small></div>
         </div>
-        ${result.units.map(unit=>'<div class="list-item"><div><strong>'+esc(unit.name)+'</strong><br><small>Clientes: '+unit.customers+' · OS: '+unit.workOrders+' · OS abertas: '+unit.openOrders+'</small></div></div>').join('')}
+        ${result.units.map(unit=>'<div class="list-item"><div><strong>'+esc(unit.name)+'</strong><br><small>Clientes: '+unit.customers+' · OS: '+unit.workOrders+' · Recebido: '+money(unit.finance.receivedCents)+' · Despesas: '+money(unit.finance.expensesCents)+'</small></div></div>').join('')}
       </div>`);
     });
+  };
+
+  const share=$('#tenantSharePart');
+  if(share)share.onclick=async()=>{
+    const choices=possibleCatalogSources.map(u=>'<option value="'+u.id+'">'+esc(u.companyName)+' / '+esc(u.name)+'</option>').join('');
+    showModal('Compartilhar catálogo entre filiais',`<form class="form-stack">
+      <p class="muted">Copia somente o cadastro da peça. Nenhum item de estoque, movimento ou saldo financeiro é transferido. Exige administrador nas duas unidades.</p>
+      <label>Unidade de origem<select name="sourceUnitId" id="shareSourceUnit">${choices}</select></label>
+      <label>Unidade de destino<select name="targetUnitId" id="shareTargetUnit" required></select></label>
+      <label>Peça cadastrada<select name="partId" id="shareCatalogPart" required></select></label>
+      <button type="submit" class="btn primary">Compartilhar cadastro</button>
+    </form>`,async fd=>{
+      const data=formObj(fd);
+      const result=await api('/api/tenancy/share-part',{method:'POST',body:{
+        sourceUnitId:Number(data.sourceUnitId),targetUnitId:Number(data.targetUnitId),partId:Number(data.partId)
+      }});
+      toast(result.created?'Cadastro compartilhado; estoque inicial zero':'Cadastro já compartilhado anteriormente');
+    });
+    const sourcePicker=$('#shareSourceUnit'),targetPicker=$('#shareTargetUnit'),partPicker=$('#shareCatalogPart');
+    const load=async()=>{
+      const source=managed.find(u=>String(u.id)===sourcePicker.value);
+      targetPicker.replaceChildren();partPicker.replaceChildren();
+      for(const unit of managed.filter(u=>u.companyId===source.companyId&&u.id!==source.id)){
+        const option=document.createElement('option');option.value=String(unit.id);
+        option.textContent=unit.name;targetPicker.append(option);
+      }
+      const result=await api('/api/tenancy/shareable-parts?unitId='+encodeURIComponent(sourcePicker.value));
+      for(const part of result.parts||[]){
+        const option=document.createElement('option');option.value=String(part.id);
+        option.textContent=part.sku+' — '+part.description;partPicker.append(option);
+      }
+      if(!partPicker.options.length)toast('Nenhuma peça ativa encontrada na unidade de origem');
+    };
+    sourcePicker.onchange=()=>void load().catch(error=>toast(error.message,true));
+    await load();
   };
   const edit=$('#editTenantMember');
   if(edit)edit.onclick=async()=>{
