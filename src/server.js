@@ -1,3 +1,4 @@
+import {startBillingReminderScheduler} from './platform/billing-reminder-scheduler.js';
 import { createServer } from 'node:http';
 import {publicErrorMessage} from './platform/public-errors.js';
 import { readFileSync, existsSync, statSync } from 'node:fs';
@@ -244,7 +245,7 @@ export function createAppServer({db=openDatabase(),storageDir=process.env.STORAG
     reversePayment:input=>reverseReceipt(db,input.workOrderId,input.receiptId,input),
     reminderSender:paymentOptions?.reminderSender??null
   });
-  return createServer(async(req,res)=>{
+  const httpServer=createServer(async(req,res)=>{
     const url=new URL(req.url||'/','http://localhost'); const route=router.match(req.method||'GET',url.pathname);
     hardenHttpResponse(res,req);
     try{
