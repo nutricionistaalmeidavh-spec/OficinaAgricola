@@ -263,9 +263,11 @@ async function displayBillingPlan(plan,workOrderId){
    <small>Vence em ${esc(i.due_date)} · ${esc(i.status)}</small></div>
    <div class="action-row">
     ${i.payment_url?`<a href="${esc(i.payment_url)}" rel="noopener noreferrer" target="_blank">Abrir cobrança</a>`:''}
-    ${i.status!=='PAID'&&plan.method==='MANUAL'?`<button class="btn sm" data-manual-billing="${i.id}">Confirmar recebido</button>`:''}
-    ${i.status!=='PAID'&&plan.method!=='MANUAL'?`<button class="btn sm" data-provider-billing="${i.id}" data-command="${i.provider_ref?'sync':'activate'}">${i.provider_ref?'Consultar':'Emitir cobrança'}</button>`:''}
-    ${i.status==='PAID'?`<button class="btn sm" data-settle-billing="${i.id}">Taxa/repasse</button>`:''}
+    ${i.status==='PENDING'&&plan.method==='MANUAL'?`<button class="btn sm" data-manual-billing="${i.id}">Confirmar recebido</button>`:''}
+    ${i.status==='PENDING'&&plan.method!=='MANUAL'?`<button class="btn sm" data-provider-billing="${i.id}" data-command="${i.provider_ref?'sync':'activate'}">${i.provider_ref?'Consultar':'Emitir cobrança'}</button>`:''}
+    ${i.status==='PAID'&&!i.refund_id?`<button class="btn sm" data-settle-billing="${i.id}">Taxa/repasse</button>`:''}
+     ${i.status==='PAID'&&plan.method!=='MANUAL'&&caps.externalRefunds?`<button class="btn sm" data-refund-billing="${i.id}" data-refund-id="${i.refund_id||''}">${i.refund_id?'Consultar estorno':'Solicitar estorno'}</button>`:''}
+     ${i.refund_status?`<small>Estorno: ${esc(i.refund_status)}</small>`:''}
    </div></div>`).join('')}</div>
   <button class="btn sm" id="billingBackOrder">Voltar à OS</button>
  </div>`);
@@ -286,7 +288,24 @@ async function displayBillingPlan(plan,workOrderId){
    toast(row.status==='PAID'?'Cobrança recebida e conciliada':'Cobrança ainda pendente');
   }catch(error){toast(error.message,true);btn.disabled=false}
  });
- $$('[data-settle-billing]').forEach(btn=>btn.onclick=async()=>{
+  $('[data-refund-billing]').forEach(btn=>btn.onclick=async()=>{
+   try{
+    if(btn.dataset.refundId){
+     const refund=await api('/api/billing/refunds/'+btn.dataset.refundId+'/sync',
+      {method:'POST',body:{}});
+     toast(refund.status==='APPLIED'?'Estorno confirmado e lançado no financeiro':
+      'Estorno externo: '+refund.status);
+    }else{
+     if(!confirm('Solicitar devolução REAL ao provedor? Confirme que não há extrato ou repasse conciliado.'))return;
+     const refund=await api('/api/billing/installments/'+btn.dataset.refundBilling+'/refund',
+      {method:'POST',body:{requestId:newCommandId()}});
+     toast('Estorno solicitado: '+refund.status+'. Consulte para confirmar.');
+    }
+    const next=await api('/api/billing/plans/'+plan.id);
+    await displayBillingPlan(next,workOrderId);
+   }catch(error){toast(error.message,true)}
+  });
+ $('[data-settle-billing]').forEach(btn=>btn.onclick=async()=>{
   const cents=prompt('Taxa da operadora (R$):','0.00');
   if(cents===null)return;
   if(!/^\d+(?:[.,]\d{1,2})?$/.test(cents.trim())){toast('Taxa inválida',true);return}
