@@ -1,3 +1,4 @@
+import {readPostgresSessionToken,hasPostgresCookieSession,assertPostgresSameOrigin,postgresBrowserCookie} from './postgres-session-transport.js';
 // PostgreSQL-only control plane for authenticated tenant administration.
 // The operational /api/* compatibility gateway remains disabled until P3/P4.
 const HEADERS={
@@ -24,16 +25,16 @@ async function parseJson(request){
  return value;
 }
 const authToken=request=>{
- const header=String(request.headers.get('authorization')??'');
- const match=/^Bearer ([A-Za-z0-9_-]{32,512})$/.exec(header);
- if(!match)fail('Sessão inválida',401);
- return match[1];
+ const token=readPostgresSessionToken(request);
+ if(!token)fail('Sessão inválida',401);
+ return token;
 };
 export function createPostgresRegistryControlHandler({registry,allowAdminBootstrap=false}={}){
  if(!registry||typeof registry.validateSession!=='function'||typeof registry.listUserUnits!=='function')
    throw Error('Controle PostgreSQL exige registry nativo');
  return async function handle(request,{remoteAddress='unknown'}={}){
   try{
+   assertPostgresSameOrigin(request);
    const url=new URL(request.url),path=url.pathname,method=request.method.toUpperCase();
    if(path==='/api/health'&&method==='GET')
      return json({ok:true,mode:'postgres-registry',operationalApiReady:false});
@@ -51,13 +52,21 @@ export function createPostgresRegistryControlHandler({registry,allowAdminBootstr
        await registry.logout(login.token);
        fail('Permissão: usuário sem vínculo com oficina',403);
      }
+     if(String(request.headers.get('x-session-transport')??'').toLowerCase()==='cookie'){
+       const response=json({user:login.user,expiresAt:login.expiresAt});
+       response.headers.set('set-cookie',postgresBrowserCookie(request,login.token));
+       return response;
+     }
      return json(login);
    }
    const token=authToken(request);
    const user=await registry.validateSession(token);
    if(path==='/api/auth/logout'&&method==='POST'){
      await registry.logout(token);
-     return json({ok:true});
+     const response=json({ok:true});
+     if(hasPostgresCookieSession(request))
+       response.headers.set('set-cookie',postgresBrowserCookie(request,null,{clear:true}));
+     return response;
    }
    const units=async()=>{
      const all=await registry.listUserUnits(user.id);
