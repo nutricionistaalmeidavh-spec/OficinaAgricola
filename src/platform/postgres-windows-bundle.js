@@ -32,7 +32,7 @@ export function verifyPostgresWindowsBundle({
      throw Error('Manifesto PostgreSQL incompleto');
    for(const name of names){
      if(typeof name!=='string'||
-        !/^(?:bin|share|lib)\/[A-Za-z0-9._/-]+$/.test(name)||
+        !/^(?:bin|share|lib)\/[A-Za-z0-9._@/-]+$/.test(name)||
         name.includes('//')||name.split('/').includes('..'))
        throw Error('Caminho suspeito no bundle PostgreSQL');
      const file=resolve(base,...name.split('/'));
