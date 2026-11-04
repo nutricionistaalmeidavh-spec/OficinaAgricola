@@ -6,6 +6,12 @@ import { createMultiTenantServer } from './platform/multi-tenant-server.js';
 import { resolveServerConfig, listLanUrls } from './platform/network.js';
 import { startMultiTenantBackupSchedule } from './platform/tenant-backup.js';
 
+// Explicit backend selection. Never pretend that D1/R2/PostgreSQL are active
+// while writing user data to an unrelated SQLite database.
+const databaseEngine=String(process.env.OFICINA_DATABASE_ENGINE||'sqlite').toLowerCase();
+const objectsEngine=String(process.env.OFICINA_OBJECT_STORAGE||'disk').toLowerCase();
+if(databaseEngine!=='sqlite'||objectsEngine!=='disk')
+  throw new Error('Motor solicitado não disponível neste runtime: use sqlite + disk ou implemente o adaptador antes de iniciar');
 const legacyDatabasePath=resolveDatabasePath();
 const legacyStorageDir=resolveStoragePath({databasePath:legacyDatabasePath});
 const registryPath=resolve(process.env.TENANCY_REGISTRY_PATH || join(dirname(legacyDatabasePath),'oficina-registry.sqlite'));
