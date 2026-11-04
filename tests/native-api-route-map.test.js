@@ -9,7 +9,7 @@ test('native bridge uses only explicitly supported paths, never a generic /api t
  assert.equal(mapLegacyNativeRoute('GET','/api/inventory/low-stock')?.path,'/v1/parts/low-stock');
  for(const route of ['/api/diagnostics/hardware','/api/public/approval/abcdef','/api/unsupported-page',
   '/api/commands/status','/api/work-orders/3/documents/orcamento/pdf',
-  '/api/customers/3/../expenses','/api/fiscal/1/xml'])
+  '/api/customers/3/../expenses','/api/fiscal/1/pdf'])
   assert.equal(mapLegacyNativeRoute('GET',route),null,route);
  assert.equal(mapLegacyNativeRoute('DELETE','/api/customers'),null);
 });
