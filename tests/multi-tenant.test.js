@@ -65,6 +65,14 @@ test('HTTP isolation: company and unit records, member roles and revoked access'
   const bAgain=await request('GET','/api/customers',undefined,second);
   assert.deepEqual(aAgain.data.map(x=>x.name),['Cliente somente matriz']);
   assert.deepEqual(bAgain.data.map(x=>x.name),['Cliente da empresa B']);
+  const vehicle=await request('POST','/api/machines',{customerId:aAgain.data[0].id,type:'AUTOMOVEL',brand:'Volkswagen'},1);
+  assert.equal(vehicle.status,200,JSON.stringify(vehicle.data));
+  const order=await request('POST','/api/work-orders',{customerId:aAgain.data[0].id,machineId:vehicle.data.id,problemReported:'Revisão'},1);
+  assert.equal(order.status,200,JSON.stringify(order.data));
+  assert.equal(order.data.unit_id,1,'an OS is assigned to its local unit at creation');
+  const foreignOrders=await request('GET','/api/work-orders',undefined,second);
+  assert.equal(foreignOrders.status,200);
+  assert.deepEqual(foreignOrders.data,[],'OS records never cross units');
   const sku=await request('POST','/api/parts',{sku:'PART-A-ONLY',description:'Componente exclusivo'},1);
   assert.equal(sku.status,200,JSON.stringify(sku.data));
   assert.equal((await request('POST','/api/fiscal/1/submit',{},second)).status,409,'fiscal provider must be isolated per company');
