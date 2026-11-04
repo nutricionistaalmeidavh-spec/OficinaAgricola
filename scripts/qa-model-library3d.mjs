@@ -37,6 +37,7 @@ try{
   context=await browser.newContext({viewport});
   page=await context.newPage();
   page.on('pageerror',e=>browserErrors.push(String(e.message||e)));
+  page.on('console',m=>{if(m.type()==='error')browserErrors.push('console: '+m.text())});
   page.on('response',r=>{if(r.status()>=400&&r.url().includes('/vendor/'))browserErrors.push('HTTP '+r.status()+' '+r.url())});
   await page.goto(base,{waitUntil:'domcontentloaded'});
   await page.locator('#loginForm input[name="username"]').fill('admin');
@@ -61,7 +62,13 @@ try{
     await page.waitForFunction(()=>document.querySelector('#ml-view-start')?.disabled===false,{timeout:120000});
   }
   await page.locator('#ml-view-start').click();
-  await page.locator('#ml-viewer-stage canvas').waitFor({state:'visible',timeout:45000});
+  await page.waitForFunction(()=>{
+    const error=document.querySelector('#ml-viewer-message')?.textContent||'';
+    return Boolean(document.querySelector('#ml-viewer-stage canvas'))||error.startsWith('Falha na visualização:');
+  },{timeout:45000});
+  const viewerError=await page.locator('#ml-viewer-message').textContent();
+  if(viewerError?.startsWith('Falha na visualização:'))throw new Error('WEBGL_VIEWER: '+viewerError);
+  await page.locator('#ml-viewer-stage canvas').waitFor({state:'visible',timeout:10000});
   await page.locator('#ml-viewer-message').filter({hasText:'Arraste para girar'}).waitFor({state:'visible',timeout:45000});
   if(browserErrors.length)throw new Error('Erros do visualizador: '+browserErrors.join(' | ').slice(0,1600));
   const canvas=page.locator('#ml-viewer-stage canvas');
