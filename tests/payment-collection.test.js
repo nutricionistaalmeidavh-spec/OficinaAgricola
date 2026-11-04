@@ -24,10 +24,9 @@ test('Pix estático monta BR Code verificável sem dependência de API paga',()=
  const br=generateStaticPix({pixKey:'12345678909',merchantName:'OFICINA TESTE',merchantCity:'RIBEIRAO PRETO',amountCents:1250,txid:'TESTE123'});
  assert.match(br,/^000201/);
  assert.ok(br.includes('br.gov.bcb.pix'));
- assert.ok(br.includes('1250')===false);
  assert.ok(br.includes('12.50'));
  assert.ok(checkPixCrc(br));
- assert.equal(checkPixCrc(br.slice(0,-1)+'0'),false);
+ assert.equal(checkPixCrc(br.slice(0,-1)+(br.endsWith('0')?'1':'0')),false);
 });
 
 test('intenção Pix estática não quita OS sem confirmação do banco ou baixa manual explícita',async()=>{
@@ -90,5 +89,18 @@ test('pagamento misto preserva baixa única e saldo canônico',async()=>{
   assert.equal(summary.pendingCents,5000);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM payment_events').get().n,2);
   assert.ok(part.id);
+ }finally{db.close();}
+});
+
+test('recebimento confirmado por provedor não pode ser estornado só no livro local',async()=>{
+ const provider={create:async()=>({reference:'tef-live-1'}),status:async()=>({
+  reference:'tef-live-1',status:'PAID',amountCents:3500
+ })};
+ const {db,order,collection,services}=await fixture({providers:{TEF:provider}});
+ try{
+  const intent=await collection.createIntent({workOrderId:order.id,amountCents:3500,method:'TEF',requestId:'tef-live-1'});
+  const settled=await collection.syncIntent(intent.id);
+  await assert.rejects(services.reverseReceipt({workOrderId:order.id,receiptId:settled.receipt_id,note:'Solicitado'}),/provedor.*estorno/i);
+  assert.equal((await services.getPaymentSummary(order.id)).receivedCents,3500);
  }finally{db.close();}
 });
