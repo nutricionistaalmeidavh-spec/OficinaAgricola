@@ -305,7 +305,7 @@ async function displayBillingPlan(plan,workOrderId){
     await displayBillingPlan(next,workOrderId);
    }catch(error){toast(error.message,true)}
   });
- $('[data-settle-billing]').forEach(btn=>btn.onclick=async()=>{
+  $$('[data-settle-billing]').forEach(btn=>btn.onclick=async()=>{
   const cents=prompt('Taxa da operadora (R$):','0.00');
   if(cents===null)return;
   if(!/^\d+(?:[.,]\d{1,2})?$/.test(cents.trim())){toast('Taxa inválida',true);return}
