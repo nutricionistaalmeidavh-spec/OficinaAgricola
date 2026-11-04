@@ -36,6 +36,7 @@ jobs:
           SRC=/tmp/artisys-3d-vendor/node_modules
           mkdir -p public/vendor/three/addons/loaders public/vendor/three/addons/controls public/vendor/three/addons/utils public/vendor/licenses
           cp "$SRC/three/build/three.module.js" public/vendor/three/three.module.js
+          cp "$SRC/three/build/three.core.js" public/vendor/three/three.core.js
           cp "$SRC/three/examples/jsm/loaders/GLTFLoader.js" public/vendor/three/addons/loaders/GLTFLoader.js
           cp "$SRC/three/examples/jsm/controls/OrbitControls.js" public/vendor/three/addons/controls/OrbitControls.js
           cp "$SRC/three/examples/jsm/utils/BufferGeometryUtils.js" public/vendor/three/addons/utils/BufferGeometryUtils.js
@@ -57,6 +58,7 @@ jobs:
               path.write_text(s,encoding="utf-8")
               print(path, "imports reescritos",n)
           PY
+          node --check public/vendor/three/three.core.js
           node --check public/vendor/three/three.module.js
           node --check public/vendor/three/addons/loaders/GLTFLoader.js
           node --check public/vendor/three/addons/controls/OrbitControls.js
@@ -85,6 +87,7 @@ jobs:
           PY
       - name: Validar recursos locais antes de registrar
         run: |
+          test -s public/vendor/three/three.core.js
           test -s public/vendor/meshopt_decoder.mjs
           test -s public/vendor/three/addons/loaders/GLTFLoader.js
           test -s public/vendor/three/addons/controls/OrbitControls.js
