@@ -148,7 +148,37 @@ try {
 
   $dbFile = Join-Path $env:LOCALAPPDATA 'ArtiSys\Oficina\data\artisys-oficina.sqlite'
   if (-not (Test-Path $dbFile)) { throw 'Banco exclusivo do aplicativo não foi criado no perfil Windows' }
-  Write-Host 'PASS: NSIS instalou, bootstrap/login funcionou, e o EventBus desktop projetou evento idempotente' 
+  Write-Host 'PASS: NSIS instalou, bootstrap/login funcionou, e o EventBus desktop projetou evento idempotente'
+  # Atualização in-place: reiniciar instalador em cima de perfil já utilizado.
+  # Mesmo pacote verifica retenção; matriz entre versões distintas é gate comercial separado.
+  Stop-Process -Id $appProcess.Id -Force
+  Wait-Process -Id $appProcess.Id -ErrorAction SilentlyContinue
+  $appProcess = $null
+  $reinstall = Start-Process -FilePath $installer.FullName -ArgumentList @('/S',"/D=$installDir") -Wait -PassThru
+  if ($reinstall.ExitCode -ne 0) { throw "Falha na reinstalação: $($reinstall.ExitCode)" }
+  $appProcess = Start-Process -FilePath $exe.FullName -PassThru
+  $ready = $false
+  for ($attempt=0; $attempt -lt 80; $attempt++) {
+    Start-Sleep -Milliseconds 500
+    if ($appProcess.HasExited) { throw 'Aplicativo não iniciou após reinstalação' }
+    try { if ((Invoke-RestMethod -Uri "$hostUrl/api/health" -TimeoutSec 2).ok) { $ready=$true; break } } catch {}
+  }
+  if (-not $ready) { throw 'Servidor indisponível após reinstalação' }
+  $afterSetup = Invoke-RestMethod -Uri "$hostUrl/api/setup/status"
+  if ($afterSetup.required -ne $false) { throw 'Reinstalação apagou o administrador' }
+  $afterLogin = Invoke-RestMethod -Uri "$hostUrl/api/auth/login" -Method Post -ContentType 'application/json' -Body '{"username":"gestorqa","password":"SenhaDeTesteQA2026!Local"}'
+  if ($afterLogin.user.role -ne 'ADMIN') { throw 'Reinstalação invalidou as credenciais existentes' }
+  $afterHeaders = @{ Authorization = "Bearer $($afterLogin.token)" }
+  $storedCustomer = Invoke-RestMethod -Uri "$hostUrl/api/customers/$($customer.id)" -Headers $afterHeaders
+  if ($storedCustomer.id -ne $customer.id -or $storedCustomer.name -ne $customer.name) {
+    throw 'Reinstalação perdeu o registro canônico de cliente'
+  }
+  $afterFiscal = Invoke-RestMethod -Uri "$hostUrl/api/fiscal/settings" -Headers $afterHeaders
+  if ($afterFiscal.enabled -eq $true -or $afterFiscal.enabled -eq 1) {
+    throw 'Reinstalação habilitou o fiscal indevidamente'
+  }
+  Write-Host 'PASS: Reinstalação preservou cadastro e autenticação; fiscal permaneceu desabilitado'
+
 } finally {
   if ($appProcess -and -not $appProcess.HasExited) { Stop-Process -Id $appProcess.Id -Force -ErrorAction SilentlyContinue }
 }
