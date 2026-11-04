@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {openDatabase,migrate} from '../src/db.js';
+import {spawnSync} from 'node:child_process';
+import {mkdtempSync,rmSync,statSync} from 'node:fs';
+import {join} from 'node:path';
+import {tmpdir} from 'node:os';
 import {migrateAssistencia} from '../src/assistencia-schema.js';
 import {createCommonDataAdapter} from '../src/platform/common-data-adapter.js';
 import {createAsyncWorkshopServices} from '../src/platform/async-workshop-services.js';
@@ -65,4 +69,25 @@ test('migration manifest refuses silent attachment loss when source still refere
   assert.equal(manifest.readyForRemote,false);
   assert.equal(manifest.unresolvedDiskAttachments,1);
  }finally{db.close();}
+});
+
+test('read-only operator CLI produces sanitized digest without altering local SQLite file',()=>{
+ const root=mkdtempSync(join(tmpdir(),'oficina-migration-manifest-'));
+ const path=join(root,'oficina.sqlite'),db=openDatabase(path);
+ try{
+  migrate(db);migrateAssistencia(db);db.close();
+  const prior=statSync(path).size;
+  const cmd=spawnSync(process.execPath,[
+   'scripts/inspect-tenant-migration.mjs','--file',path
+  ],{encoding:'utf8',timeout:15000});
+  assert.equal(cmd.status,0,cmd.stderr);
+  const snapshot=JSON.parse(cmd.stdout);
+  assert.equal(snapshot.format,'artisys-workshop-canonical-v1');
+  assert.ok(snapshot.digest.length===64);
+  assert.equal(snapshot.readyForRemote,true);
+  assert.equal(statSync(path).size,prior,'manifest scan must not write WAL or expand data file');
+  const refused=spawnSync(process.execPath,['scripts/inspect-tenant-migration.mjs'],
+   {encoding:'utf8'});
+  assert.notEqual(refused.status,0,'no implicit default customer path');
+ }finally{try{db.close();}catch{}rmSync(root,{recursive:true,force:true});}
 });
