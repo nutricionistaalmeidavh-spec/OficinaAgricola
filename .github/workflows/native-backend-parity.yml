@@ -49,14 +49,6 @@ jobs:
         run: npm ci
       - name: Audit SQLite cutover blockers (read-only P0)
         run: npm run db:postgres:audit
-      - name: Install optional open-source PostgreSQL driver for CI only
-        run: npm install --no-save --no-package-lock --ignore-scripts pg@8
-      - name: Temporary lockfile generation for OSS pg runtime
-        run: |
-          npm install --package-lock-only --save --ignore-scripts --no-audit --no-fund pg@8
-          echo 'PG_RUNTIME_LOCK_BEGIN'
-          cat package-lock.json
-          echo 'PG_RUNTIME_LOCK_END'
       - name: Native PostgreSQL transactional regression
         env:
           CI: "true"
