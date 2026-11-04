@@ -103,7 +103,7 @@
         installBtn.textContent=ready?'Modelo instalado':'Baixar '+formatMB(target.variants[variant]?.bytes);
       }
       if(colorInput)colorInput.disabled=!ready||busy;
-      if(!busy)message.textContent=ready?'Modelo disponível offline neste servidor':'Modelo ainda não instalado neste servidor';
+      if(!busy&&!stageElement.querySelector('canvas'))message.textContent=ready?'Modelo disponível offline neste servidor':'Modelo ainda não instalado neste servidor';
     }
     async function preview(){
       if(!installed[variant]||busy)return;
