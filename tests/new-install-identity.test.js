@@ -32,7 +32,9 @@ test('instalador novo tem identidade própria, nome e área de dados isolados', 
   assert.match(builder,/shortcutName: ArtiSys Oficina/);
   assert.doesNotMatch(builder,/com\.artisys\.assistenciatecnica|OficinaAgro-Setup/);
   assert.match(electron,/join\(local, 'ArtiSys', 'Oficina'\)/);
-  assert.match(electron,/join\(root, 'data', 'artisys-oficina\.sqlite'\)/);
+  assert.match(electron,/createPortablePostgresController/);
+  assert.match(electron,/const url = await startPostgresDesktop\(\);/);
+  assert.doesNotMatch(electron,/\.sqlite|startLocalServer/);
   assert.doesNotMatch(electron,/OficinaAgro|AssistenciaTecnica|assistencia-tecnica\.sqlite/);
   assert.equal(pkg.name,'artisys-oficina');
 });
