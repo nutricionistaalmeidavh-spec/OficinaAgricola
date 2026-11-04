@@ -163,14 +163,20 @@ export function createAssistenciaServer({
   storageDir = process.env.STORAGE_DIR || './storage/assistencia-tecnica/uploads',
   eventRuntime = null,
   tls = null,
+  fiscalProviderOverride = undefined,
 } = {}) {
   migrate(db);
   migrateAssistencia(db);
-  const acbrFiscalProvider=createAcbrLibFiscalProvider();
-  const localFiscalProvider=createLocalFiscalProvider();
-  if(acbrFiscalProvider&&localFiscalProvider)
-    throw new Error('Configure apenas um motor fiscal local: ACBrLib ou sidecar');
-  const fiscalProvider=acbrFiscalProvider||localFiscalProvider;
+  // Explicit tenant override, including null (= disabled), never falls back
+  // to global environment credentials used by the legacy single-company app.
+  let fiscalProvider=fiscalProviderOverride;
+  if(fiscalProviderOverride===undefined){
+    const acbrFiscalProvider=createAcbrLibFiscalProvider();
+    const localFiscalProvider=createLocalFiscalProvider();
+    if(acbrFiscalProvider&&localFiscalProvider)
+      throw new Error('Configure apenas um motor fiscal local: ACBrLib ou sidecar');
+    fiscalProvider=acbrFiscalProvider||localFiscalProvider;
+  }
   const baseServer = createAppServer({ db, storageDir, eventRuntime, fiscalProvider });
 
   const handler=async (req,res) => {
