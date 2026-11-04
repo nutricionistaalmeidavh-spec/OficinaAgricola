@@ -69,6 +69,22 @@ export function createPostgresUnifiedGateway({
    const u=new URL(request.url),path=u.pathname,method=request.method.toUpperCase();
    if(isControl(path))return control(request,options);
    if(!path.startsWith('/api/'))return json({error:'Rota não encontrada'},404);
+   const approval=path.match(/^\/api\/public\/approval\/([a-f0-9]{64})$/);
+   if(approval){
+     if(!['GET','POST'].includes(method))fail('Método inválido',405);
+     const requestedUnit=u.searchParams.get('unit');
+     if(!requestedUnit||!/^[1-9][0-9]*$/.test(requestedUnit)||
+        !validId(requestedUnit))fail('Unidade do link inválida',400);
+     const publicUnit=await registry.getPublicUnit(Number(requestedUnit));
+     const backend=await tenantHandlerForUnit(publicUnit);
+     const handler=typeof backend==='function'?backend:backend?.handler;
+     if(typeof handler!=='function')fail('Unidade indisponível',503);
+     const data=method==='POST'?await readPayload(request,16384):{};
+     const answer=await dispatchNative(handler,'/v1/public/approval/'+approval[1],{
+       method,serviceToken,body:data
+     });
+     return safeNativeResponse(answer);
+   }
    // Public approval links, transfers and command reconciliation must be
    // migrated explicitly. None may fall back to a legacy SQLite service.
    const token=readPostgresSessionToken(request);
@@ -128,6 +144,12 @@ export function createPostgresUnifiedGateway({
    const native=await dispatchNative(handler,mapping.path,{
      method,session:personalToken,search:u.search,body:input,serviceToken
    });
+   if(mapping.path.endsWith('/quote/approval-link')&&native.ok){
+     const result=await native.json();
+     if(!/^\/approval\.html\?token=[a-f0-9]{64}$/.test(result?.path??''))
+       fail('Link de aprovação retornado inválido',502);
+     return json({...result,path:result.path+'&unit='+unit.id},200);
+   }
    return safeNativeResponse(native);
   }catch(error){
    const status=Number.isInteger(error?.status)&&error.status>=400&&error.status<600
