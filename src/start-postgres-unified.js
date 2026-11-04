@@ -1,3 +1,4 @@
+import {requestPayloadLimit} from './platform/billing-http-limits.js';
 import {fileURLToPath} from 'node:url';
 // Self-hosted, opt-in unified PostgreSQL gateway for P3/P4.
 // It replaces SQLite for this process only; main/legacy entry points stay
@@ -110,8 +111,7 @@ try{
     return respond(res,405,{},'Method not allowed');
    return staticAsset(url,res);
   }
-  const max= /^\/api\/work-orders\/[1-9][0-9]*\/attachments$/.test(url.pathname)&&
-    req.method==='POST'?7*1024*1024:1048576;
+  const max=requestPayloadLimit(req.method,url.pathname);
   const chunks=[];
   let bytes=0;
   try{
