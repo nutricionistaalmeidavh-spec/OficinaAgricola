@@ -251,6 +251,11 @@ test('P4 confirma estorno externo pelo provedor antes de estornar o ledger uma √
   assert.equal(refund.status,'PENDING');
   assert.equal((await billing.requestExternalRefund(paid.id,{requestId:'refund-request-1'})).id,refund.id);
   assert.equal(requests,1);
+  await assert.rejects(billing.recordSettlement({installmentId:paid.id,feeCents:100,
+   settledAt:'2026-11-07',requestId:'refund-settlement-block'}),/estorno externo/i);
+  const bank=await billing.importStatement({bankAccount:'conta',externalId:'refund-bank',
+   bookedAt:'2026-11-07',amountCents:10001,description:'Cobran√ßa'});
+  await assert.rejects(billing.matchStatement(bank.id,paid.receipt_id),/estorno externo/i);
   assert.equal((await billing.syncExternalRefund(refund.id)).status,'PENDING');
   assert.equal((await core.getPaymentSummary(order.id)).receivedCents,10001);
   refunded=true;
