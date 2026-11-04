@@ -6,6 +6,17 @@ const FIN=Object.freeze(['ADMIN','FINANCEIRO']);
 const ADMIN=Object.freeze(['ADMIN']);
 const ROLES={ALL,OFFICE,TECH,FIN,ADMIN};
 const ROUTES=[
+ 'GET /api/dashboard /v1/dashboard ALL',
+ 'GET /api/reports /v1/reports/operations ALL',
+ 'GET /api/company /v1/company ALL',
+ 'PATCH /api/company /v1/company ADMIN',
+ 'GET /api/customers/page /v1/customers/page ALL',
+ 'GET /api/customers/:id /v1/customers/:id ALL',
+ 'GET /api/machines/page /v1/machines/page ALL',
+ 'GET /api/machines/:id /v1/machines/:id ALL',
+ 'GET /api/machines/:id/history /v1/machines/:id/history ALL',
+ 'GET /api/cash/current /v1/cash/current FIN',
+ 'GET /api/cash/sessions /v1/cash/sessions FIN',
  'GET /api/customers /v1/customers ALL',
  'POST /api/customers /v1/customers OFFICE',
  'PATCH /api/customers/:id /v1/customers/:id OFFICE',
