@@ -228,8 +228,8 @@ export function createAppServer({db=openDatabase(),storageDir=process.env.STORAG
       assertSameOrigin(req);
       // Instalação dos GLBs é I/O externo e NÃO entra em transação SQLite.
       // Repositório e commit são fixos no manifesto com SHA-256; sem CDN em execução.
-      const modelInstall=req.method==='POST'?url.pathname.match(/^\/api\/models3d\/install\/([a-z0-9-]+)\/(original|restored)$/):null;
-      const modelImport=req.method==='POST'?url.pathname.match(/^\/api\/models3d\/import\/([a-z0-9-]+)\/(original|restored)$/):null;
+      const modelInstall=req.method==='POST'?url.pathname.match(/^\/api\/models3d\/install\/([a-z0-9-]+)\/(original|restored|repaired)$/):null;
+      const modelImport=req.method==='POST'?url.pathname.match(/^\/api\/models3d\/import\/([a-z0-9-]+)\/(original|restored|repaired)$/):null;
       if(modelInstall||modelImport){
         const user=validateSession(db,tokenFrom(req));roleGuard(user,['ADMIN']);
         const id=(modelInstall||modelImport)[1],variant=(modelInstall||modelImport)[2];
