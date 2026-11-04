@@ -434,6 +434,36 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
      return json(await services.createPart(await dataFrom(request)),201);
    if(path==='/v1/stock'&&method==='POST')
      return json(await services.postStockMovement(await dataFrom(request)),201);
+   if(path==='/v1/billing/capabilities'&&method==='GET')return json(services.capabilities());
+   if(path==='/v1/billing/plans'&&method==='POST')
+     return json(await services.createPlan(await dataFrom(request,16384)),201);
+   const planForOrder=path.match(/^\/v1\/billing\/orders\/([1-9]\d*)\/plan$/);
+   if(planForOrder&&method==='GET')
+     return json(await services.getPlanForOrder(Number(planForOrder[1])));
+   const billingPlan=path.match(/^\/v1\/billing\/plans\/([a-f0-9]{32})$/);
+   if(billingPlan&&method==='GET')return json(await services.getPlan(billingPlan[1]));
+   const billingInstallment=path.match(/^\/v1\/billing\/installments\/([a-f0-9]{32})\/(activate|sync|manual)$/);
+   if(billingInstallment&&method==='POST'){
+     const [,id,action]=billingInstallment;
+     if(action==='activate')return json(await services.activateInstallment(id));
+     if(action==='sync')return json(await services.syncInstallment(id));
+     return json(await services.confirmManual(id,await dataFrom(request,16384)));
+   }
+   if(path==='/v1/billing/settlements'&&method==='POST')
+     return json(await services.recordSettlement(await dataFrom(request,16384)),201);
+   if(path==='/v1/billing/report'&&method==='GET')
+     return json(await services.financeReport({asOf:u.searchParams.get('asOf')||undefined}));
+   if(path==='/v1/billing/statements'&&method==='GET')
+     return json(await services.listStatements({limit:u.searchParams.get('limit')||100}));
+   if(path==='/v1/billing/statements'&&method==='POST')
+     return json(await services.importStatement(await dataFrom(request,16384)),201);
+   const billingMatch=path.match(/^\/v1\/billing\/statements\/([a-f0-9]{32})\/match$/);
+   if(billingMatch&&method==='POST'){
+     const payload=await dataFrom(request,16384);
+     return json(await services.matchStatement(billingMatch[1],payload.receiptId));
+   }
+   if(path==='/v1/billing/reminders/prepare'&&method==='POST')
+     return json(await services.prepareReminders(await dataFrom(request,16384)));
    if(path==='/v1/payment-intents/capabilities'&&method==='GET')
      return json(services.getCapabilities());
    if(path==='/v1/payment-intents'&&method==='POST')
