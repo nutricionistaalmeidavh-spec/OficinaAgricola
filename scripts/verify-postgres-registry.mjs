@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {randomBytes,createHash} from 'node:crypto';
 import {createCommonDataAdapter} from '../src/platform/common-data-adapter.js';
 import {createPostgresTenantRegistry} from '../src/platform/async-postgres-registry.js';
+import {createPostgresRegistryControlHandler} from '../src/platform/postgres-registry-control.js';
 
 const url=process.env.POSTGRES_TEST_URL;
 if(!url)throw Error('POSTGRES_TEST_URL é obrigatório neste gate; nunca simular integração PostgreSQL');
@@ -60,6 +61,24 @@ try{
    const records=await registry.listAudit(tech.id,company.id);
    assert.ok(records.some(x=>x.action==='MEMBERSHIP_CHANGED'));
    await assert.rejects(registry.createUnit(tech.id,{companyId:1,code:'FRAUDE',name:'Outro Tenant'}),/Permissão/i);
+ });
+ await test('API HTTP de controle valida sessão e nunca desvia operação para SQLite',async()=>{
+   const http=createPostgresRegistryControlHandler({registry});
+   const login=await http(new Request('http://127.0.0.1/api/auth/login',{
+     method:'POST',headers:{'content-type':'application/json'},
+     body:JSON.stringify({username:'adminprimario',password:adminCredentials.password})}));
+   assert.equal(login.status,200);
+   const identity=await login.json();
+   const authorization='Bearer '+identity.token;
+   const context=await http(new Request('http://127.0.0.1/api/tenancy/context',{
+     headers:{authorization}}));
+   assert.equal(context.status,200);
+   assert.equal((await context.json()).platformAdmin,true);
+   assert.equal((await http(new Request('http://127.0.0.1/api/tenancy/context'))).status,401);
+   const missing=await http(new Request('http://127.0.0.1/api/work-orders',{
+     headers:{authorization}}));
+   assert.equal(missing.status,501);
+   await registry.logout(identity.token);
  });
  await test('registry não pode iniciar sobre um banco operacional por engano',async()=>{
    await pool.query('CREATE TABLE async_tenant_identity(id INTEGER PRIMARY KEY)');
