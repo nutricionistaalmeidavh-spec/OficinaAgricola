@@ -61,8 +61,14 @@ export function reverseReceipt(db,workOrderId,receiptId,{note='',createdBy=null}
    const row=db.prepare('SELECT * FROM receipts WHERE id=? AND work_order_id=?').get(receiptId,workOrderId);
    if(!row)throw new Error('Recebimento não encontrado');
    if(row.reversed_at)throw new Error('Recebimento já estornado');
-   if(db.prepare("SELECT id FROM billing_installments WHERE receipt_id=? AND status='PAID'").get(receiptId))
+   const billingInstallment=db.prepare(`SELECT i.id,p.method FROM billing_installments i
+     JOIN billing_plans p ON p.id=i.plan_id WHERE i.receipt_id=? AND i.status='PAID'`).get(receiptId);
+   if(billingInstallment?.method!=='MANUAL'&&billingInstallment)
      throw new Error('Cobrança externa exige confirmação de estorno externo antes da baixa financeira');
+   if(db.prepare('SELECT id FROM billing_bank_entries WHERE receipt_id=?').get(receiptId))
+     throw new Error('Extrato conciliado exige reconciliação antes do estorno');
+   if(billingInstallment&&db.prepare('SELECT id FROM billing_settlements WHERE installment_id=?').get(billingInstallment.id))
+     throw new Error('Repasse conciliado impede estorno da parcela até reconciliação');
    if(db.prepare("SELECT id FROM payment_intents WHERE receipt_id=? AND status='PAID'").get(receiptId))
      throw new Error('Cobrança do provedor exige confirmação de estorno externo antes da baixa financeira');
    const cash=activeCashForMethod(db,row.method);
@@ -71,6 +77,10 @@ export function reverseReceipt(db,workOrderId,receiptId,{note='',createdBy=null}
    postPaymentEvent(db,{sourceType:'OS_RECEIPT',sourceId:receiptId,eventType:'REFUNDED',
      amountCents:row.amount_cents,method:row.method,cashSessionId:cash?.id||null,
      createdBy,note:`Estorno recebimento OS #${workOrderId}`,createdAt:t});
+   if(billingInstallment?.method==='MANUAL')
+     db.prepare(`UPDATE billing_installments SET status='PENDING',receipt_id=NULL,
+       attempt_no=attempt_no+1,updated_at=? WHERE id=? AND status='PAID'`)
+       .run(t,billingInstallment.id);
    return {...row,reversed_at:t,reversal_note:text(note)};
  });
 }
