@@ -42,8 +42,31 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
      return json(await migrate());
    if(path==='/v1/customers'&&method==='POST')
      return json(await services.createCustomer(await dataFrom(request)),201);
+   if(path==='/v1/customers'&&method==='GET')
+     return json(await services.listCustomers({
+       search:u.searchParams.get('search')||'',
+       includeInactive:u.searchParams.get('includeInactive')==='1',
+       limit:u.searchParams.get('limit')||200,
+       offset:u.searchParams.get('offset')||0
+     }));
+   const customer=path.match(/^\/v1\/customers\/([1-9]\d*)$/);
+   if(customer&&method==='PATCH')
+     return json(await services.updateCustomer(Number(customer[1]),await dataFrom(request)));
    if(path==='/v1/machines'&&method==='POST')
      return json(await services.createMachine(await dataFrom(request)),201);
+   if(path==='/v1/machines'&&method==='GET')
+     return json(await services.listMachines({
+       customerId:u.searchParams.get('customerId')||null,
+       search:u.searchParams.get('search')||'',
+       includeInactive:u.searchParams.get('includeInactive')==='1'
+     }));
+   const machine=path.match(/^\/v1\/machines\/([1-9]\d*)$/);
+   if(machine&&method==='PATCH')
+     return json(await services.updateMachine(Number(machine[1]),await dataFrom(request)));
+   if(path==='/v1/technicians'&&method==='GET')
+     return json(await services.listTechnicians({includeInactive:true}));
+   if(path==='/v1/technicians'&&method==='POST')
+     return json(await services.createTechnician(await dataFrom(request)),201);
    if(path==='/v1/orders'&&method==='POST')
      return json(await services.createWorkOrder(await dataFrom(request)),201);
    const order=path.match(/^\/v1\/orders\/([1-9]\d*)$/);
