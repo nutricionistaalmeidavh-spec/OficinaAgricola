@@ -8,6 +8,7 @@ import {createAsyncWorkshopFinance} from './async-workshop-finance.js';
 import {createAsyncWorkshopOrders} from './async-workshop-orders.js';
 import {createAsyncWorkshopInventory} from './async-workshop-inventory.js';
 import {createAsyncWorkshopAutomotive} from './async-workshop-automotive.js';
+import {createAsyncWorkshopCrm} from './async-workshop-crm.js';
 
 // Async canonical service layer for PostgreSQL and D1. Each command is
 // explicitly transactional on its backend; never delegate to legacy SQLite.
@@ -467,6 +468,7 @@ export function createAsyncWorkshopServices(port,{fiscalProvider=null}={}){
    ...createAsyncWorkshopFinance(port),
    ...createAsyncWorkshopOrders(port,{createWorkOrder,transitionWorkOrder,getWorkOrder}),
    ...createAsyncWorkshopInventory(port),
-   ...createAsyncWorkshopAutomotive(port)
+   ...createAsyncWorkshopAutomotive(port),
+   ...createAsyncWorkshopCrm(port)
  });
 }
