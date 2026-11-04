@@ -11,6 +11,6 @@ test('OS separa recebimento manual da cobrança pendente Pix/TEF e expõe copia 
  assert.match(ui,/pix_payload/);
  assert.match(ui,/PIX_STATIC/);
  assert.match(ui,/syncCollection/);
- assert.match(ui,/PENDING/);
+ assert.match(ui,/não dá baixa/);
  assert.match(ui,/pagamento manual/i);
 });
