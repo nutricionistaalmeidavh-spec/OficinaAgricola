@@ -43,7 +43,7 @@ test('P3 gera plano único, parcelas fecham o saldo; idempotência rejeita mudan
  }finally{db.close();}
 });
 test('P3 boleto/link exige provedor e NUNCA registra receita antes de confirmação',async()=>{
- const provider={create:async({requestId,amountCents})=>({reference:'asaas-'+requestId,paymentUrl:'https://www.asaas.com/i/exemplo'}),
+ const provider={create:async({requestId,amountCents})=>({reference:'generic-'+requestId,paymentUrl:'https://payments.example.test/checkout/exemplo'}),
   status:async ref=>({reference:ref,status:'PENDING',amountCents:10001})};
  const {db,core,order,billing}=await setup({providers:{BOLETO:provider}});
  try{
@@ -51,7 +51,7 @@ test('P3 boleto/link exige provedor e NUNCA registra receita antes de confirmaç
     firstDueDate:'2026-12-15',method:'BOLETO',requestId:'boleto-1'});
   const activated=await billing.activateInstallment(plan.installments[0].id);
   assert.equal(activated.status,'PENDING');
-  assert.equal(activated.payment_url,'https://www.asaas.com/i/exemplo');
+  assert.equal(activated.payment_url,'https://payments.example.test/checkout/exemplo');
   assert.equal((await core.getPaymentSummary(order.id)).receivedCents,0);
   assert.equal((await billing.syncInstallment(activated.id)).status,'PENDING');
   assert.equal((await core.getPaymentSummary(order.id)).receivedCents,0);
@@ -59,8 +59,8 @@ test('P3 boleto/link exige provedor e NUNCA registra receita antes de confirmaç
 });
 test('P3 liquidação conferida baixa parcela uma só vez; divergência bloqueia',async()=>{
  let confirmed=false;
- const provider={create:async()=>({reference:'asaas-charge-1',paymentUrl:'https://www.asaas.com/i/teste'}),
-  status:async()=>({reference:'asaas-charge-1',status:confirmed?'PAID':'PENDING',amountCents:10001})};
+ const provider={create:async()=>({reference:'generic-charge-1',paymentUrl:'https://payments.example.test/checkout/teste'}),
+  status:async()=>({reference:'generic-charge-1',status:confirmed?'PAID':'PENDING',amountCents:10001})};
  const {db,core,order,billing}=await setup({providers:{PAYMENT_LINK:provider}});
  try{
   const plan=await billing.createPlan({workOrderId:order.id,amountCents:10001,count:1,
@@ -140,7 +140,7 @@ test('P3 impede emissão duplicada quando duas sessões tentam ativar a mesma pa
  let releases,created=0;
  const barrier=new Promise(resolve=>{releases=resolve});
  const provider={create:async()=>{created++;await barrier;return {
-  reference:'boleto-unico',paymentUrl:'https://www.asaas.com/i/boleto'
+  reference:'boleto-unico',paymentUrl:'https://payments.example.test/checkout/boleto'
  }},status:async()=>({reference:'boleto-unico',status:'PENDING',amountCents:10001})};
  const {db,order,billing}=await setup({providers:{BOLETO:provider}});
  try{
