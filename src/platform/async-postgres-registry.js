@@ -13,7 +13,7 @@ const id=value=>{
  return n;
 };
 const username=value=>{
- const s=String(value??').trim().toLowerCase();
+ const s=String(value??'').trim().toLowerCase();
  if(!/^[a-z0-9_.-]{3,40}$/.test(s))fail('Usuário inválido',400);
  return s;
 };
@@ -23,7 +23,7 @@ const role=value=>{
 };
 const digest=token=>createHash('sha256').update(token).digest('hex');
 const cleanName=value=>{
- const s=String(value??').trim();
+ const s=String(value??'').trim();
  if(s.length<2||s.length>120)fail('Nome inválido',400);
  return s;
 };
@@ -34,13 +34,13 @@ function passwordHash(password){
  return 'scrypt$'+salt.toString('hex')+'$'+scryptSync(password,salt,64).toString('hex');
 }
 async function passwordMatches(password,encoded){
- const [kind,saltHex,hashHex]=String(encoded??').split('$');
- if(kind!=='scrypt'||!/^[a-f0-9]{32}$/i.test(saltHex??')||!/^[a-f0-9]{128}$/i.test(hashHex??'))
+ const [kind,saltHex,hashHex]=String(encoded??'').split('$');
+ if(kind!=='scrypt'||!/^[a-f0-9]{32}$/i.test(saltHex??'')||!/^[a-f0-9]{128}$/i.test(hashHex??''))
    return false;
  try{
    const expected=Buffer.from(hashHex,'hex');
    const actual=await new Promise((resolve,reject)=>
-     scrypt(String(password??'),Buffer.from(saltHex,'hex'),64,
+     scrypt(String(password??''),Buffer.from(saltHex,'hex'),64,
        (error,result)=>error?reject(error):resolve(result)));
    return timingSafeEqual(expected,actual);
  }catch{return false;}
@@ -153,7 +153,7 @@ export function createPostgresTenantRegistry(port){
  }
  async function login({username:handle,password,remoteAddress='unknown'}={}){
    const address=throttle(remoteAddress);
-   const handleValue=String(handle??').trim().toLowerCase();
+   const handleValue=String(handle??'').trim().toLowerCase();
    const user=await port.first('SELECT * FROM users WHERE lower(username)=? AND active=1',[handleValue]);
    const matched=await passwordMatches(password,user?.password_hash||DUMMY_PASSWORD_HASH);
    if(!user||!matched){
@@ -191,7 +191,7 @@ export function createPostgresTenantRegistry(port){
    return reportingAdmin(port,userId,companyId);
  }
  async function createCompany(actorId,{slug,name}={}){
-   const owner=id(actorId),handle=String(slug??').trim().toLowerCase(),title=cleanName(name);
+   const owner=id(actorId),handle=String(slug??'').trim().toLowerCase(),title=cleanName(name);
    if(!SLUG.test(handle))fail('Dados da empresa inválidos',400);
    return port.transaction(async tx=>{
      await platformAdmin(tx,owner);
@@ -210,7 +210,7 @@ export function createPostgresTenantRegistry(port){
  }
  async function createUnit(actorId,{companyId,code,name}={}){
    const owner=id(actorId),company=validCompanyId(companyId);
-   const normalized=String(code??').trim().toUpperCase(),title=cleanName(name);
+   const normalized=String(code??'').trim().toUpperCase(),title=cleanName(name);
    if(!CODE.test(normalized))fail('Dados da unidade inválidos',400);
    return port.transaction(async tx=>{
      await companyAdmin(tx,owner,company);
