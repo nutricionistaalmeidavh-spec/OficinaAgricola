@@ -29,7 +29,7 @@
     "start:postgres:unified": "node src/start-postgres-unified.js",
     "db:postgres:verify-unified": "node scripts/verify-postgres-unified.mjs"
   },
-  "optionalDependencies": {
+  "dependencies": {
     "pg": "^8.23.1"
   }
 }
