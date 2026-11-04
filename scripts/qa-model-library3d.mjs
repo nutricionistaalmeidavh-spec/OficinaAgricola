@@ -38,7 +38,11 @@ try{
   page=await context.newPage();
   page.on('pageerror',e=>browserErrors.push(String(e.message||e)));
   page.on('console',m=>{if(m.type()==='error')browserErrors.push('console: '+m.text())});
-  page.on('response',r=>{if(r.url().includes('/vendor/'))console.log('QA_VENDOR_RESPONSE',r.status(),r.headers()['content-type'],r.url()); if(r.status()>=400&&r.url().includes('/vendor/'))browserErrors.push('HTTP '+r.status()+' '+r.url())});
+  page.on('response',r=>{
+    if(r.url().includes('/vendor/'))console.log('QA_VENDOR_RESPONSE',r.status(),r.headers()['content-type'],r.url());
+    if(r.status()>=400&&(r.url().includes('/vendor/')||r.url().includes('/api/models3d/')))
+      browserErrors.push('HTTP '+r.status()+' '+r.url());
+  });
   // Qualquer módulo 3D servido como HTML faz o import() falhar silenciosamente.
   // Verificar a resposta HTTP original ANTES do service worker.
   for(const modulePath of ['/vendor/three/three.module.js','/vendor/three/addons/loaders/GLTFLoader.js','/vendor/meshopt_decoder.mjs','/model-viewer.js']){
@@ -55,6 +59,8 @@ try{
   await page.locator('#loginForm input[name="password"]').fill('Admin@1234');
   await page.getByRole('button',{name:'Entrar'}).click();
   await page.locator('#appView').waitFor({state:'visible'});
+  // /api/auth/me pode retornar 401 antes do login, sem indicar falha 3D.
+  browserErrors.length=0;
   if(viewportName==='mobile'){
     await page.locator('#mobileMoreBtn').click();
     await page.locator('[data-mobile-page="model-library"]').click();
