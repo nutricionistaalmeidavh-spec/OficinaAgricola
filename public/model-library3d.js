@@ -83,7 +83,7 @@
       +'<div class="ml-viewer-notes"><h4>Curadoria e licenças</h4><ul>'+warning+'</ul>'
       +credits+(source?'<p><a href="'+escapeHtml(source)+'" rel="noopener noreferrer" target="_blank">Ver origem 3D no Sketchfab</a></p>':'')
       +'<p>Os downloads são opcionais e armazenados no servidor da oficina. Depois de instalado, o modelo funciona offline em computadores e celulares conectados ao servidor.</p></div></section>',
-      undefined,{entityKey:'library3d:'+target.id});
+      undefined,{entityKey:'library3d:'+target.id,trackChanges:false});
     if(blocked)return;
     const select=document.querySelector('#ml-variant');
     const openBtn=document.querySelector('#ml-view-start');
