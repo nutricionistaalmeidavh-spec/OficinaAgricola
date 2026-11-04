@@ -20,7 +20,9 @@ test('entregas 00-08 permanecem isoladas e sem dependência SaaS de runtime', as
   const pkg = JSON.parse(pkgText);
 
   assert.equal(pkg.name, 'artisys-oficina');
-  assert.equal(pkg.dependencies, undefined);
+  assert.ok(pkg.dependencies && typeof pkg.dependencies.pg==='string' && /^\^8\./.test(pkg.dependencies.pg),
+    'PostgreSQL OSS é dependência local empacotada, não SaaS');
+  assert.deepEqual(Object.keys(pkg.dependencies),['pg']);
   assert.equal(pkg.devDependencies, undefined);
   assert.match(env, /PORT=3344/);
   assert.match(env, /DATABASE_PATH=/);

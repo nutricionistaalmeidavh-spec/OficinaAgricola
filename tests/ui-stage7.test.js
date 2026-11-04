@@ -36,7 +36,9 @@ test('ArtiSys QA fica configurado como consumidor opcional da assistência', asy
   assert.equal(manifest.defaultFlow, 'stage7-shell');
   assert.equal(manifest.environments.local.baseURL, 'http://127.0.0.1:3344');
   assert.ok(manifest.flows['stage7-shell']);
-  assert.equal(pkg.dependencies, undefined);
+  assert.ok(pkg.dependencies && typeof pkg.dependencies.pg==='string' && /^\^8\./.test(pkg.dependencies.pg),
+    'PostgreSQL OSS é dependência local empacotada, não SaaS');
+  assert.deepEqual(Object.keys(pkg.dependencies),['pg']);
   assert.equal(pkg.devDependencies, undefined);
 });
 

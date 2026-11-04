@@ -8,6 +8,10 @@ asarUnpack:
 directories:
   output: dist-electron
 extraResources:
+  - from: build/postgresql
+    to: postgresql
+    filter:
+      - '**/*'
   - from: build/fiscal
     to: fiscal
     filter:

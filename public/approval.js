@@ -1,11 +1,13 @@
 'use strict';
-const token=new URLSearchParams(location.search).get('token')||'';
+const approvalParams=new URLSearchParams(location.search);
+const token=approvalParams.get('token')||'';
+const unit=approvalParams.get('unit')||'';
 const notice=document.querySelector('#notice'),box=document.querySelector('#proposal');
 const money=v=>(v/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const el=id=>document.getElementById(id);
 function message(v){notice.textContent=v;notice.hidden=false;}
 async function apiApproval(method,body){
- const response=await fetch('/api/public/approval/'+encodeURIComponent(token),{
+ const response=await fetch('/api/public/approval/'+encodeURIComponent(token)+(unit?'?unit='+encodeURIComponent(unit):''),{
  method,headers:{'Content-Type':'application/json'},credentials:'omit',cache:'no-store',
  body:body?JSON.stringify(body):undefined
  });

@@ -20,11 +20,14 @@ export function createWorkOrder(db,input){
   if(Number(machine.customer_id)!==Number(customer.id)) throw new Error('Máquina não pertence ao cliente selecionado');
   if(input.technicianId && !db.prepare('SELECT id FROM technicians WHERE id=? AND active=1').get(input.technicianId)) throw new Error('Técnico não encontrado');
   const priority=input.priority??'NORMAL'; if(!PRIORITIES.has(priority)) throw new Error('Prioridade inválida');
+  const unitId=input.unitId==null?1:Number(input.unitId);
+  if(!Number.isSafeInteger(unitId)||unitId<1||!db.prepare('SELECT id FROM shop_units WHERE id=? AND active=1').get(unitId))
+    throw new Error('Unidade da OS inválida');
   return transaction(db,()=>{
     const next=Number(db.prepare('SELECT COALESCE(MAX(os_number),0)+1 next FROM work_orders').get().next);
     const t=nowIso();
-    const r=db.prepare(`INSERT INTO work_orders(os_number,customer_id,machine_id,entered_at,problem_reported,diagnosis,technician_id,estimated_delivery,priority,internal_notes,status,snapshot_customer,snapshot_machine,created_at,updated_at)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(next,customer.id,machine.id,input.enteredAt??t,text(input.problemReported),text(input.diagnosis),input.technicianId??null,input.estimatedDelivery??null,priority,text(input.internalNotes),'ENTRADA',customerSnapshot(customer),machineSnapshot(machine),t,t);
+    const r=db.prepare(`INSERT INTO work_orders(os_number,customer_id,machine_id,entered_at,problem_reported,diagnosis,technician_id,estimated_delivery,priority,internal_notes,status,snapshot_customer,snapshot_machine,unit_id,created_at,updated_at)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(next,customer.id,machine.id,input.enteredAt??t,text(input.problemReported),text(input.diagnosis),input.technicianId??null,input.estimatedDelivery??null,priority,text(input.internalNotes),'ENTRADA',customerSnapshot(customer),machineSnapshot(machine),unitId,t,t);
     const id=Number(r.lastInsertRowid);
     db.prepare(`INSERT INTO work_order_status_history(work_order_id,from_status,to_status,reason,changed_by,changed_at) VALUES(?,?,?,?,?,?)`).run(id,null,'ENTRADA','Abertura da OS',input.createdBy??null,t);
     return getWorkOrder(db,id);
@@ -38,8 +41,8 @@ export function getWorkOrder(db,id){
 }
 export function listWorkOrders(db,{status,scope,search='',limit=200,offset=0}={}){
   const clauses=[]; const params=[];
-  if(scope==='closed')clauses.push("wo.status IN ('ENTREGUE','CANCELADA','REPROVADA')");
-  if(scope==='active')clauses.push("wo.status NOT IN ('ENTREGUE','CANCELADA','REPROVADA')");
+  if(scope==='closed')clauses.push("wo.status IN ('ENTREGUE','CANCELADA','REPROVADA','TRANSFERIDA')");
+  if(scope==='active')clauses.push("wo.status NOT IN ('ENTREGUE','CANCELADA','REPROVADA','TRANSFERIDA')");
   if(status){clauses.push('wo.status=?');params.push(status)}
   if(search){const q=`%${text(search)}%`;clauses.push('(CAST(wo.os_number AS TEXT) LIKE ? OR c.name LIKE ? OR m.model LIKE ? OR wo.problem_reported LIKE ?)');params.push(q,q,q,q)}
   params.push(Math.min(Math.max(Number(limit)||200,1),1000));
@@ -55,8 +58,8 @@ export function listWorkOrdersPage(db,{status='',scope='',search='',cursor=null,
   const next=cursor==null||cursor===''?null:Number(cursor);
   if(next!==null&&(!Number.isSafeInteger(next)||next<=0))throw new Error('Cursor inválido');
   const q=String(search||'').trim(),where=[],args=[];
-  if(scope==='closed')where.push("wo.status IN ('ENTREGUE','CANCELADA','REPROVADA')");
-  if(scope==='active')where.push("wo.status NOT IN ('ENTREGUE','CANCELADA','REPROVADA')");
+  if(scope==='closed')where.push("wo.status IN ('ENTREGUE','CANCELADA','REPROVADA','TRANSFERIDA')");
+  if(scope==='active')where.push("wo.status NOT IN ('ENTREGUE','CANCELADA','REPROVADA','TRANSFERIDA')");
   if(status){where.push('wo.status=?');args.push(status)}
   if(q){where.push('(CAST(wo.os_number AS TEXT) LIKE ? OR c.name LIKE ? OR m.model LIKE ? OR wo.problem_reported LIKE ?)');const like='%'+q+'%';args.push(like,like,like,like)}
   const base=' FROM work_orders wo JOIN customers c ON c.id=wo.customer_id JOIN machines m ON m.id=wo.machine_id LEFT JOIN technicians t ON t.id=wo.technician_id';
@@ -72,6 +75,7 @@ export function listWorkOrdersPage(db,{status='',scope='',search='',cursor=null,
 
 export function updateWorkOrder(db,id,input,{changedBy=null}={}){
   const old=getWorkOrder(db,id);
+  if(old.status==='TRANSFERIDA')throw new Error('OS transferida para outra unidade: edição bloqueada na origem');
   if(input.expectedVersion!==undefined&&Number(input.expectedVersion)!==Number(old.version))throw new Error('Conflito de versão: OS foi atualizada por outro usuário');
   const customerId=input.customerId===undefined?old.customer_id:Number(input.customerId);
   const machineId=input.machineId===undefined?old.machine_id:Number(input.machineId);
@@ -115,7 +119,8 @@ export function duplicateWorkOrder(db,id,input={}){
     priority:input.copyPriority===false?'NORMAL':old.priority,
     internalNotes:input.copyInternalNotes?old.internal_notes:'',
     estimatedDelivery:null,
-    createdBy:input.createdBy??null
+    createdBy:input.createdBy??null,
+    unitId:input.unitId??old.unit_id??1
   });
 }
 

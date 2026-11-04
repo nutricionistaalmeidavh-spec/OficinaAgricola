@@ -1,0 +1,10 @@
+# Exemplo com DNS e HTTPS automático (Caddy open source).
+# Troque o domínio pelo do próprio cliente.
+oficina.exemplo.com {
+  encode zstd gzip
+  reverse_proxy 127.0.0.1:3344
+  header {
+    X-Content-Type-Options "nosniff"
+    Referrer-Policy "strict-origin-when-cross-origin"
+  }
+}

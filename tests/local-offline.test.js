@@ -51,7 +51,9 @@ test('núcleo local não exige API ou SaaS externo', async () => {
     read('public/sw.js'),
   ]);
   const pkg = JSON.parse(pkgText);
-  assert.equal(pkg.dependencies, undefined);
+  assert.ok(pkg.dependencies && typeof pkg.dependencies.pg==='string' && /^\^8\./.test(pkg.dependencies.pg),
+    'PostgreSQL OSS é dependência local empacotada, não SaaS');
+  assert.deepEqual(Object.keys(pkg.dependencies),['pg']);
   assert.equal(pkg.optionalDependencies, undefined);
   assert.doesNotMatch(runtime, /https?:\/\//);
   assert.doesNotMatch(sw, /https?:\/\//);
