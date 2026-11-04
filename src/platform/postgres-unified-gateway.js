@@ -1,3 +1,4 @@
+import {journalEligible} from './postgres-command-journal.js';
 import {createHmac} from 'node:crypto';
 import {mapLegacyNativeRoute} from './native-api-route-map.js';
 import {createPostgresRegistryControlHandler} from './postgres-registry-control.js';
@@ -36,11 +37,13 @@ function sessionForUnit(secret,unit,token){
    .update('oficina-native-session/v1\0'+unit.companyId+'/'+unit.id+'\0'+token)
    .digest('base64url');
 }
-async function dispatchNative(handler,path,{method='GET',session,body,search='',serviceToken}={}){
+async function dispatchNative(handler,path,{method='GET',session,body,search='',serviceToken,commandScope=null,commandId=null}={}){
  const options={method,headers:{
    authorization:'Bearer '+serviceToken,
    'content-type':'application/json',
-   ...(session?{'x-oficina-session':session}:{})
+   ...(session?{'x-oficina-session':session}:{}),
+   ...(commandScope?{'x-oficina-command-scope':commandScope}:{}),
+   ...(commandId?{'x-oficina-command-id':commandId}:{})
  }};
  if(!['GET','HEAD'].includes(method))options.body=JSON.stringify(body??{});
  const result=await handler(new Request('http://127.0.0.1'+path+search,options));
@@ -104,6 +107,19 @@ export function createPostgresUnifiedGateway({
      unit=await registry.requireUnitMembership(actor.id,Number(selected));
    }
    if(!validId(unit.id)||!validId(unit.companyId))fail('Vínculo da unidade inválido',403);
+   if(path==='/api/commands/status'&&method==='GET'){
+     const queriedMethod=u.searchParams.get('method')||'';
+     const queriedPath=u.searchParams.get('path')||'';
+     const key=u.searchParams.get('requestId')||'';
+     if(!journalEligible(queriedMethod,queriedPath)||
+        !/^[A-Za-z0-9_:.-]{3,128}$/.test(key))
+       fail('Consulta de operação inválida',400);
+     const runtime=await tenantHandlerForUnit(unit);
+     if(typeof runtime?.commandStatus!=='function')
+       fail('Journal PostgreSQL indisponível',503);
+     return json(await runtime.commandStatus(
+       'http:'+queriedMethod+':'+queriedPath+':user:'+actor.id,key));
+   }
    const mapping=mapLegacyNativeRoute(method,path);
    if(!mapping)fail('Rota não migrada para PostgreSQL',501);
    if(!mapping.roles.includes(unit.role))fail('Permissão insuficiente',403);
@@ -141,8 +157,12 @@ export function createPostgresUnifiedGateway({
      if(mapping.path==='/v1/payments'&&!input.requestId)
        fail('Recebimento exige requestId',409);
    }
+   const journalKey=journalEligible(method,path)&&typeof input.requestId==='string'&&
+      /^[A-Za-z0-9_:.-]{3,128}$/.test(input.requestId)?input.requestId:null;
    const native=await dispatchNative(handler,mapping.path,{
-     method,session:personalToken,search:u.search,body:input,serviceToken
+     method,session:personalToken,search:u.search,body:input,serviceToken,
+     commandId:journalKey,
+     commandScope:journalKey?'http:'+method+':'+path+':user:'+actor.id:null
    });
    if(mapping.path.endsWith('/quote/approval-link')&&native.ok){
      const result=await native.json();
