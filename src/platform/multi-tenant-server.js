@@ -59,6 +59,7 @@ export function createMultiTenantServer({
   tenantFiscalConfigs = {},
   tenantPaymentConfigs = {},
   billingProvidersForUnit = null,
+  reminderSenderForUnit = null,
   objectStoreForUnit = null,
   unitServerFactory = createAssistenciaServer,
   nativeBackendForUnit = null,
@@ -105,7 +106,8 @@ export function createMultiTenantServer({
     // from request headers or client-controlled JSON.
     const objectStore=objectStoreForUnit?objectStoreForUnit(unit):null;
     const paymentOptions={...resolveTenantPaymentOptions(unit,tenantPaymentConfigs),
-      billingProviders:billingProvidersForUnit?.(unit,db)??{}
+      billingProviders:billingProvidersForUnit?.(unit,db)??{},
+      reminderSender:reminderSenderForUnit?.(unit)??null
     };
     const srv=unitServerFactory({db,storageDir,eventRuntime,tls:null,fiscalProviderOverride,objectStore,paymentOptions});
     const runtime={db,srv,unit,storageDir,objectStore,eventRuntime,owned:!isLegacy,
