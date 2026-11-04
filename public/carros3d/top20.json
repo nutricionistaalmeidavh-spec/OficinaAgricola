@@ -75,9 +75,20 @@
           "sha256": "b5c655e1ab897c70c18bacf9b7ba956781f75c05eb7a936e66fb3c186ae07756",
           "bytes": null,
           "experimental": true
+        },
+        "repaired": {
+          "ref": "347d92f44f401d24b25562a7a236a69fe6e3f734",
+          "path": "curadoria/geometria/fiat-palio-rodas.glb",
+          "sha256": "9a8845b4e1ffeb72dac8f60cc6161ce7db4b273fec3d1d09b2b6e5c607fb3b91",
+          "bytes": 388504,
+          "experimental": true,
+          "geometry": "PROCEDURAL_NON_OEM",
+          "generatedWheels": 4
         }
       },
-      "notes": [],
+      "notes": [
+        "Rodas novas procedimentais; modelo em revisão visual e não homologado para identificação de componentes OEM."
+      ],
       "review_status": "PENDENTE_REVISAO_VISUAL",
       "credit": {
         "author": "Fall0X",
@@ -288,9 +299,20 @@
           "sha256": "c6858d095910854d5db9547865bcd3d486d7855e4807649a8a08f05da252969e",
           "bytes": null,
           "experimental": true
+        },
+        "repaired": {
+          "ref": "347d92f44f401d24b25562a7a236a69fe6e3f734",
+          "path": "curadoria/geometria/ford-ka-rodas.glb",
+          "sha256": "178327e9528b5a3f63f3ff501084048ce5119756f2ba117de45da4da81c3d913",
+          "bytes": 419132,
+          "experimental": true,
+          "geometry": "PROCEDURAL_NON_OEM",
+          "generatedWheels": 4
         }
       },
-      "notes": [],
+      "notes": [
+        "Rodas novas procedimentais; modelo em revisão visual e não homologado para identificação de componentes OEM."
+      ],
       "review_status": "PENDENTE_REVISAO_VISUAL",
       "credit": {
         "author": "Merc_TV",
@@ -349,9 +371,20 @@
           "sha256": "5cb33c2a2ef90c68bd7d1aafb4d1caeafa0c831eae038314c07752963bce1baf",
           "bytes": null,
           "experimental": true
+        },
+        "repaired": {
+          "ref": "347d92f44f401d24b25562a7a236a69fe6e3f734",
+          "path": "curadoria/geometria/vw-fox-rodas.glb",
+          "sha256": "1dc3de78888ff2bcb30036556beb6bb521724c1280f4c9df4dce63485e49eef9",
+          "bytes": 510008,
+          "experimental": true,
+          "geometry": "PROCEDURAL_NON_OEM",
+          "generatedWheels": 4
         }
       },
-      "notes": [],
+      "notes": [
+        "Rodas novas procedimentais; modelo em revisão visual e não homologado para identificação de componentes OEM."
+      ],
       "review_status": "PENDENTE_REVISAO_VISUAL",
       "credit": {
         "author": "Merc_TV",
