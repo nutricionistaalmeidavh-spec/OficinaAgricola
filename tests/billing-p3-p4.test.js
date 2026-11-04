@@ -118,3 +118,20 @@ test('P4 taxas e repasses não alteram receita bruta; lembretes ficam somente em
   assert.equal((await core.getPaymentSummary(order.id)).receivedCents,5001);
  }finally{db.close();}
 });
+
+test('P4 mostra recebimentos elegíveis por OS, sem pedir IDs numéricos ao operador',async()=>{
+ const {db,order,billing}=await setup();
+ try{
+  const plan=await billing.createPlan({workOrderId:order.id,amountCents:10001,count:1,
+   firstDueDate:'2026-11-05',method:'MANUAL',requestId:'manual-selector'});
+  const installment=await billing.confirmManual(plan.installments[0].id,{verified:true});
+  const available=await billing.listAvailableReceipts();
+  assert.equal(available.length,1);
+  assert.equal(available[0].id,installment.receipt_id);
+  assert.ok(available[0].os_number);
+  const bank=await billing.importStatement({bankAccount:'conta-principal',
+   externalId:'bank-receipt-list',bookedAt:'2026-11-05',amountCents:10001,description:'Recebimento OS'});
+  await billing.matchStatement(bank.id,installment.receipt_id);
+  assert.equal((await billing.listAvailableReceipts()).length,0);
+ }finally{db.close();}
+});
