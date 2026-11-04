@@ -97,11 +97,19 @@ test('staging import verifies actual R2/MinIO bytes, not only attachment metadat
   await assert.rejects(importCanonicalSqliteTenant({sourceDb:source,targetPort:port,
    companyId:3,unitId:4}),/storage|anexos|objectStore/i);
   assert.equal(await port.first('SELECT * FROM async_tenant_identity'),null);
+  const sourceStore={async getObject({key:received,maxBytes}){
+    assert.equal(received,key);assert.ok(maxBytes>=5);return Buffer.from('12345');
+  }};
+  await assert.rejects(importCanonicalSqliteTenant({sourceDb:source,targetPort:port,
+    companyId:3,unitId:4,objectStore:sourceStore}),/storage|destino|anexo/i,
+    'metadata points to destination storage, which must be separately verified');
+  await assert.rejects(importCanonicalSqliteTenant({sourceDb:source,targetPort:port,
+    companyId:3,unitId:4,objectStore:sourceStore,
+    targetObjectStore:{async getObject(){return Buffer.from('XXXXX');}}
+  }),/integridade|divergente|checksum/i);
+  assert.equal(await port.first('SELECT * FROM async_tenant_identity'),null);
   const transfer=await importCanonicalSqliteTenant({sourceDb:source,targetPort:port,
-   companyId:3,unitId:4,
-   objectStore:{async getObject({key:received,maxBytes}){
-     assert.equal(received,key);assert.ok(maxBytes>=5);return Buffer.from('12345');
-   }}
+    companyId:3,unitId:4,objectStore:sourceStore,targetObjectStore:sourceStore
   });
   assert.equal(transfer.verified,true);
   assert.equal((await port.first('SELECT * FROM attachments')).relative_path,'s3:'+key);
