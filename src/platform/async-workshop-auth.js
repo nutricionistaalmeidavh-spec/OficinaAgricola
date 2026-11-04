@@ -31,6 +31,7 @@ function fields(input){
  const username=clean(input.username).toLowerCase(),name=clean(input.name),role=clean(input.role);
  if(!/^[a-z0-9._-]{3,64}$/.test(username)||!name||name.length>160||!VALID_ROLES.has(role))
    fail('Usuário inválido');
+ if(username.startsWith('gateway_'))fail('Identificador reservado para sessões internas');
  return {username,name,role,passwordHash:encodePassword(input.password)};
 }
 export function createAsyncWorkshopAuth(port){
@@ -92,5 +93,46 @@ export function createAsyncWorkshopAuth(port){
      await port.run('DELETE FROM sessions WHERE token_hash=?',[tokenHash(token)]);
    return {ok:true};
  }
- return Object.freeze({bootstrapAdmin,createUser,login,validateSession,requireRole,logout});
+ // Only the authenticated multiempresa gateway may call this via the
+ // service-token-protected internal endpoint. Native passwords are never
+ // copied, and no caller-supplied role reaches this function from the browser.
+ async function provisionGatewaySession(input={}){
+   const userId=Number(input.globalUserId),role=clean(input.role);
+   const name=clean(input.name),token=input.sessionToken;
+   const expiration=Date.parse(input.expiresAt),current=Date.now();
+   if(!Number.isSafeInteger(userId)||userId<1||userId>2147483647||
+      !name||name.length>160)fail('Identidade do usuário global inválida');
+   if(!VALID_ROLES.has(role))fail('Função do usuário inválida',403);
+   if(typeof token!=='string'||token.length<32||token.length>512)
+     fail('Sessão inválida',401);
+   if(typeof input.expiresAt!=='string'||!Number.isFinite(expiration)||
+      expiration<=current||expiration>current+43260000)
+     fail('Sessão global expirada ou inválida',401);
+   // Refresh at most once a minute. The global registry remains authoritative.
+   const expiresAt=new Date(Math.min(expiration,current+60000)).toISOString();
+   const stamp=new Date(current).toISOString(),nativeId=2**52+userId;
+   const username='gateway_'+userId;
+   const shadowUser={sql:`INSERT INTO users(
+     id,username,password_hash,name,role,active,created_at,updated_at
+   ) VALUES(?,?,?,?,?,1,?,?)
+   ON CONFLICT(id) DO UPDATE SET
+     username=excluded.username,name=excluded.name,role=excluded.role,
+     active=1,updated_at=excluded.updated_at`,params:[
+     nativeId,username,'!gateway:'+randomBytes(32).toString('hex'),name,role,stamp,stamp
+   ]};
+   const shadowSession={sql:`INSERT INTO sessions(
+     id,token_hash,user_id,created_at,expires_at
+   ) VALUES(?,?,?,?,?)
+   ON CONFLICT(token_hash) DO UPDATE SET
+     user_id=excluded.user_id,expires_at=excluded.expires_at`,params:[
+     issueId(),tokenHash(token),nativeId,stamp,expiresAt
+   ]};
+   if(port.engine==='d1')await port.batch([shadowUser,shadowSession]);
+   else await port.transaction(async tx=>{
+     await tx.run(shadowUser.sql,shadowUser.params);
+     await tx.run(shadowSession.sql,shadowSession.params);
+   });
+   return {ok:true,expiresAt};
+ }
+ return Object.freeze({bootstrapAdmin,createUser,login,validateSession,requireRole,logout,provisionGatewaySession});
 }
