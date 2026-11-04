@@ -93,13 +93,14 @@ export function createAsyncWorkshopAttachments(port,{objectStore=null}={}){
    }
    const replay=await previous();
    if(replay)return replay;
+   const storageKind=backend.kind==='local'?'local':'s3';
    const objectKey=os+'/'+randomUUID()+ext,attachmentId=newId(),stamp=now();
    const insert={sql:`INSERT INTO attachments(
      id,work_order_id,category,caption,mime_type,original_name,
      relative_path,size_bytes,created_at
    ) VALUES(?,?,?,?,?,?,?,?,?)`,params:[
      attachmentId,os,input.category,caption,input.mimeType,name,
-     's3:'+objectKey,raw.length,stamp
+     storageKind+':'+objectKey,raw.length,stamp
    ]};
    const requestInsert=request?{sql:`INSERT INTO tenant_remote_upload_requests(
      work_order_id,request_id,payload_hash,attachment_id
@@ -135,9 +136,10 @@ export function createAsyncWorkshopAttachments(port,{objectStore=null}={}){
  }
  async function readAttachment(attachmentId){
    const backend=store(),row=await getAttachment(attachmentId);
-   if(!row.relative_path?.startsWith('s3:'))
-     fail('Anexo legado em disco: migração explícita necessária',409);
-   const path=row.relative_path.slice(3);
+   const kind=backend.kind==='local'?'local':'s3';
+   if(!row.relative_path?.startsWith(kind+':'))
+     fail('Anexo pertence a outro backend de armazenamento; migração explícita necessária',409);
+   const path=row.relative_path.slice(kind.length+1);
    if(!new RegExp('^'+row.work_order_id+'/[0-9a-f-]{36}\\.(jpg|png|webp|pdf)$').test(path))
      fail('Chave de armazenamento inválida',409);
    const bytes=Buffer.from(await backend.getObject({key:path,maxBytes:maxSize}));
