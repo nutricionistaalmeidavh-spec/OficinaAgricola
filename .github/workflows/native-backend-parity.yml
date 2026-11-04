@@ -1,4 +1,4 @@
-name: Native PostgreSQL · Paridade operacional
+name: Native PostgreSQL e D1 · Paridade operacional
 
 on:
   push:
@@ -6,13 +6,14 @@ on:
     paths:
       - "src/platform/async-**"
       - "scripts/verify-postgres-native.mjs"
+      - "scripts/verify-d1-local.mjs"
       - ".github/workflows/native-backend-parity.yml"
   pull_request:
     branches: [main]
   workflow_dispatch:
 
 concurrency:
-  group: native-postgres-${{ github.event.pull_request.number || github.ref }}
+  group: native-sql-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -53,3 +54,23 @@ jobs:
           CI: "true"
           POSTGRES_TEST_URL: postgresql://oficina_ci:ci-only-disposable@127.0.0.1:5432/oficina_ci
         run: node scripts/verify-postgres-native.mjs
+
+  d1-local:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+          cache: npm
+      - name: Install core
+        run: npm ci
+      - name: Install local open-source D1/Workerd emulator for CI only
+        run: npm install --no-save --no-package-lock miniflare@4
+      - name: Native local D1 transactional regression
+        env:
+          CI: "true"
+        run: node scripts/verify-d1-local.mjs
