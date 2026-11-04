@@ -85,6 +85,15 @@ export async function mountViewer({id,variant='original',element,statusElement})
   try{
     gltf=await new Promise((resolve,reject)=>loader.parse(buffer,'',resolve,reject));
     if(disposed||!element.isConnected){cleanup();return null}
+    if(variant==='repaired'){
+      const expected=new Set(['ARTISYS_NEW_WHEEL_FL','ARTISYS_NEW_WHEEL_FR','ARTISYS_NEW_WHEEL_RL','ARTISYS_NEW_WHEEL_RR']);
+      const found=new Set();
+      gltf.scene.traverse(node=>{if(expected.has(node.name)&&node.isMesh)found.add(node.name)});
+      if(found.size!==4)throw new Error('Modelo de rodas reconstruídas incompleto: '+found.size+' de 4 rodas');
+      element.dataset.generatedWheels=String(found.size);
+    }else{
+      delete element.dataset.generatedWheels;
+    }
     scene.add(gltf.scene);
     const box=new THREE.Box3().setFromObject(gltf.scene);
     if(box.isEmpty())throw new Error('O GLB não contém geometria visível');
