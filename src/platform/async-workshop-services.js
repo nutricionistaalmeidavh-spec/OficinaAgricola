@@ -14,6 +14,7 @@ import {createAsyncWorkshopCrm} from './async-workshop-crm.js';
 import {createAsyncWorkshopAttachments} from './async-workshop-attachments.js';
 import {createAsyncLegacyViews} from './async-workshop-legacy-views.js';
 import {createPaymentCollection} from './payment-collection.js';
+import {createBillingService} from './billing-p3-p4.js';
 
 // Async canonical service layer for PostgreSQL and D1. Each command is
 // explicitly transactional on its backend; never delegate to legacy SQLite.
@@ -486,5 +487,11 @@ export function createAsyncWorkshopServices(port,{fiscalProvider=null,objectStor
   receivePayment:services.receivePayment,getPaymentSummary:services.getPaymentSummary,
   ...paymentOptions
  });
- return Object.freeze({...services,...payments,...createAsyncLegacyViews(port,services)});
+ const billing=createBillingService(port,{
+  receivePayment:services.receivePayment,getPaymentSummary:services.getPaymentSummary,
+  providers:paymentOptions?.billingProviders??{},
+  reversePayment:services.reverseReceipt,
+  reminderSender:paymentOptions?.reminderSender??null
+ });
+ return Object.freeze({...services,...payments,...billing,...createAsyncLegacyViews(port,services)});
 }

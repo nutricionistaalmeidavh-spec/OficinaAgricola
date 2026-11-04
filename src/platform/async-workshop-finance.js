@@ -119,12 +119,24 @@ export function createAsyncWorkshopFinance(port){
    return {totalCents,receivedCents,pendingCents,
      status:totalCents<=0?'SEM_ORCAMENTO':pendingCents===0?'PAGO':receivedCents?'PARCIAL':'PENDENTE'};
  }
- async function reverseReceipt({workOrderId,receiptId,note=''}={}){
+ async function reverseReceipt({workOrderId,receiptId,note='',externalRefundId=null}={}){
    const osId=positive(workOrderId),rId=positive(receiptId);
    const receipt=await port.first('SELECT * FROM receipts WHERE id=? AND work_order_id=?',
      [rId,osId]);
    if(!receipt)fail('Recebimento não encontrado',404);
    if(receipt.reversed_at)fail('Recebimento já estornado',409);
+   const billingInstallment=await port.first(`SELECT i.id,p.method FROM billing_installments i
+     JOIN billing_plans p ON p.id=i.plan_id WHERE i.receipt_id=? AND i.status='PAID'`,[rId]);
+   if(billingInstallment&&billingInstallment.method!=='MANUAL'){
+     const authorized=externalRefundId&&await port.first(
+       "SELECT id FROM billing_refunds WHERE id=? AND installment_id=? AND receipt_id=? AND amount_cents=? AND status='CONFIRMED'",
+       [externalRefundId,billingInstallment.id,rId,receipt.amount_cents]);
+     if(!authorized)fail('Cobrança externa exige confirmação de estorno externo antes da baixa financeira',409);
+   }
+   if(await port.first('SELECT id FROM billing_bank_entries WHERE receipt_id=?',[rId]))
+     fail('Extrato conciliado exige reconciliação antes do estorno',409);
+   if(billingInstallment&&await port.first('SELECT id FROM billing_settlements WHERE installment_id=?',[billingInstallment.id]))
+     fail('Repasse conciliado impede estorno da parcela até reconciliação',409);
    if(await port.first("SELECT id FROM payment_intents WHERE receipt_id=? AND status='PAID'",[rId]))
      fail('Cobrança do provedor exige confirmação de estorno externo antes da baixa financeira',409);
    const cash=await port.first(`SELECT id FROM cash_sessions WHERE status='ABERTO'
@@ -146,6 +158,12 @@ export function createAsyncWorkshopFinance(port){
        id(),cash.id,rId,-Number(receipt.amount_cents),receipt.method,
        'Estorno recebimento OS '+osId,at,rId,at
      ]));
+   if(billingInstallment?.method!=='MANUAL'&&billingInstallment)movements.push(query(
+     "UPDATE billing_installments SET status='FAILED',updated_at=? WHERE id=? AND receipt_id=? AND status='PAID'",
+     [at,billingInstallment.id,rId]));
+   if(billingInstallment?.method==='MANUAL')movements.push(query(`UPDATE billing_installments
+     SET status='PENDING',receipt_id=NULL,attempt_no=attempt_no+1,updated_at=?
+     WHERE id=? AND status='PAID' AND receipt_id=?`,[at,billingInstallment.id,rId]));
    if(isD1){
      const results=await port.batch(movements);
      if(count(results[0])!==1)fail('Recebimento já estornado',409);

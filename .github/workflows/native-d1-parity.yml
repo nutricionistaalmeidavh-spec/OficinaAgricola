@@ -5,6 +5,8 @@ on:
     branches: [main, "feat/**"]
     paths:
       - "src/platform/async-**"
+      - "src/platform/billing-p3-p4.js"
+      - "tests/billing-p3-p4.test.js"
       - "src/workers/d1-workshop.js"
       - "scripts/verify-d1-native.mjs"
       - ".github/workflows/native-d1-parity.yml"

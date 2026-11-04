@@ -5,6 +5,8 @@ on:
     branches: [main, "feat/**"]
     paths:
       - "src/platform/async-**"
+      - "src/platform/billing-p3-p4.js"
+      - "tests/billing-p3-p4.test.js"
       - "scripts/verify-postgres-native.mjs"
       - "scripts/verify-d1-local.mjs"
       - ".github/workflows/native-backend-parity.yml"

@@ -1,3 +1,7 @@
+import {requestPayloadLimit} from './billing-http-limits.js';
+import {createCommonDataAdapter} from './common-data-adapter.js';
+import {createBillingService} from './billing-p3-p4.js';
+import {addReceipt,getPaymentSummary,reverseReceipt} from '../services/finance.js';
 import { createServer as createHttpServer } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
 import {createNativeApiBridge} from './native-api-bridge.js';
@@ -58,6 +62,8 @@ export function createMultiTenantServer({
   tls = null,
   tenantFiscalConfigs = {},
   tenantPaymentConfigs = {},
+  billingProvidersForUnit = null,
+  reminderSenderForUnit = null,
   objectStoreForUnit = null,
   unitServerFactory = createAssistenciaServer,
   nativeBackendForUnit = null,
@@ -103,7 +109,10 @@ export function createMultiTenantServer({
     // A unit-specific S3 namespace is derived from trusted registry IDs, never
     // from request headers or client-controlled JSON.
     const objectStore=objectStoreForUnit?objectStoreForUnit(unit):null;
-    const paymentOptions=resolveTenantPaymentOptions(unit,tenantPaymentConfigs);
+    const paymentOptions={...resolveTenantPaymentOptions(unit,tenantPaymentConfigs),
+      billingProviders:billingProvidersForUnit?.(unit,db)??{},
+      reminderSender:reminderSenderForUnit?.(unit)??null
+    };
     const srv=unitServerFactory({db,storageDir,eventRuntime,tls:null,fiscalProviderOverride,objectStore,paymentOptions});
     const runtime={db,srv,unit,storageDir,objectStore,eventRuntime,owned:!isLegacy,
       fiscalConfigured:isLegacy||Boolean(scopedFiscalProvider)};
@@ -392,11 +401,7 @@ export function createMultiTenantServer({
         'SELECT expires_at FROM sessions WHERE token_hash=? AND user_id=?'
       ).get(tokenDigest(token),user.id);
       if(!session)throw httpError('Sessão global inválida',401);
-      const parts=path.split('/');
-      const attachmentUpload=method==='POST'&&parts.length===5&&
-        parts[1]==='api'&&parts[2]==='work-orders'&&
-        /^[1-9][0-9]*$/.test(parts[3])&&parts[4]==='attachments';
-      const maxBytes=attachmentUpload?7*1024*1024:1048576;
+      const maxBytes=requestPayloadLimit(method,path);
       const body=['POST','PUT','PATCH'].includes(method)?await readJson(req,maxBytes):{};
       const answer=await nativeApiBridge({
         backend:nativeBackend,unit,user,globalToken:token,
@@ -464,6 +469,18 @@ export function createMultiTenantServer({
       try{
         const runtime=unitRuntime(id);
         createMaintenanceCrmTasks(runtime.db,{daysAhead:7});
+        // Unidades com backend nativo têm relógio próprio (PG) ou cron explícito (D1);
+        // nunca gerar avisos do shadow SQLite de outra origem canônica.
+        if(!nativeBackendForUnit?.(runtime.unit)){
+          const billing=createBillingService(createCommonDataAdapter({engine:'sqlite',db:runtime.db}),{
+            receivePayment:input=>addReceipt(runtime.db,input.workOrderId,input),
+            getPaymentSummary:workOrderId=>getPaymentSummary(runtime.db,workOrderId),
+            reversePayment:input=>reverseReceipt(runtime.db,input.workOrderId,input.receiptId,input),
+            reminderSender:reminderSenderForUnit?.(runtime.unit)??null
+          });
+          void billing.dispatchReminders({daysAhead:3})
+            .catch(error=>console.error('[tenant-billing-reminders]',id,error.message));
+        }
         const audit=auditInvariants(runtime.db);
         if(!audit.ok)console.warn('[tenancy-reconciliation]',id,JSON.stringify(audit.errors));
       }catch(error){console.error('[tenancy-maintenance]',id,error.message);}

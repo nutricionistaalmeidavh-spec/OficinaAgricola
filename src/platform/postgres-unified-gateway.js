@@ -1,3 +1,4 @@
+import {requestPayloadLimit} from './billing-http-limits.js';
 import {journalEligible} from './postgres-command-journal.js';
 import {createHmac} from 'node:crypto';
 import {mapLegacyNativeRoute} from './native-api-route-map.js';
@@ -204,8 +205,7 @@ export function createPostgresUnifiedGateway({
    if(!provisioned.ok)fail('Sessão da unidade não pôde ser validada',502);
    let input={};
    if(!['GET','HEAD'].includes(method)){
-     const upload=method==='POST'&&/^\/api\/work-orders\/[1-9][0-9]*\/attachments$/.test(path);
-     input=mapping.mapBody(await readPayload(request,upload?7*1024*1024:1048576));
+     input=mapping.mapBody(await readPayload(request,requestPayloadLimit(method,path)));
      // All audit identities are derived from the validated registry session.
      delete input.createdBy;delete input.changedBy;delete input.userRole;
      if(mapping.path.startsWith('/v1/technicians')&&input.userId!=null)

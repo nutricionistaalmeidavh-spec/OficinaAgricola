@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { migrateFiscal } from './fiscal-schema.js';
 import { migrateMarketParity } from './services/market-parity.js';
 import {migrateLocalPaymentCollection} from './platform/payment-collection.js';
+import {migrateLocalBilling} from './platform/billing-p3-p4.js';
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
@@ -22,7 +23,7 @@ export function migrate(db) {
   db.exec("CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY, applied_at TEXT NOT NULL)");
   const version='2026-11-03-main-p0-p3';
   if(db.prepare('SELECT 1 FROM schema_migrations WHERE version=?').get(version)){
-    migrateMarketParity(db);migrateLocalPaymentCollection(db);return;
+    migrateMarketParity(db);migrateLocalPaymentCollection(db);migrateLocalBilling(db);return;
   }
   return transaction(db,()=>{
   db.exec(`
@@ -365,6 +366,7 @@ export function migrate(db) {
   if(!outboxCols.has('next_attempt_at'))db.exec('ALTER TABLE domain_outbox ADD COLUMN next_attempt_at TEXT');
   db.exec('CREATE INDEX IF NOT EXISTS idx_outbox_retry ON domain_outbox(delivered_at,next_attempt_at,id)');
   migrateLocalPaymentCollection(db);
+  migrateLocalBilling(db);
   db.prepare('INSERT INTO schema_migrations(version,applied_at) VALUES(?,?)').run(version,nowIso());
   });
 }

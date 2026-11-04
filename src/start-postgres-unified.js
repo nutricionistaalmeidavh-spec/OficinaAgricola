@@ -1,3 +1,4 @@
+import {requestPayloadLimit} from './platform/billing-http-limits.js';
 import {fileURLToPath} from 'node:url';
 // Backend canônico PostgreSQL. Sem SQLite ou fallback para o runtime do Oficina.
 // Self-hosted R$0; PostgreSQL embarcado no instalador Windows.
@@ -10,6 +11,7 @@ import {createPostgresTenantRegistry} from './platform/async-postgres-registry.j
 import {createPostgresTenantRuntimeFactory} from './platform/postgres-tenant-runtime.js';
 import {createPostgresUnifiedGateway} from './platform/postgres-unified-gateway.js';
 import {loadTenantPaymentConfigs,resolveTenantPaymentOptions} from './platform/tenant-payment.js';
+import {loadTenantReminderSenders} from './platform/tenant-reminder-smtp.js';
 
 const registryUrl=process.env.OFICINA_POSTGRES_REGISTRY_URL;
 const operationsUrl=process.env.OFICINA_POSTGRES_OPERATIONS_URL;
@@ -59,6 +61,7 @@ async function staticAsset(url,res){
  }catch{return respond(res,404,{},'Not found');}
 }
 const tenantPaymentConfigs=loadTenantPaymentConfigs(process.env.TENANCY_PAYMENT_CONFIG_FILE);
+const reminderSenderForUnit=loadTenantReminderSenders(process.env.TENANCY_REMINDER_SMTP_CONFIG_FILE);
 let tenantFactory;
 try{
  await registryPool.query('SELECT 1');
@@ -87,7 +90,8 @@ try{
    allowProvision:process.env.OFICINA_POSTGRES_PROVISION_NEW_UNITS==='true',
    schemaPrefix:process.env.OFICINA_POSTGRES_SCHEMA_PREFIX||'oficina',
    localStorageRoot:process.env.OFICINA_POSTGRES_STORAGE_ROOT||'./storage/postgres',
-   paymentOptionsForUnit:unit=>resolveTenantPaymentOptions(unit,tenantPaymentConfigs)
+   paymentOptionsForUnit:unit=>({...resolveTenantPaymentOptions(unit,tenantPaymentConfigs),
+      reminderSender:reminderSenderForUnit(unit)})
  });
  const gateway=createPostgresUnifiedGateway({
    registry,tenantHandlerForUnit:tenantFactory.handlerForUnit,
@@ -106,8 +110,7 @@ try{
     return respond(res,405,{},'Method not allowed');
    return staticAsset(url,res);
   }
-  const max= /^\/api\/work-orders\/[1-9][0-9]*\/attachments$/.test(url.pathname)&&
-    req.method==='POST'?7*1024*1024:1048576;
+  const max=requestPayloadLimit(req.method,url.pathname);
   const chunks=[];
   let bytes=0;
   try{
