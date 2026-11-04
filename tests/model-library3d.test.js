@@ -202,3 +202,22 @@ test('captura determinística do canvas 3D não depende de screenshot full-page 
   assert.match(qa,/snapshotViewer\(\)/);
   assert.match(qa,/Buffer\.from\(.*base64/);
 });
+
+
+test('viewer reconhece 4 conjuntos reais de rodas com nomes legados e reparados',async()=>{
+  const {verifyRepairedWheels}=await import('../public/model-viewer.js');
+  const nodes=names=>({
+    traverse(cb){
+      for(const name of names){
+        const mesh={isMesh:true};
+        const node={name,traverse(fn){fn(node);fn(mesh)}};
+        cb(node);
+      }
+    }
+  });
+  assert.equal(verifyRepairedWheels(nodes(['ARTISYS_NEW_WHEEL_FL','ARTISYS_NEW_WHEEL_FR','ARTISYS_NEW_WHEEL_RL','ARTISYS_NEW_WHEEL_RR'])),4);
+  assert.equal(verifyRepairedWheels(nodes(['ArtiSys_Wheel_01_Reused','ArtiSys_Wheel_02_Reused','ArtiSys_Wheel_03_Reused','ArtiSys_Wheel_04_Reused'])),4);
+  assert.equal(verifyRepairedWheels(nodes(['ArtiSys_Wheel_01_Procedural','ArtiSys_Wheel_02_Procedural','ArtiSys_Wheel_03_Procedural','ArtiSys_Wheel_04_Procedural'])),4);
+  assert.throws(()=>verifyRepairedWheels(nodes(['ArtiSys_Wheel_01_Reused','ArtiSys_Wheel_02_Reused'])),/4 rodas/);
+  assert.throws(()=>verifyRepairedWheels(nodes([])),/4 rodas/);
+});
