@@ -51,8 +51,8 @@ async function billingFinanceModal(){
    ${stat('Taxas registradas',money(report.feeCents))}
    ${stat('Repasse líquido registrado',money(report.netSettledCents))}
   </div>
-  <p class="muted">Conciliação associa um lançamento bancário a um recebimento existente; não adiciona receita em duplicidade. Os lembretes só geram rascunhos locais, sem disparar mensagens.</p>
-  <div class="action-row"><button class="btn sm" type="button" id="prepareBillingReminders">Preparar lembretes</button></div>
+  <p class="muted">O extrato associa recebimentos existentes sem duplicar receita. Lembretes são preparados automaticamente no funcionamento offline; envio só quando SMTP próprio está habilitado.</p>
+  <div class="action-row"><button class="btn sm" type="button" id="prepareBillingReminders">Executar lembretes agora</button></div>
   <form id="statementForm" class="form-stack">
    <h3>Adicionar lançamento de extrato</h3>
    <div class="field-row">
@@ -66,6 +66,15 @@ async function billingFinanceModal(){
    <label>Descrição<input name="description" maxlength="300"></label>
    <button class="btn sm primary" type="submit">Registrar no extrato</button>
   </form>
+  <form id="statementFileForm" class="form-stack">
+   <h3>Importar extrato OFX ou CSV</h3>
+   <div class="field-row">
+    <label>Identificação da conta<input name="bankAccount" maxlength="80" required></label>
+    <label>Arquivo (.ofx ou .csv)<input type="file" name="statementFile" accept=".ofx,.csv,text/csv" required></label>
+   </div>
+   <small class="muted">Até 1 MB ou 1.000 lançamentos. Reimportar não duplica registros. Conciliar recebimentos separadamente.</small>
+   <button class="btn sm primary" type="submit">Importar arquivo</button>
+  </form>
   <h3>Últimos lançamentos</h3>
   <div class="list">${entries.length?entries.map(row=>`<div class="list-item">
    <div><strong>${money(row.amount_cents)}</strong> · ${esc(row.bank_account)}<br>
@@ -77,10 +86,26 @@ async function billingFinanceModal(){
  const reminders=$('#prepareBillingReminders');
  if(reminders)reminders.onclick=async()=>{
   try{
-   const drafts=await api('/api/billing/reminders/prepare',{method:'POST',body:{
-    asOf:new Date().toISOString().slice(0,10),daysAhead:3
+   const result=await api('/api/billing/reminders/run',{method:'POST',body:{daysAhead:3}});
+   toast(result.disabled
+    ?result.prepared+' rascunho(s). SMTP não habilitado; nenhum e-mail enviado.'
+    :result.sent+' e-mail(s) enviado(s); '+(result.uncertain||0)+' requer(em) conferência.');
+  }catch(error){toast(error.message,true)}
+ };
+ const fileForm=$('#statementFileForm');
+ if(fileForm)fileForm.onsubmit=async e=>{
+  e.preventDefault();
+  try{
+   const fd=new FormData(fileForm),file=fd.get('statementFile');
+   if(!file||!file.name||file.size>1024*1024)throw Error('Selecione um OFX ou CSV até 1 MB');
+   const ext=file.name.toLowerCase().split('.').at(-1);
+   if(!['csv','ofx'].includes(ext))throw Error('Formato suportado: .csv ou .ofx');
+   const result=await api('/api/billing/statements/import',{method:'POST',body:{
+    bankAccount:String(fd.get('bankAccount')||''),
+    format:ext.toUpperCase(),content:await file.text()
    }});
-   toast(drafts.length+' lembrete(s) em rascunho — nenhum envio realizado');
+   toast(result.imported+' lançamento(s) importado(s); '+result.repeated+' já existia(m).');
+   await billingFinanceModal();
   }catch(error){toast(error.message,true)}
  };
  const statement=$('#statementForm');
@@ -95,7 +120,7 @@ async function billingFinanceModal(){
    toast('Lançamento de extrato registrado');await billingFinanceModal();
   }catch(error){toast(error.message,true)}
  };
- $('[data-match-entry]').forEach(btn=>btn.onclick=async()=>{
+ document.querySelectorAll('[data-match-entry]').forEach(btn=>btn.onclick=async()=>{
   try{
    const receipts=await api('/api/billing/receipts/available?limit=100');
    const bank=entries.find(x=>x.id===btn.dataset.matchEntry);
