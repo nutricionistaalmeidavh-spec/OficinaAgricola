@@ -1,5 +1,5 @@
 import { createHash, createHmac } from 'node:crypto';
-import { createReadStream, statSync } from 'node:fs';
+import { createReadStream, statSync, lstatSync, realpathSync } from 'node:fs';
 import { resolve, relative, join, sep } from 'node:path';
 import { verifyBackup } from './backup.js';
 
@@ -81,7 +81,7 @@ export function createS3BackupClient({
     let response;
     try{
       response=await httpFetch(url,{
-        method:'PUT',headers:signedHeaders({method:'PUT',path,payloadHash:hash,metadataHash:hash}),
+        method:'PUT',headers:{...signedHeaders({method:'PUT',path,payloadHash:hash,metadataHash:hash}),'Content-Length':String(size)},
         body,duplex:'half',redirect:'error'
       });
     }finally{body.destroy();}
@@ -97,6 +97,21 @@ export function createS3BackupClient({
   }
   return Object.freeze({putFile});
 }
+function safeArchiveFile(archive,relPath){
+  const parts=splitKey(relPath);
+  let current=archive;
+  for(const part of parts){
+    current=join(current,part);
+    if(lstatSync(current).isSymbolicLink())
+      throw Error('Backup contém link simbólico e não pode ser espelhado remotamente');
+  }
+  if(!lstatSync(current).isFile())
+    throw Error('Backup contém objeto não regular');
+  const root=realpathSync(archive),real=realpathSync(current);
+  if(!real.startsWith(root+sep))
+    throw Error('Backup aponta para arquivo fora do diretório permitido');
+  return current;
+}
 /**
  * Upload immutable verified snapshots. Manifest is always published LAST,
  * so a partial attempt is never advertised as a completed remote backup.
@@ -110,16 +125,19 @@ export async function mirrorVerifiedTenantBackups({records,backupRoot,client}){
     const rel=relative(base,archive);
     if(!rel||rel==='..'||rel.startsWith('..'+sep)||rel.startsWith(sep))
       throw Error('Backup fora da raiz permitida');
+    const rootReal=realpathSync(base),archiveReal=realpathSync(archive);
+    if(!archiveReal.startsWith(rootReal+sep)||lstatSync(archive).isSymbolicLink())
+      throw Error('Backup fora da raiz de armazenamento permitida');
     const manifest=verifyBackup(archive);
     const keyRoot=rel.split(sep).join('/');
     for(const item of manifest.files){
       const fragments=splitKey(item.path);
       await client.putFile({
-        filePath:join(archive,...fragments),
+        filePath:safeArchiveFile(archive,fragments.join('/')),
         key:keyRoot+'/'+fragments.join('/')
       });
     }
-    await client.putFile({filePath:join(archive,'manifest.json'),key:keyRoot+'/manifest.json'});
+    await client.putFile({filePath:safeArchiveFile(archive,'manifest.json'),key:keyRoot+'/manifest.json'});
     mirrored.push({archive:keyRoot,files:manifest.files.length+1});
   }
   return mirrored;
