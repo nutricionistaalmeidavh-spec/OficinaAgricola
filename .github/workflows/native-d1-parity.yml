@@ -48,6 +48,8 @@ jobs:
           compatibility_flags = ["nodejs_compat"]
           [vars]
           ASYNC_BACKEND_SERVICE_TOKEN = "d1-local-ephemeral-test-token-2026-11-04-a"
+          ASYNC_TENANT_COMPANY_ID = "2"
+          ASYNC_TENANT_UNIT_ID = "4"
           [[d1_databases]]
           binding = "DB"
           database_name = "oficina-d1-ephemeral-ci"
