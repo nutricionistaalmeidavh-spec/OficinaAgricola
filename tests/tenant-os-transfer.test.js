@@ -5,7 +5,7 @@ import {createUser} from '../src/auth.js';
 import {createCustomer,createMachine} from '../src/services/catalog.js';
 import {createWorkOrder,transitionWorkOrder} from '../src/services/work-orders.js';
 import {migrateTenantRegistry,createTenantCompany,createTenantUnit} from '../src/platform/tenant-registry.js';
-import {transferTenantWorkOrder,retryTenantWorkOrderTransfer,getTenantTransferDossier} from '../src/platform/tenant-os-transfer.js';
+import {transferTenantWorkOrder,retryTenantWorkOrderTransfer,getTenantTransferDossier,listTenantOrderTransfers} from '../src/platform/tenant-os-transfer.js';
 import {saveQuote,approveQuote} from '../src/services/quotes.js';
 import {createPart,addInventoryMovement,consumePart} from '../src/services/inventory.js';
 import {addReceipt} from '../src/services/finance.js';
@@ -121,6 +121,7 @@ test('complex OS handoff preserves original fiscal, stock, payments, quote and a
   assert.equal(dossier.originUnitId,s.company.unitId);
   assert.equal(dossier.targetUnitId,s.targetUnit.id);
   assert.equal(dossier.authoritativeLedgers,'ORIGIN');
+  assert.equal(listTenantOrderTransfers({...params,companyId:s.company.id})[0].targetWorkOrderId,outcome.targetWorkOrderId);
   const again=transferTenantWorkOrder(params);
   assert.equal(again.created,false);
   assert.equal(again.targetWorkOrderId,outcome.targetWorkOrderId);
