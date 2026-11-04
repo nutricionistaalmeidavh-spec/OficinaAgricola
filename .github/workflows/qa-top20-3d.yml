@@ -5,6 +5,11 @@ on:
     branches: [feat/visualizador3d-top20-20261103]
     paths:
       - .github/workflows/qa-top20-3d.yml
+      - src/platform/session-http.js
+      - public/model-viewer.js
+      - public/model-library3d.js
+      - public/model-library.js
+      - scripts/qa-model-library3d.mjs
   workflow_dispatch:
 
 permissions:
