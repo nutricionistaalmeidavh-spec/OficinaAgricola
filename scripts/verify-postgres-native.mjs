@@ -96,5 +96,23 @@ try{
  const cash=await service.cashSummary();
  assert.equal(cash.movementTotalCents,0);
  assert.equal((await service.closeCashSession({closingCents:3000})).status,'FECHADO');
- console.log('PostgreSQL 16 real: schema, OS, orçamento, caixa, venda, estorno, estoque e pagamentos OK');
+
+ // Real PostgreSQL verification of the same automotive workflows already
+ // required by SQLite and local D1.
+ const fitting=await service.savePartFitment(part.id,{brand:'Fiat',model:'Uno'});
+ assert.equal((await service.listCompatibleParts(machine.id))[0].id,part.id);
+ await service.deletePartFitment(part.id,fitting.id);
+ assert.equal((await service.listCompatibleParts(machine.id)).length,0);
+ const plan=await service.createMaintenancePlan(machine.id,{
+  name:'Revisão semestral',intervalDays:180,startingDate:'2026-05-01'
+ });
+ assert.equal(plan.next_due_date,'2026-10-28');
+ const alert=await service.listMaintenanceAlerts({today:'2026-11-04'});
+ assert.ok(alert.some(row=>row.id===plan.id),'overdue maintenance must be reported');
+ const completed=await service.completeMaintenancePlan(plan.id,{performedAt:'2026-11-04'});
+ assert.equal(completed.last_completed_at,'2026-11-04');
+ assert.equal((await service.listServiceRecords(machine.id)).length,1);
+ await assert.rejects(service.completeMaintenancePlan(plan.id,{performedAt:'2026-11-04'}),
+   /já concluído/);
+ console.log('PostgreSQL 16 real: OS, caixa, estorno, estoque, aplicações de peças e manutenção preventiva OK');
 }finally{await pool.end();}
