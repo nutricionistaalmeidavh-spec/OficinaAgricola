@@ -181,7 +181,15 @@ const VERSION='2026-11-04-async-canonical-initial';
 export function asyncTenantSchema(engine){
  if(!['postgres','d1'].includes(engine))
    throw Error('Engine SQL assíncrono inválido');
- const statements=[...TABLES,...ADDITIONAL_TENANT_TABLES].map(sql=>{
+ const statements=[...TABLES,...ADDITIONAL_TENANT_TABLES,
+   `CREATE TABLE IF NOT EXISTS tenant_remote_upload_requests(
+     work_order_id INTEGER NOT NULL REFERENCES work_orders(id),
+     request_id TEXT NOT NULL,
+     payload_hash TEXT NOT NULL,
+     attachment_id INTEGER NOT NULL REFERENCES attachments(id),
+     PRIMARY KEY(work_order_id,request_id)
+   )`
+ ].map(sql=>{
    if(engine!=='postgres')return sql;
    // Runtime-issued 48-bit IDs and monetary cent amounts exceed PostgreSQL
    // INT4. Keep every FK and canonical monetary column as BIGINT.
