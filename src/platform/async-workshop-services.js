@@ -489,7 +489,9 @@ export function createAsyncWorkshopServices(port,{fiscalProvider=null,objectStor
  });
  const billing=createBillingService(port,{
   receivePayment:services.receivePayment,getPaymentSummary:services.getPaymentSummary,
-  providers:paymentOptions?.billingProviders??{}
+  providers:paymentOptions?.billingProviders??{},
+  reversePayment:services.reverseReceipt,
+  reminderSender:paymentOptions?.reminderSender??null
  });
  return Object.freeze({...services,...payments,...billing,...createAsyncLegacyViews(port,services)});
 }
