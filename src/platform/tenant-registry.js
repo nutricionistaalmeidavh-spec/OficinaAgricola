@@ -81,12 +81,22 @@ export function requireCompanyAdmin(db,userId,companyId) {
   const result=db.prepare("SELECT 1 FROM tenant_memberships m JOIN tenant_units u ON u.id=m.unit_id JOIN tenant_companies c ON c.id=u.company_id WHERE m.user_id=? AND u.company_id=? AND m.active=1 AND m.role='ADMIN' AND u.active=1 AND c.active=1 LIMIT 1").get(userId,companyId);
   if (!result) fail('Permissão: administração da empresa necessária');
 }
+/** Company-wide reports require explicit ADMIN membership in EVERY active unit. */
+export function requireCompanyReportingAdmin(db,userId,companyId){
+  requireCompanyAdmin(db,userId,companyId);
+  const unassigned=db.prepare(`SELECT COUNT(*) n FROM tenant_units u
+    JOIN tenant_companies c ON c.id=u.company_id
+    LEFT JOIN tenant_memberships m ON m.unit_id=u.id AND m.user_id=?
+    WHERE u.company_id=? AND u.active=1 AND c.active=1
+      AND (m.user_id IS NULL OR m.active<>1 OR m.role<>'ADMIN')`).get(userId,companyId).n;
+  if(unassigned)fail('Permissão: relatório global exige acesso administrativo a todas as unidades',403);
+}
 function audit(db,actorId,action,companyId,unitId,targetId,detail={}){
   db.prepare('INSERT INTO tenant_audit(actor_user_id,action,company_id,unit_id,target_user_id,detail_json,created_at) VALUES(?,?,?,?,?,?,?)')
     .run(actorId,action,companyId,unitId??null,targetId??null,JSON.stringify(detail),nowIso());
 }
 export function listTenantAudit(db,actorId,companyId,{limit=100}={}){
-  requireCompanyAdmin(db,actorId,companyId);
+  requireCompanyReportingAdmin(db,actorId,companyId);
   const capped=Math.min(200,Math.max(1,Number(limit)||100));
   return db.prepare('SELECT id,actor_user_id,action,company_id,unit_id,target_user_id,detail_json,created_at FROM tenant_audit WHERE company_id=? ORDER BY id DESC LIMIT ?')
     .all(companyId,capped);
