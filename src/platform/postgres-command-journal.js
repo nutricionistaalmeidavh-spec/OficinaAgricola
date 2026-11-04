@@ -6,6 +6,16 @@ import {createHash} from 'node:crypto';
 // duplicate sales, payments or stock in a network-failure replay.
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 const identifier=value=>typeof value==='string'&&/^[A-Za-z0-9_:.-]{3,128}$/.test(value);
+const safeCreate=/^\/api\/(?:customers|machines|work-orders|parts|services|schedule|expenses|inventory\/movements|sales|cash\/open|cash\/current\/movements|cash\/current\/close)$/;
+const safeLinked=/^\/api\/work-orders\/[1-9][0-9]*\/(?:parts|receipts|checklists)$/;
+const safeUpdate=/^\/api\/(?:customers|machines|parts|services|schedule|expenses|company|work-orders)(?:\/[1-9][0-9]*)?$/;
+export function journalEligible(method,path){
+ const verb=String(method??'').toUpperCase();
+ if(verb==='POST')return safeCreate.test(path)||safeLinked.test(path);
+ if(verb==='PATCH'||verb==='PUT')
+   return safeUpdate.test(path)||verb==='PUT'&&/^\/api\/work-orders\/[1-9][0-9]*\/quote$/.test(path);
+ return false;
+}
 function stable(value){
  if(Array.isArray(value))return value.map(stable);
  if(value&&typeof value==='object')
@@ -69,7 +79,8 @@ export function createPostgresCommandJournal(port){
        const serialized=await result.text();
        // Roll back any writes the nested handler may have performed before
        // returning an error. Do not persist unsuccessful replies.
-       const error=fail('Comando falhou',result.status);
+       const error=new Error('Comando falhou');
+       error.status=result.status;
        error.safeResponse={status:result.status,body:serialized,
          contentType:result.headers.get('content-type')||'application/json'};
        throw error;
