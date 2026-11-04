@@ -42,7 +42,12 @@ export function createNativeApiBridge({fetchImpl=fetch}={}){
   const commonHeaders={authorization:'Bearer '+backend.serviceToken,
     'content-type':'application/json'};
   const remoteFetch=async(url,options)=>{
-   try{return await fetchImpl(url,options);}
+   try{
+     const response=await fetchImpl(url,{...options,redirect:'manual'});
+     if(response.status>=300&&response.status<400)
+       fail('Redirecionamento do backend nativo recusado',502);
+     return response;
+   }
    catch{fail('Backend nativo temporariamente indisponível',503);}
   };
   const auth=await remoteFetch(new URL('/v1/internal/gateway-session',base),{
