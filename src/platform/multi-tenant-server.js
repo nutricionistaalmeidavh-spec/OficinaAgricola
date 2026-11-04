@@ -12,6 +12,7 @@ import { assertSecureNetwork } from './network.js';
 import { loginHttp, validateSession, logout, hashPassword } from '../auth.js';
 import { createApprovalLink, createMaintenanceCrmTasks } from '../services/market-parity.js';
 import { financeSummary } from '../services/finance.js';
+import { sharePartCatalog } from './tenant-catalog-sharing.js';
 import { seedDefaultChecklists, recoverOrphanAttachments } from '../services/operations.js';
 import { createEventRuntime } from './event-runtime.js';
 import { dispatchOutbox } from './outbox.js';
@@ -163,6 +164,10 @@ export function createMultiTenantServer({
       return json(res,200,changeUnitMembership(registryDb,user.id,await readJson(req)));
     if(path==='/api/tenancy/memberships'&&method==='GET')
       return json(res,200,listUnitMembers(registryDb,user.id,positive(url.searchParams.get('unitId'))));
+    if(path==='/api/tenancy/share-part'&&method==='POST'){
+      const body=await readJson(req);
+      return json(res,200,sharePartCatalog({registryDb,unitRuntime,actorUserId:user.id,...body}));
+    }
     if(path==='/api/tenancy/audit'&&method==='GET')
       return json(res,200,listTenantAudit(registryDb,user.id,positive(url.searchParams.get('companyId'))));
     if(path==='/api/tenancy/company-summary'&&method==='GET'){
