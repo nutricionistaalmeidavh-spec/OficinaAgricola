@@ -55,7 +55,7 @@ export function addReceipt(db,workOrderId,input){
    return db.prepare('SELECT * FROM receipts WHERE id=?').get(receiptId);
  });
 }
-export function reverseReceipt(db,workOrderId,receiptId,{note='',createdBy=null}={}){
+export function reverseReceipt(db,workOrderId,receiptId,{note='',createdBy=null,externalRefundId=null}={}){
  return transaction(db,()=>{
    getWorkOrder(db,workOrderId);
    const row=db.prepare('SELECT * FROM receipts WHERE id=? AND work_order_id=?').get(receiptId,workOrderId);
@@ -63,8 +63,12 @@ export function reverseReceipt(db,workOrderId,receiptId,{note='',createdBy=null}
    if(row.reversed_at)throw new Error('Recebimento já estornado');
    const billingInstallment=db.prepare(`SELECT i.id,p.method FROM billing_installments i
      JOIN billing_plans p ON p.id=i.plan_id WHERE i.receipt_id=? AND i.status='PAID'`).get(receiptId);
-   if(billingInstallment?.method!=='MANUAL'&&billingInstallment)
-     throw new Error('Cobrança externa exige confirmação de estorno externo antes da baixa financeira');
+   if(billingInstallment?.method!=='MANUAL'&&billingInstallment){
+     const authorized=externalRefundId&&db.prepare(
+       "SELECT id FROM billing_refunds WHERE id=? AND installment_id=? AND receipt_id=? AND amount_cents=? AND status='CONFIRMED'"
+     ).get(externalRefundId,billingInstallment.id,receiptId,row.amount_cents);
+     if(!authorized)throw new Error('Cobrança externa exige confirmação de estorno externo antes da baixa financeira');
+   }
    if(db.prepare('SELECT id FROM billing_bank_entries WHERE receipt_id=?').get(receiptId))
      throw new Error('Extrato conciliado exige reconciliação antes do estorno');
    if(billingInstallment&&db.prepare('SELECT id FROM billing_settlements WHERE installment_id=?').get(billingInstallment.id))
@@ -77,6 +81,9 @@ export function reverseReceipt(db,workOrderId,receiptId,{note='',createdBy=null}
    postPaymentEvent(db,{sourceType:'OS_RECEIPT',sourceId:receiptId,eventType:'REFUNDED',
      amountCents:row.amount_cents,method:row.method,cashSessionId:cash?.id||null,
      createdBy,note:`Estorno recebimento OS #${workOrderId}`,createdAt:t});
+   if(billingInstallment?.method!=='MANUAL'&&billingInstallment)
+     db.prepare("UPDATE billing_installments SET status='FAILED',updated_at=? WHERE id=? AND receipt_id=? AND status='PAID'")
+       .run(t,billingInstallment.id,receiptId);
    if(billingInstallment?.method==='MANUAL')
      db.prepare(`UPDATE billing_installments SET status='PENDING',receipt_id=NULL,
        attempt_no=attempt_no+1,updated_at=? WHERE id=? AND status='PAID'`)
