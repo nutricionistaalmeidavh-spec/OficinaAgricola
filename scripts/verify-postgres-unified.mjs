@@ -174,6 +174,30 @@ try{
    assert.equal(actor.companyId,company.id);
    const other=await call('/api/customers',{token,unit:9999});
    assert.equal(other.status,403);
+
+   const summary=await call('/api/tenancy/company-summary?companyId=1',{token});
+   assert.equal(summary.status,200,JSON.stringify(summary.data));
+   assert.equal(summary.data.totals.workOrders,1);
+   assert.equal(summary.data.totals.customers,1);
+   const companySummary=await call('/api/tenancy/company-summary?companyId='+company.id,{token});
+   assert.equal(companySummary.status,200,JSON.stringify(companySummary.data));
+   assert.equal(companySummary.data.totals.customers,0);
+   const list=await call('/api/tenancy/shareable-customers?unitId=1',{token});
+   assert.equal(list.status,200,JSON.stringify(list.data));
+   assert.equal(list.data.customers.length,1);
+   const tech=await registry.grantMembership(adminId,{
+     unitId:newUnitId,username:'tech-p4',name:'Tecnico P4',
+     password:'TestPass2026!',role:'TECNICO'
+   });
+   const techSession=await registry.login({username:'tech-p4',password:'TestPass2026!'});
+   assert.equal(techSession.user.id,tech.id);
+   const denied=await call('/api/tenancy/company-summary?companyId='+company.id,{
+     token:techSession.token
+   });
+   assert.equal(denied.status,403,'technician cannot see cross-company finances');
+   assert.equal((await call('/api/tenancy/shareable-customers?unitId='+newUnitId,{
+     token:techSession.token
+   })).status,403);
    const bindingA=await registry.getTenantStorageBinding(1,1);
    const bindingB=await registry.getTenantStorageBinding(company.id,newUnitId);
    assert.notEqual(bindingA.schemaName,bindingB.schemaName);
