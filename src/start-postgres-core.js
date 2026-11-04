@@ -3,6 +3,7 @@ import {createPostgresPort} from './platform/async-sql-ports.js';
 import {createAsyncWorkshopServices} from './platform/async-workshop-services.js';
 import {migrateAsyncTenantStore,claimAsyncTenantIdentity,assertAsyncTenantIdentity} from './platform/async-tenant-migrations.js';
 import {createAsyncWorkshopHandler} from './platform/async-workshop-handler.js';
+import {createS3BackupClient} from './platform/s3-backup.js';
 
 // Experimental, separately addressed async tenant API. The existing UI/main
 // runtime still uses SQLite until its entire business workflow is ported.
@@ -21,8 +22,20 @@ const pool=new Pool({connectionString,max:5,connectionTimeoutMillis:5000,
   idleTimeoutMillis:20000,statement_timeout:10000});
 await pool.query('SELECT 1');
 const port=createPostgresPort({pool});
+const storageMode=String(process.env.OFICINA_OBJECT_STORAGE||'none').toLowerCase();
+if(!['none','s3'].includes(storageMode))
+ throw Error('PostgreSQL nativo permite object storage none ou s3 explícito');
+const objectStore=storageMode==='s3'?createS3BackupClient({
+ endpoint:process.env.OFICINA_ATTACHMENT_S3_ENDPOINT,
+ bucket:process.env.OFICINA_ATTACHMENT_S3_BUCKET,
+ region:process.env.OFICINA_ATTACHMENT_S3_REGION||'us-east-1',
+ accessKeyId:process.env.OFICINA_ATTACHMENT_S3_ACCESS_KEY_ID,
+ secretAccessKey:process.env.OFICINA_ATTACHMENT_S3_SECRET_ACCESS_KEY,
+ prefix:(process.env.OFICINA_ATTACHMENT_S3_PREFIX||'oficina-attachments')+
+   '/company-'+companyId+'/unit-'+unitId
+}):null;
 const handler=createAsyncWorkshopHandler({
- services:createAsyncWorkshopServices(port),serviceToken:token,
+ services:createAsyncWorkshopServices(port,{objectStore}),serviceToken:token,
  migrate:async()=>{
    const result=await migrateAsyncTenantStore(port);
    await claimAsyncTenantIdentity(port,{companyId,unitId});
