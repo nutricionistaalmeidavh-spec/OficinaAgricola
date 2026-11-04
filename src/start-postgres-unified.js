@@ -10,7 +10,6 @@ import {createPostgresTenantRegistry} from './platform/async-postgres-registry.j
 import {createPostgresTenantRuntimeFactory} from './platform/postgres-tenant-runtime.js';
 import {createPostgresUnifiedGateway} from './platform/postgres-unified-gateway.js';
 import {loadTenantPaymentConfigs,resolveTenantPaymentOptions} from './platform/tenant-payment.js';
-import {loadTenantAsaasConfigs,createTenantAsaasBillingProviders} from './platform/asaas-tenant-options.js';
 
 const registryUrl=process.env.OFICINA_POSTGRES_REGISTRY_URL;
 const operationsUrl=process.env.OFICINA_POSTGRES_OPERATIONS_URL;
@@ -60,7 +59,6 @@ async function staticAsset(url,res){
  }catch{return respond(res,404,{},'Not found');}
 }
 const tenantPaymentConfigs=loadTenantPaymentConfigs(process.env.TENANCY_PAYMENT_CONFIG_FILE);
-const tenantAsaasConfigs=loadTenantAsaasConfigs(process.env.TENANCY_ASAAS_CONFIG_FILE);
 let tenantFactory;
 try{
  await registryPool.query('SELECT 1');
@@ -75,10 +73,7 @@ try{
    allowProvision:process.env.OFICINA_POSTGRES_PROVISION_NEW_UNITS==='true',
    schemaPrefix:process.env.OFICINA_POSTGRES_SCHEMA_PREFIX||'oficina',
    localStorageRoot:process.env.OFICINA_POSTGRES_STORAGE_ROOT||'./storage/postgres',
-   paymentOptionsForUnit:(unit,port)=>({
-     ...resolveTenantPaymentOptions(unit,tenantPaymentConfigs),
-     billingProviders:createTenantAsaasBillingProviders(unit,tenantAsaasConfigs,port)
-   })
+   paymentOptionsForUnit:unit=>resolveTenantPaymentOptions(unit,tenantPaymentConfigs)
  });
  const gateway=createPostgresUnifiedGateway({
    registry,tenantHandlerForUnit:tenantFactory.handlerForUnit,
