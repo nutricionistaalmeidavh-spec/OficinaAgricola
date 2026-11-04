@@ -3,6 +3,7 @@ import { resolveDatabasePath, resolveStoragePath } from './platform/data-locatio
 import {readFileSync} from 'node:fs';
 import {dirname,join} from 'node:path';
 import { openDatabase, migrate } from './db.js';
+import {loadTenantAsaasConfigs,createTenantAsaasBillingProviders} from './platform/asaas-tenant-options.js';
 import { seed } from './seed.js';
 import { migrateAssistencia } from './assistencia-schema.js';
 import { createAssistenciaServer } from './server-assistencia.js';
@@ -80,8 +81,12 @@ const pixStatic=process.env.OFICINA_PIX_KEY&&process.env.OFICINA_PIX_MERCHANT_NA
   merchantName:process.env.OFICINA_PIX_MERCHANT_NAME,
   merchantCity:process.env.OFICINA_PIX_CITY
 }:null;
+const asaasConfigs=loadTenantAsaasConfigs(process.env.TENANCY_ASAAS_CONFIG_FILE);
+const billingProviders=createTenantAsaasBillingProviders({companyId:1,id:1},asaasConfigs,{
+  first:async(sql,params=[])=>db.prepare(sql).get(...params)
+});
 const server = createAssistenciaServer({ db, storageDir: process.env.STORAGE_DIR, eventRuntime, tls,
-  paymentOptions:{pixStatic}
+  paymentOptions:{pixStatic,billingProviders}
 });
 const stopBackupSchedule=startBackupSchedule({
  databasePath:process.env.DATABASE_PATH,
