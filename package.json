@@ -28,5 +28,8 @@
     "db:postgres:verify-registry": "node scripts/verify-postgres-registry.mjs",
     "start:postgres:unified": "node src/start-postgres-unified.js",
     "db:postgres:verify-unified": "node scripts/verify-postgres-unified.mjs"
+  },
+  "dependencies": {
+    "pg": "^8.23.1"
   }
 }
