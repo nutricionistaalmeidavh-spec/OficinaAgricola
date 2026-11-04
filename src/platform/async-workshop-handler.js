@@ -39,13 +39,14 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
      await preflight();
    // Service authentication does not authorize individual employees.
    // Reject every operational call without a tenant-specific user session.
+   let actor=null;
    if(!serviceOnlyNativeRoute(path)){
      const personalToken=request.headers.get('x-oficina-session')||'';
      if(personalToken.length<32)
        throw Object.assign(new Error('Sessão do usuário obrigatória'),{status:401});
      if(typeof services.validateSession!=='function')
        throw Error('Autenticação nativa não configurada');
-     const actor=await services.validateSession(personalToken);
+     actor=await services.validateSession(personalToken);
      if(!requiredNativeRoles(method,path).includes(actor?.role))
        throw Object.assign(new Error('Permissão insuficiente na unidade'),{status:403});
    }
@@ -72,6 +73,45 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
      const {sessionToken}=await dataFrom(request);
      return json(await services.logout(sessionToken));
    }
+   // Legacy interface read models are native SQL operations, not SQLite fallbacks.
+   if(path==='/v1/dashboard'&&method==='GET')
+     return json(await services.getDashboard({role:actor.role}));
+   if(path==='/v1/reports/operations'&&method==='GET')
+     return json(await services.getOperationalReport({
+       from:u.searchParams.get('from')||undefined,
+       to:u.searchParams.get('to')||undefined,
+       includeFinance:['ADMIN','FINANCEIRO'].includes(actor.role)
+     }));
+   if(path==='/v1/company'&&method==='GET')
+     return json(await services.getCompanySettings());
+   if(path==='/v1/company'&&method==='PATCH')
+     return json(await services.updateCompanySettings(await dataFrom(request)));
+   if(path==='/v1/customers/page'&&method==='GET')
+     return json(await services.listCustomersPage({
+       search:u.searchParams.get('search')||'',
+       includeInactive:u.searchParams.get('includeInactive')==='1',
+       limit:u.searchParams.get('limit')||50,cursor:u.searchParams.get('cursor')
+     }));
+   const customerOne=path.match(/^\/v1\/customers\/([1-9][0-9]*)$/);
+   if(customerOne&&method==='GET')
+     return json(await services.getCustomer(Number(customerOne[1])));
+   if(path==='/v1/machines/page'&&method==='GET')
+     return json(await services.listMachinesPage({
+       customerId:u.searchParams.get('customerId')||null,
+       search:u.searchParams.get('search')||'',
+       includeInactive:u.searchParams.get('includeInactive')==='1',
+       limit:u.searchParams.get('limit')||50,cursor:u.searchParams.get('cursor')
+     }));
+   const machineOne=path.match(/^\/v1\/machines\/([1-9][0-9]*)$/);
+   if(machineOne&&method==='GET')
+     return json(await services.getMachine(Number(machineOne[1])));
+   const machineHistory=path.match(/^\/v1\/machines\/([1-9][0-9]*)\/history$/);
+   if(machineHistory&&method==='GET')
+     return json(await services.machineHistory(Number(machineHistory[1])));
+   if(path==='/v1/cash/current'&&method==='GET')
+     return json(await services.getCurrentCashSession());
+   if(path==='/v1/cash/sessions'&&method==='GET')
+     return json(await services.listCashSessions());
    if(path==='/v1/customers'&&method==='POST')
      return json(await services.createCustomer(await dataFrom(request)),201);
    if(path==='/v1/customers'&&method==='GET')
