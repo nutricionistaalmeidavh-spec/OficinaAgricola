@@ -22,7 +22,7 @@ async function dataFrom(request){
    throw Object.assign(new Error('Objeto JSON obrigatório'),{status:400});
  return data;
 }
-export function createAsyncWorkshopHandler({services,serviceToken,migrate=null}={}){
+export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,preflight=null}={}){
  if(!services||typeof services!=='object')throw Error('Serviço SQL assíncrono indisponível');
  if(!serviceToken||String(serviceToken).length<32)
    throw Error('Token privado do backend SQL deve ter ao menos 32 caracteres');
@@ -32,6 +32,10 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null}=
   if(!authorized)return json({error:'Serviço privado: acesso não autorizado'},401);
   try{
    const u=new URL(request.url),path=u.pathname,method=request.method.toUpperCase();
+   // Called only after private Bearer authentication and before ANY
+   // operational query; prevents a wrongly mapped company from reading data.
+   if(preflight&&path!=='/v1/migrate'&&path!=='/v1/health')
+     await preflight();
    if(path==='/v1/health'&&method==='GET')
      return json({ok:true,backend:'async-workshop'});
    if(path==='/v1/migrate'&&method==='POST'&&migrate)
