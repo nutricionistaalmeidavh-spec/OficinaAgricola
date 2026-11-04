@@ -52,6 +52,7 @@ try{
    assert.equal(await registry.requireCompanyReportingAdmin(actor,company.id),true);
    await assert.rejects(registry.changeMembership(actor,{unitId:unit.id,userId:actor,role:'TECNICO',active:false}),/Último|administrador/i);
    await registry.changeMembership(actor,{unitId:unit.id,userId:tech.id,role:'ADMIN',active:true});
+   await registry.grantMembership(actor,{unitId:company.unitId,username:'tecnico-a',role:'ADMIN'});
    await registry.changeMembership(actor,{unitId:unit.id,userId:actor,role:'ADMIN',active:false});
    await assert.rejects(registry.requireUnitMembership(actor,unit.id),/Permissão/i);
    const records=await registry.listAudit(tech.id,company.id);
