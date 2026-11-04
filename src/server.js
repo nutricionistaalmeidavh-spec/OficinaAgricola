@@ -240,7 +240,9 @@ export function createAppServer({db=openDatabase(),storageDir=process.env.STORAG
   const billing=createBillingService(createCommonDataAdapter({engine:'sqlite',db}),{
     receivePayment:input=>addReceipt(db,input.workOrderId,input),
     getPaymentSummary:workOrderId=>getPaymentSummary(db,workOrderId),
-    providers:paymentOptions?.billingProviders??{}
+    providers:paymentOptions?.billingProviders??{},
+    reversePayment:input=>reverseReceipt(db,input.workOrderId,input.receiptId,input),
+    reminderSender:paymentOptions?.reminderSender??null
   });
   return createServer(async(req,res)=>{
     const url=new URL(req.url||'/','http://localhost'); const route=router.match(req.method||'GET',url.pathname);
@@ -271,7 +273,7 @@ export function createAppServer({db=openDatabase(),storageDir=process.env.STORAG
       if(url.pathname.startsWith('/api/billing/')){
         const user=validateSession(db,tokenFrom(req));roleGuard(user,ROLE_FIN);
         const method=req.method,path=url.pathname;
-        const body=method==='POST'?await readJson(req,16384):{};
+        const body=method==='POST'?await readJson(req,path==='/api/billing/statements/import'?1150000:16384):{};
         const data={...body,requestId:body.requestId??req.headers['idempotency-key']};
         const capture=pattern=>path.match(pattern);
         let result;
@@ -281,8 +283,14 @@ export function createAppServer({db=openDatabase(),storageDir=process.env.STORAG
         else if(method==='GET'&&path==='/api/billing/statements')result=await billing.listStatements({limit:url.searchParams.get('limit')||100});
         else if(method==='GET'&&path==='/api/billing/receipts/available')result=await billing.listAvailableReceipts({limit:url.searchParams.get('limit')||100});
         else if(method==='POST'&&path==='/api/billing/statements')result=await billing.importStatement(data);
+        else if(method==='POST'&&path==='/api/billing/statements/import')result=await billing.importStatementFile(data);
         else if(method==='POST'&&path==='/api/billing/settlements')result=await billing.recordSettlement(data);
         else if(method==='POST'&&path==='/api/billing/reminders/prepare')result=await billing.prepareReminders(data);
+        else if(method==='POST'&&path==='/api/billing/reminders/run')result=await billing.dispatchReminders(data);
+        else if(method==='GET'&&path==='/api/billing/reminders')result=await billing.listReminders({limit:url.searchParams.get('limit')||100});
+        else if(method==='GET'&&capture(/^\/api\/billing\/refunds\/([a-f0-9]{32})$/))result=await billing.getExternalRefund(capture(/^\/api\/billing\/refunds\/([a-f0-9]{32})$/)[1]);
+        else if(method==='POST'&&capture(/^\/api\/billing\/refunds\/([a-f0-9]{32})\/sync$/))result=await billing.syncExternalRefund(capture(/^\/api\/billing\/refunds\/([a-f0-9]{32})\/sync$/)[1]);
+        else if(method==='POST'&&capture(/^\/api\/billing\/installments\/([a-f0-9]{32})\/refund$/))result=await billing.requestExternalRefund(capture(/^\/api\/billing\/installments\/([a-f0-9]{32})\/refund$/)[1],data);
         else if(method==='GET'&&capture(/^\/api\/billing\/orders\/([1-9]\d*)\/plan$/))
           result=await billing.getPlanForOrder(Number(capture(/^\/api\/billing\/orders\/([1-9]\d*)\/plan$/)[1]));
         else if(method==='GET'&&capture(/^\/api\/billing\/plans\/([a-f0-9]{32})$/))
