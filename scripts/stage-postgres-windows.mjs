@@ -40,7 +40,7 @@ function walk(dir){
    if(ent.isDirectory())walk(path);
    else if(ent.isFile()){
      const relativeName=relative(target,path).split(sep).join('/');
-     if(!/^(?:bin|lib|share)\/[A-Za-z0-9._@/-]+$/.test(relativeName)||
+     if(!/^(?:bin|lib|share)\/[A-Za-z0-9._@+/-]+$/.test(relativeName)||
         relativeName.includes('//')||relativeName.split('/').includes('..'))
        throw Error('Arquivo PostgreSQL com caminho não permitido: '+relativeName);
      files[relativeName]=createHash('sha256').update(readFileSync(path)).digest('hex');
