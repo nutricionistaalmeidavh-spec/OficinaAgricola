@@ -152,3 +152,49 @@ try {
 } finally {
   if ($appProcess -and -not $appProcess.HasExited) { Stop-Process -Id $appProcess.Id -Force -ErrorAction SilentlyContinue }
 }
+
+# Atualização/reinstalação no mesmo diretório: banco e anexos precisam sobreviver.
+# Mesmo instalador simula um upgrade in-place sem rodar migradores externos.
+Write-Host 'Verificando preservação de dados na reinstalação Windows...'
+$sentinelDir=Join-Path $env:LOCALAPPDATA 'ArtiSys\Oficina\storage\uploads'
+New-Item -ItemType Directory -Path $sentinelDir -Force | Out-Null
+$sentinelFile=Join-Path $sentinelDir 'qa-upgrade-preserve.txt'
+$sentinel='Conteúdo QA preservado após atualização'
+Set-Content -LiteralPath $sentinelFile -Value $sentinel -NoNewline -Encoding utf8
+$installerAgain=Start-Process -FilePath $installer.FullName -ArgumentList @('/S',"/D=$installDir") -Wait -PassThru
+if ($installerAgain.ExitCode -ne 0) { throw "Reinstalação falhou: $($installerAgain.ExitCode)" }
+if (-not (Test-Path -LiteralPath $dbFile -PathType Leaf)) {
+  throw 'Reinstalação apagou o banco do cliente'
+}
+if ((Get-Content -LiteralPath $sentinelFile -Raw -Encoding utf8) -ne $sentinel) {
+  throw 'Reinstalação apagou ou modificou anexos da oficina'
+}
+$upgradeProcess=$null
+try {
+  $upgradeProcess=Start-Process -FilePath $exe.FullName -PassThru
+  $upgradeReady=$false
+  for ($attempt=0; $attempt -lt 80; $attempt++) {
+    Start-Sleep -Milliseconds 500
+    if ($upgradeProcess.HasExited) { throw 'Aplicativo não abriu após reinstalação' }
+    try {
+      $health=Invoke-RestMethod -Uri "$hostUrl/api/health" -TimeoutSec 2
+      if ($health.ok) { $upgradeReady=$true; break }
+    } catch {}
+  }
+  if (-not $upgradeReady) { throw 'Servidor local não respondeu após reinstalação' }
+  $setupAfter=Invoke-RestMethod -Uri "$hostUrl/api/setup/status"
+  if ($setupAfter.required -ne $false) { throw 'Reinstalação perdeu o administrador original' }
+  $loginAfter=Invoke-RestMethod -Uri "$hostUrl/api/auth/login" -Method Post -ContentType 'application/json' -Body '{"username":"gestorqa","password":"SenhaDeTesteQA2026!Local"}'
+  if ($loginAfter.user.role -ne 'ADMIN') { throw 'Reinstalação invalidou o acesso original' }
+  $authAfter=@{ Authorization="Bearer $($loginAfter.token)" }
+  $customerAfter=Invoke-RestMethod -Uri "$hostUrl/api/customers/$($customer.id)" -Headers $authAfter
+  if ($customerAfter.name -ne 'Cliente QA EventBus Windows' -or $customerAfter.id -ne $customer.id) {
+    throw 'Reinstalação perdeu ou alterou cliente salvo no SQLite'
+  }
+  Write-Host 'PASS: Reinstalação preservou login, cliente, banco e arquivos locais'
+} finally {
+  if ($upgradeProcess -and -not $upgradeProcess.HasExited) {
+    Stop-Process -Id $upgradeProcess.Id -Force -ErrorAction SilentlyContinue
+  }
+  Remove-Item -LiteralPath $sentinelFile -Force -ErrorAction SilentlyContinue
+}
