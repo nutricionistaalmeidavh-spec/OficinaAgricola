@@ -148,6 +148,11 @@ test('HTTP isolation: company and unit records, member roles and revoked access'
   assert.equal((await request('GET','/api/tenancy/shareable-parts?unitId='+unit.data.id,undefined,unit.data.id,staffToken)).status,403);
   assert.equal((await request('GET','/api/tenancy/shareable-customers?unitId='+unit.data.id,undefined,unit.data.id,staffToken)).status,403);
   assert.equal((await request('POST','/api/tenancy/share-part',{sourceUnitId:second,targetUnitId:unit.data.id,partId:sharedSource.data.id},unit.data.id,staffToken)).status,403);
+  // Untrusted JSON cannot override authenticated actor identity at the gateway.
+  assert.equal((await request('POST','/api/tenancy/share-part',{sourceUnitId:second,targetUnitId:unit.data.id,partId:sharedSource.data.id,actorUserId:1},unit.data.id,staffToken)).status,403,
+    'body actorUserId must never impersonate a platform admin');
+  assert.equal((await request('POST','/api/tenancy/share-customer',{...shareCustomerBody,actorUserId:1},unit.data.id,staffToken)).status,403,
+    'customer sharing must not allow client-controlled actor identity');
   const revocation=await request('PATCH','/api/tenancy/memberships',{unitId:unit.data.id,userId:member.data.id,role:'TECNICO',active:false});
   assert.equal(revocation.status,200);
   assert.equal((await request('GET','/api/customers',undefined,unit.data.id,staffToken)).status,403);
