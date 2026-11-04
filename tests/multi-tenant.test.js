@@ -99,7 +99,7 @@ test('HTTP isolation: company and unit records, member roles and revoked access'
   const partsOfB=await request('GET','/api/parts',undefined,second);
   assert.equal(partsOfB.status,200);
   assert.deepEqual(partsOfB.data,[],'inventory is physically isolated');
-  const expense=await request('POST','/api/expenses',{description:'Despesa B',amountCents:5500},second);
+  const expense=await request('POST','/api/expenses',{description:'Despesa B',amountCents:5500,paidAt:'2026-11-03T12:00:00.000Z'},second);
   assert.equal(expense.status,200,JSON.stringify(expense.data));
   const expensesOfA=await request('GET','/api/expenses',undefined,1);
   assert.equal(expensesOfA.status,200);
