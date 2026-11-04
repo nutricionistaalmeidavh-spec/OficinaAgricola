@@ -1,0 +1,70 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {openDatabase} from '../src/db.js';
+import {createD1Port} from '../src/platform/async-sql-ports.js';
+import {migrateAsyncTenantStore} from '../src/platform/async-tenant-migrations.js';
+import {createAsyncWorkshopServices} from '../src/platform/async-workshop-services.js';
+
+function localD1(db){
+ return {
+  prepare(sql){return {bind(...args){return {
+   async first(){return db.prepare(sql).get(...args);},
+   async all(){return {results:db.prepare(sql).all(...args)};},
+   async run(){const result=db.prepare(sql).run(...args);return {meta:{changes:Number(result.changes)}};}
+  }}}},
+  async batch(statements){
+   db.exec('BEGIN IMMEDIATE');
+   try{
+    const output=[];for(const s of statements)output.push(await s.run());
+    db.exec('COMMIT');return output;
+   }catch(error){db.exec('ROLLBACK');throw error;}
+  }
+ };
+}
+test('D1 async workshop core creates customer, vehicle and work order in canonical tables',async()=>{
+ const db=openDatabase(':memory:');
+ try{
+  const port=createD1Port({binding:localD1(db)});
+  await migrateAsyncTenantStore(port);
+  const workshop=createAsyncWorkshopServices(port);
+  const c=await workshop.createCustomer({name:'Cliente Real',phone:'16999999999'});
+  const m=await workshop.createMachine({customerId:c.id,type:'AUTOMOVEL',brand:'Fiat',model:'Uno'});
+  const os=await workshop.createWorkOrder({customerId:c.id,machineId:m.id,problemReported:'Ruído na suspensão'});
+  assert.equal(os.status,'ENTRADA');
+  assert.equal(os.os_number,1);
+  assert.equal((await workshop.getWorkOrder(os.id)).id,os.id);
+  assert.equal((await port.all('SELECT * FROM work_order_status_history WHERE work_order_id=?',[os.id])).length,1);
+  const second=await workshop.createWorkOrder({customerId:c.id,machineId:m.id,problemReported:'Novo serviço'});
+  assert.equal(second.os_number,2);
+  await assert.rejects(workshop.createWorkOrder({customerId:999,machineId:m.id,problemReported:'Erro'}),/Cliente/);
+ }finally{db.close();}
+});
+test('D1 async workshop posts stock and receipts atomically without double payment',async()=>{
+ const db=openDatabase(':memory:');
+ try{
+  const port=createD1Port({binding:localD1(db)});
+  await migrateAsyncTenantStore(port);
+  const workshop=createAsyncWorkshopServices(port);
+  const c=await workshop.createCustomer({name:'Empresa A'});
+  const m=await workshop.createMachine({customerId:c.id,type:'TRATOR'});
+  const os=await workshop.createWorkOrder({customerId:c.id,machineId:m.id,problemReported:'Troca de peça'});
+  const part=await workshop.createPart({sku:'KIT-001',description:'Kit de peças',salePriceCents:2000});
+  await workshop.postStockMovement({partId:part.id,type:'ENTRADA',quantity:5});
+  await workshop.postStockMovement({partId:part.id,type:'SAIDA_MANUAL',quantity:2});
+  await assert.rejects(workshop.postStockMovement({partId:part.id,type:'SAIDA_MANUAL',quantity:100}),/Estoque insuficiente/);
+  assert.equal((await port.first('SELECT quantity FROM parts WHERE id=?',[part.id])).quantity,3);
+  assert.equal((await port.first('SELECT SUM(quantity_delta) total FROM inventory_movements WHERE part_id=?',[part.id])).total,3);
+  const now=new Date().toISOString();
+  await port.run(`INSERT INTO quotes(work_order_id,subtotal_cents,discount_cents,total_cents,approval_status,approved_at,created_at,updated_at)
+    VALUES(?,2000,0,2000,'APROVADO',?,?,?)`,[os.id,now,now,now]);
+  await port.run('UPDATE work_orders SET quote_total_cents=2000 WHERE id=?',[os.id]);
+  const first=await workshop.receivePayment({workOrderId:os.id,amountCents:1500,method:'PIX',requestId:'async-pay-001'});
+  const repeat=await workshop.receivePayment({workOrderId:os.id,amountCents:1500,method:'PIX',requestId:'async-pay-001'});
+  assert.equal(first.id,repeat.id);
+  await assert.rejects(workshop.receivePayment({workOrderId:os.id,amountCents:1000,method:'PIX',requestId:'async-pay-002'}),/Saldo insuficiente/);
+  assert.equal((await port.all('SELECT * FROM payment_events')).length,1);
+  const summary=await workshop.financeSummary();
+  assert.equal(summary.receivedCents,1500);
+  assert.equal(summary.pendingCents,500);
+ }finally{db.close();}
+});
