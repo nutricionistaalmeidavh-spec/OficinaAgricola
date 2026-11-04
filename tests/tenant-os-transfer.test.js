@@ -40,7 +40,7 @@ test('early OS transfer preserves active work in target and closes original with
     legalBasis:'CONTRATO',recordReference:'OS-2026-TRANSFER-001',requestId:'os-transfer-001'};
   const first=transferTenantWorkOrder(params);
   assert.equal(first.status,'COMPLETED');
-  assert.equal(s.source.prepare('SELECT status FROM work_orders WHERE id=?').get(s.os.id).status,'CANCELADA');
+  assert.equal(s.source.prepare('SELECT status FROM work_orders WHERE id=?').get(s.os.id).status,'TRANSFERIDA');
   const target=s.target.prepare('SELECT * FROM work_orders WHERE id=?').get(first.targetWorkOrderId);
   assert.equal(target.status,'ENTRADA');
   assert.equal(target.problem_reported,'Revisão');
