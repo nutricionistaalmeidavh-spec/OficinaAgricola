@@ -155,3 +155,33 @@ test('P3 impede emissão duplicada quando duas sessões tentam ativar a mesma pa
   assert.equal(created,1);
  }finally{releases();db.close();}
 });
+
+test('P4 estorno de parcela manual reabre título, mantendo histórico e aceita novo recebimento',async()=>{
+ const {db,core,order,billing}=await setup();
+ try{
+  const plan=await billing.createPlan({workOrderId:order.id,amountCents:10001,count:1,
+    firstDueDate:'2026-11-10',method:'MANUAL',requestId:'reversal-001'});
+  const first=await billing.confirmManual(plan.installments[0].id,{verified:true});
+  await core.reverseReceipt({workOrderId:order.id,receiptId:first.receipt_id,note:'Estorno solicitado'});
+  assert.equal((await billing.getInstallment(first.id)).status,'PENDING');
+  assert.equal((await core.getPaymentSummary(order.id)).receivedCents,0);
+  const second=await billing.confirmManual(first.id,{verified:true});
+  assert.notEqual(second.receipt_id,first.receipt_id);
+  assert.equal((await core.getPaymentSummary(order.id)).receivedCents,10001);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM payment_events').get().n,3);
+ }finally{db.close();}
+});
+test('P4 não estorna parcela reconciliada no banco nem com repasse contabilizado',async()=>{
+ const {db,core,order,billing}=await setup();
+ try{
+  const plan=await billing.createPlan({workOrderId:order.id,amountCents:10001,count:1,
+    firstDueDate:'2026-11-10',method:'MANUAL',requestId:'reversal-002'});
+  const paid=await billing.confirmManual(plan.installments[0].id,{verified:true});
+  const bank=await billing.importStatement({bankAccount:'matriz',externalId:'bank-irreversible-1',
+    bookedAt:'2026-11-10',amountCents:10001,description:'Recebido'});
+  await billing.matchStatement(bank.id,paid.receipt_id);
+  await assert.rejects(core.reverseReceipt({workOrderId:order.id,receiptId:paid.receipt_id}),
+    /extrato conciliado/i);
+  assert.equal((await core.getPaymentSummary(order.id)).receivedCents,10001);
+ }finally{db.close();}
+});
