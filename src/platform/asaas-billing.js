@@ -64,7 +64,25 @@ export function createAsaasBillingProvider({transport,resolveCustomer,method}={}
   fail('Asaas exige transporte autenticado e resolução de cliente no servidor');
  if(!['BOLETO','PAYMENT_LINK'].includes(method))fail('Modalidade Asaas inválida');
  const billingType=method==='BOLETO'?'BOLETO':'UNDEFINED';
+ async function recover({requestId,workOrderId,amountCents}={}){
+  const ref=validateReference(requestId),sum=amount(amountCents);
+  const customer=String(await resolveCustomer(workOrderId)??'').trim();
+  if(!/^cus_[A-Za-z0-9]+$/.test(customer))fail('Cliente Asaas não vinculado à unidade');
+  const previous=await transport('GET','/payments?externalReference='+encodeURIComponent(ref));
+  const matches=Array.isArray(previous?.data)?
+    previous.data.filter(row=>row.externalReference===ref):[];
+  if(matches.length>1)fail('Asaas retornou cobranças duplicadas: conciliação manual necessária',409);
+  if(!matches.length)return null;
+  const existing=matches[0];
+  if(existing?.customer!==customer||existing?.billingType!==billingType||
+    centavos(existing?.value)!==sum||!/^pay_[A-Za-z0-9_-]+$/.test(String(existing?.id??'')))
+   fail('Cobrança Asaas recuperada não corresponde ao cliente, modalidade ou valor',409);
+  const url=String(method==='BOLETO'?(existing.bankSlipUrl||existing.invoiceUrl):existing.invoiceUrl);
+  if(!url.startsWith('https://'))fail('Asaas não retornou URL válida na recuperação',409);
+  return {reference:existing.id,paymentUrl:url};
+ }
  return Object.freeze({
+  recover,
   async create({requestId,workOrderId,amountCents,dueDate}={}){
    const ref=validateReference(requestId),sum=amount(amountCents);
    if(!/^\d{4}-\d{2}-\d{2}$/.test(String(dueDate)))
@@ -72,13 +90,9 @@ export function createAsaasBillingProvider({transport,resolveCustomer,method}={}
    const customer=String(await resolveCustomer(workOrderId)??'').trim();
    if(!/^cus_[A-Za-z0-9]+$/.test(customer))
     fail('Cliente Asaas não vinculado à OS e à unidade');
-   // Recuperação antes de reemitir: o Asaas não garante que um timeout
-   // signifique ausência da cobrança. Nunca repetir POST sem consulta.
-   const previous=await transport('GET','/payments?externalReference='+encodeURIComponent(ref));
-   const matches=Array.isArray(previous?.data)?
-     previous.data.filter(row=>row.externalReference===ref):[];
-   if(matches.length>1)fail('Asaas retornou cobranças duplicadas: conciliação manual necessária',409);
-   const created=matches[0]??await transport('POST','/payments',{
+   const recovered=await recover({requestId:ref,workOrderId,amountCents:sum});
+   if(recovered)return recovered;
+   const created=await transport('POST','/payments',{
     customer,billingType,value:Number((sum/100).toFixed(2)),
     dueDate,externalReference:ref,
     description:'Oficina - cobrança vinculada à OS'
