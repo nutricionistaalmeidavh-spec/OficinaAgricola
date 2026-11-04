@@ -1,3 +1,4 @@
+import {createHash,timingSafeEqual} from 'node:crypto';
 import {asyncTenantSchema,claimAsyncTenantIdentity} from './async-tenant-migrations.js';
 import {buildCanonicalSqliteManifest,verifyCanonicalTargetManifest} from './tenant-migration-manifest.js';
 import {readRemoteAttachment} from './remote-attachments.js';
@@ -39,14 +40,21 @@ function readySqlite(sourceDb){
      ' anexo(s) ainda no disco local precisam ser enviados/verificados antes de trocar o banco');
  return manifest;
 }
-async function verifyOriginalObjects(sourceDb,objectStore){
+async function verifyOriginalObjects(sourceDb,objectStore,targetObjectStore){
  const rows=sourceDb.prepare('SELECT * FROM attachments ORDER BY id').iterate();
  for(const row of rows){
    if(!objectStore?.getObject)
-     fail('Anexos remotos exigem objectStore R2/MinIO explícito para verificar bytes antes da migração');
-   // Each object read validates scoped S3 key, upload checksum and expected
-   // byte count; DO NOT trust a metadata-only copy when switching storage.
-   await readRemoteAttachment(row,objectStore);
+     fail('Anexos remotos exigem objectStore R2/MinIO de origem para verificar bytes');
+   if(!targetObjectStore?.getObject)
+     fail('Anexos remotos exigem storage de destino explícito e já preenchido');
+   // The destination prefix/bucket may differ from the original installation.
+   // Do not enable a new database until both copies of every blob match.
+   const original=await readRemoteAttachment(row,objectStore);
+   const target=await readRemoteAttachment(row,targetObjectStore);
+   const a=createHash('sha256').update(original).digest();
+   const b=createHash('sha256').update(target).digest();
+   if(!timingSafeEqual(a,b))
+     fail('Integridade divergente no storage de destino para o anexo #'+row.id);
  }
 }
 async function requirePristineTarget(port,manifest){
@@ -85,7 +93,7 @@ async function reseedPgSequences(port,manifest){
  * identity lock remains unset so the normal Worker denies all operations.
  */
 export async function importCanonicalSqliteTenant({sourceDb,targetPort,
- companyId,unitId,batchSize=40,objectStore=null}={}){
+ companyId,unitId,batchSize=40,objectStore=null,targetObjectStore=null}={}){
  if(!['d1','postgres'].includes(targetPort?.engine))
    fail('Importação exige destino nativo PostgreSQL ou D1, nunca o SQLite local');
  const company=Number(companyId),unit=Number(unitId);
@@ -95,7 +103,7 @@ export async function importCanonicalSqliteTenant({sourceDb,targetPort,
  if(!Number.isSafeInteger(size)||size<1||size>100)
    fail('Lote de importação deve conter entre 1 e 100 linhas');
  const manifest=readySqlite(sourceDb);
- await verifyOriginalObjects(sourceDb,objectStore);
+ await verifyOriginalObjects(sourceDb,objectStore,targetObjectStore);
  await requirePristineTarget(targetPort,manifest);
  const order=sortByForeignKey(sourceDb,Object.keys(manifest.tables));
  let importedRows=0;
