@@ -64,5 +64,14 @@ try{
  assert.equal(summary.pendingCents,4000);
  const payments=await port.first('SELECT COUNT(*) n FROM payment_events');
  assert.equal(Number(payments.n),1);
+ const repeatedCommand={workOrderId:order.id,amountCents:500,
+  method:'PIX',requestId:'pg-parity-concurrent-001'};
+ const [sameA,sameB]=await Promise.all([
+  service.receivePayment(repeatedCommand),service.receivePayment(repeatedCommand)
+ ]);
+ assert.equal(String(sameA.id),String(sameB.id));
+ assert.equal(Number((await port.first('SELECT COUNT(*) n FROM receipts')).n),2);
+ assert.equal(Number((await port.first('SELECT COUNT(*) n FROM payment_events')).n),2);
+ assert.equal((await service.financeSummary()).receivedCents,2500);
  console.log('PostgreSQL 16 real: schema, OS, estoque e pagamento idempotente OK');
 }finally{await pool.end();}
