@@ -83,3 +83,28 @@ test('remote restore rejects corrupted bytes and leaves no apparently valid stag
  }),/integridade|SHA-256/i);
  assert.equal((await import('node:fs')).readdirSync(join(root,'staging')).length,0);
 });
+
+test('remote recovery uses streaming downloads for snapshot bodies when S3 client supports it',async t=>{
+ const root=mkdtempSync(join(tmpdir(),'oficina-stream-staging-'));
+ t.after(()=>rmSync(root,{recursive:true,force:true}));
+ const binary=Buffer.alloc(6*1024*1024,0x23);
+ const manifest={version:1,createdAt:new Date().toISOString(),files:[
+   {path:'database.sqlite',size:binary.length,sha256:sha(binary)}
+ ]};
+ const calls=[];
+ const client={
+   async getObject({key}){assert.equal(key,'registry/stream/manifest.json');return Buffer.from(JSON.stringify(manifest));},
+   async downloadObject({key,filePath,expectedSize,expectedSha256}){
+     calls.push(key);
+     assert.equal(expectedSize,binary.length);
+     assert.equal(expectedSha256,sha(binary));
+     writeFileSync(filePath,binary,{flag:'wx'});
+     return {key,size:binary.length};
+   }
+ };
+ const result=await restoreMirroredTenantBackup({
+   client,remoteArchive:'registry/stream',restoreRoot:join(root,'staging')
+ });
+ assert.deepEqual(calls,['registry/stream/database.sqlite']);
+ assert.equal(readFileSync(join(result.archivePath,'database.sqlite')).length,binary.length);
+});
