@@ -47,14 +47,14 @@ try{
    const units=await registry.listUserUnits(tech.id);
    assert.deepEqual(units.map(x=>x.id),[unit.id]);
    await assert.rejects(registry.requireCompanyReportingAdmin(tech.id,company.id),/Permissão/i);
-   await assert.rejects(registry.requireCompanyReportingAdmin(actor,company.id),/todas|unidades|Permissão/i);
-   await registry.grantMembership(actor,{unitId:unit.id,username:'adminprimario',role:'ADMIN'});
+   assert.equal(await registry.requireCompanyReportingAdmin(actor,company.id),true);
    assert.equal(await registry.requireCompanyReportingAdmin(actor,company.id),true);
    await assert.rejects(registry.changeMembership(actor,{unitId:unit.id,userId:actor,role:'TECNICO',active:false}),/Último|administrador/i);
    await registry.changeMembership(actor,{unitId:unit.id,userId:tech.id,role:'ADMIN',active:true});
    await registry.grantMembership(actor,{unitId:company.unitId,username:'tecnico-a',role:'ADMIN'});
    await registry.changeMembership(actor,{unitId:unit.id,userId:actor,role:'ADMIN',active:false});
    await assert.rejects(registry.requireUnitMembership(actor,unit.id),/Permissão/i);
+   await assert.rejects(registry.requireCompanyReportingAdmin(actor,company.id),/todas|unidades|Permissão/i);
    const records=await registry.listAudit(tech.id,company.id);
    assert.ok(records.some(x=>x.action==='MEMBERSHIP_CHANGED'));
    await assert.rejects(registry.createUnit(tech.id,{companyId:1,code:'FRAUDE',name:'Outro Tenant'}),/Permissão/i);
