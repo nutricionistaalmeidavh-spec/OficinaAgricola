@@ -187,7 +187,7 @@ export function createMultiTenantServer({
       if(search.length>80)throw httpError('Busca excede 80 caracteres',400);
       const term='%'+search+'%';
       const rows=unitRuntime(source.id).db.prepare(
-        'SELECT id,sku,description FROM parts WHERE active=1 AND (sku LIKE ? OR description LIKE ?) ORDER BY id DESC LIMIT 100'
+        'SELECT id,sku,description,unit,quantity FROM parts WHERE active=1 AND (sku LIKE ? OR description LIKE ?) ORDER BY id DESC LIMIT 100'
       ).all(term,term);
       return json(res,200,{parts:rows,limit:100});
     }
