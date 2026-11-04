@@ -40,3 +40,21 @@ test('native Cloudflare D1 port uses prepared bindings and atomic batch rather t
  await assert.rejects(port.transaction(async()=>{}),/batch/);
  assert.ok(calls.some(c=>c.batch===2));
 });
+
+test('Postgres BIGINT and integral NUMERIC results normalize like SQLite without unsafe rounding',async()=>{
+ const pool={
+  async query(){return{
+   rows:[{id:'72000',cents:'6800',huge:'9223372036854775807',name:'6800'}],
+   fields:[
+    {name:'id',dataTypeID:20},{name:'cents',dataTypeID:1700},
+    {name:'huge',dataTypeID:20},{name:'name',dataTypeID:25}
+   ],rowCount:1
+  }},
+  async connect(){return{query:this.query.bind(this),release(){}}}
+ };
+ const row=await createPostgresPort({pool}).first('SELECT 1');
+ assert.equal(row.id,72000);
+ assert.equal(row.cents,6800);
+ assert.equal(row.huge,'9223372036854775807');
+ assert.equal(row.name,'6800','VARCHAR values never converted');
+});
