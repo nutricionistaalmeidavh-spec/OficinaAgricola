@@ -130,6 +130,8 @@ test('HTTP isolation: company and unit records, member roles and revoked access'
   assert.equal((await request('GET','/api/customers',undefined,unit.data.id,staffToken)).status,200);
   assert.equal((await request('GET','/api/customers',undefined,second,staffToken)).status,403);
   assert.equal((await request('POST','/api/customers',{name:'Forbidden'},unit.data.id,staffToken)).status,403);
+  assert.equal((await request('GET','/api/tenancy/shareable-parts?unitId='+unit.data.id,undefined,unit.data.id,staffToken)).status,403);
+  assert.equal((await request('POST','/api/tenancy/share-part',{sourceUnitId:second,targetUnitId:unit.data.id,partId:sharedSource.data.id},unit.data.id,staffToken)).status,403);
   const revocation=await request('PATCH','/api/tenancy/memberships',{unitId:unit.data.id,userId:member.data.id,role:'TECNICO',active:false});
   assert.equal(revocation.status,200);
   assert.equal((await request('GET','/api/customers',undefined,unit.data.id,staffToken)).status,403);
@@ -148,5 +150,6 @@ test('HTTP isolation: company and unit records, member roles and revoked access'
   const audit=await request('GET','/api/tenancy/audit?companyId='+newCompany.data.id);
   assert.equal(audit.status,200,JSON.stringify(audit.data));
   assert.ok(audit.data.some(entry=>entry.action==='MEMBERSHIP_CHANGED'&&entry.target_user_id===member.data.id));
+  assert.ok(audit.data.some(entry=>entry.action==='CATALOG_SHARE_COMPLETED'),'catalog shares must be auditable');
   assert.equal((await request('GET','/api/tenancy/audit?companyId='+newCompany.data.id,undefined,unit.data.id,staffToken)).status,403);
 });
