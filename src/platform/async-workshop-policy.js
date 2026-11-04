@@ -11,7 +11,7 @@ const SERVICE_ROUTES=new Set([
  '/v1/auth/users','/v1/auth/logout','/v1/internal/gateway-session'
 ]);
 export function serviceOnlyNativeRoute(path){
- return SERVICE_ROUTES.has(path);
+ return SERVICE_ROUTES.has(path)||/^\/v1\/public\/approval\/[a-f0-9]{64}$/.test(path);
 }
 export function requiredNativeRoles(method,path){
  const verb=String(method||'').toUpperCase();
