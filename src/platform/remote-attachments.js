@@ -57,9 +57,11 @@ export async function saveRemoteAttachment(db,workOrderId,input,{objectStore,onP
     }
   }
   const key=osId+'/'+randomUUID()+ext;
-  await objectStore.putObject({key,data:raw,mimeType:input.mimeType});
   let canonicalRow=null,created=false;
   try{
+    // A PUT may complete remotely while its HEAD/response fails. Cleanup must
+    // also cover that case, not only SQLite insertion failures.
+    await objectStore.putObject({key,data:raw,mimeType:input.mimeType});
     canonicalRow=transaction(db,()=>{
       // Final re-check in same transaction for replay/concurrency.
       if(id){
