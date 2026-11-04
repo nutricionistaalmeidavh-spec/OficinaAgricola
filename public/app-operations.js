@@ -10,7 +10,7 @@ async function renderSchedule({cursor=null,loaded=[],period=null}={}){pageTitle(
 };showPagedLoadMore({cursor:page.nextCursor,loaded:events.length,total:page.total,onMore:()=>renderSchedule({cursor:page.nextCursor,loaded:events,period:currentPeriod})})}
 function eventModal({customers,machines,techs,orders}){const requestId=newCommandId();showModal('Novo evento',`<form class="form-stack"><div class="field-row"><label>Tipo<select name="type"><option>DIAGNOSTICO</option><option>EXECUCAO</option><option>VISITA</option><option>PREVISAO_ENTREGA</option><option>RETORNO</option></select></label><label>Título<input name="title" required></label></div><label>Início<input type="datetime-local" name="startsAt" required></label><div class="field-row"><label>Cliente<select name="customerId"><option value="">—</option>${customers.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></label><label>OS<select name="workOrderId"><option value="">—</option>${orders.map(o=>`<option value="${o.id}">#${o.os_number} ${esc(o.customer_name)}</option>`).join('')}</select></label></div><label>Técnico<select name="technicianId"><option value="">—</option>${techs.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select></label><button class="btn primary" type="submit">Agendar</button></form>`,async fd=>{const o=formObj(fd);o.startsAt=new Date(o.startsAt).toISOString();for(const k of ['customerId','workOrderId','technicianId']){if(o[k])o[k]=Number(o[k]);else delete o[k]}await api('/api/schedule',{method:'POST',body:{...o,requestId}});toast('Evento criado');await refreshCurrentPage()})}
 
-async function renderFinance({cursor=null,loaded=[]}={}){pageTitle('Financeiro','GESTÃO FINANCEIRA');if(!['ADMIN','FINANCEIRO'].includes(state.user.role)){setContent('<div class="card"><div class="empty">Seu perfil não possui acesso ao financeiro.</div></div>');return}const from=new Date();from.setDate(1);from.setHours(0,0,0,0);const to=new Date();to.setMonth(to.getMonth()+1,0);to.setHours(23,59,59,999);const qs=`from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`;const [s,page]=await Promise.all([api(`/api/finance/summary?${qs}`),api(`/api/expenses/page?${qs}&limit=50${cursor?'&cursor='+encodeURIComponent(cursor):''}`)]);const expenses=loaded.concat(page.items);setContent(`<div class="grid stats">${stat('Faturado',money(s.invoicedCents))}${stat('Recebido',money(s.receivedCents),'kpi-positive')}${stat('Pendente',money(s.pendingCents))}${stat('Despesas pagas',money(s.expensesCents),'kpi-negative')}${stat('Resultado',money(s.resultCents),s.resultCents>=0?'kpi-positive':'kpi-negative')}</div><div class="section-head" style="margin-top:20px"><div><h2>Despesas</h2><span class="muted">Mês atual</span></div><button id="newExpense" class="btn primary">+ Nova despesa</button></div>${table(['Descrição','Categoria','Valor','Vencimento','Pago em','OS'],expenses.map(e=>[`<strong>${esc(e.description)}</strong>`,esc(e.category||'—'),money(e.amount_cents),esc(e.due_date||'—'),e.paid_at?dt(e.paid_at):badge('PENDENTE'),e.os_number?`#${e.os_number}`:'—']))}`);$('#newExpense').onclick=()=>expenseModal();showPagedLoadMore({cursor:page.nextCursor,loaded:expenses.length,total:page.total,onMore:()=>renderFinance({cursor:page.nextCursor,loaded:expenses})})}
+async function renderFinance({cursor=null,loaded=[]}={}){pageTitle('Financeiro','GESTÃO FINANCEIRA');if(!['ADMIN','FINANCEIRO'].includes(state.user.role)){setContent('<div class="card"><div class="empty">Seu perfil não possui acesso ao financeiro.</div></div>');return}const from=new Date();from.setDate(1);from.setHours(0,0,0,0);const to=new Date();to.setMonth(to.getMonth()+1,0);to.setHours(23,59,59,999);const qs=`from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`;const [s,page]=await Promise.all([api(`/api/finance/summary?${qs}`),api(`/api/expenses/page?${qs}&limit=50${cursor?'&cursor='+encodeURIComponent(cursor):''}`)]);const expenses=loaded.concat(page.items);setContent(`<div class="grid stats">${stat('Faturado',money(s.invoicedCents))}${stat('Recebido',money(s.receivedCents),'kpi-positive')}${stat('Pendente',money(s.pendingCents))}${stat('Despesas pagas',money(s.expensesCents),'kpi-negative')}${stat('Resultado',money(s.resultCents),s.resultCents>=0?'kpi-positive':'kpi-negative')}</div><div class="section-head" style="margin-top:20px"><div><h2>Despesas</h2><span class="muted">Mês atual</span></div><div class="action-row"><button id="financeBilling" class="btn soft">Cobranças e conciliação</button><button id="newExpense" class="btn primary">+ Nova despesa</button></div></div>${table(['Descrição','Categoria','Valor','Vencimento','Pago em','OS'],expenses.map(e=>[`<strong>${esc(e.description)}</strong>`,esc(e.category||'—'),money(e.amount_cents),esc(e.due_date||'—'),e.paid_at?dt(e.paid_at):badge('PENDENTE'),e.os_number?`#${e.os_number}`:'—']))}`);$('#newExpense').onclick=()=>expenseModal();$('#financeBilling').onclick=()=>billingFinanceModal().catch(error=>toast(error.message,true));showPagedLoadMore({cursor:page.nextCursor,loaded:expenses.length,total:page.total,onMore:()=>renderFinance({cursor:page.nextCursor,loaded:expenses})})}
 function expenseModal(){const requestId=newCommandId();let submittedPaidAt=null;showModal('Nova despesa',`<form class="form-stack"><div class="field-row"><label>Descrição<input name="description" required></label><label>Categoria<input name="category"></label></div><div class="field-row"><label>Valor (R$)<input name="amount" type="number" step="0.01" required></label><label>Vencimento<input name="dueDate" type="date"></label></div><label><input name="paid" type="checkbox" style="width:auto"> Marcar como paga agora</label><button class="btn primary" type="submit">Salvar despesa</button></form>`,async fd=>{const o=formObj(fd);await api('/api/expenses',{method:'POST',body:{description:o.description,category:o.category,amountCents:Math.round(Number(o.amount)*100),dueDate:o.dueDate||null,paidAt:fd.get('paid')?(submittedPaidAt??=new Date().toISOString()):null,requestId}});toast('Despesa salva');await refreshCurrentPage()})}
 
 
@@ -37,4 +37,72 @@ async function partFitmentsModal(part){
       await api('/api/parts/'+part.id+'/fitments',{method:'POST',body:{...o,requestId}});
       toast('Aplicação registrada');await partFitmentsModal(part);
     });
+}
+
+async function billingFinanceModal(){
+ const [report,entries]=await Promise.all([
+  api('/api/billing/report'),api('/api/billing/statements?limit=50')
+ ]);
+ showModal('Cobranças, taxas e conciliação',`<div class="form-stack">
+  <div class="grid stats">
+   ${stat('Parcelas recebidas',money(report.grossReceivedCents))}
+   ${stat('Parcelas pendentes',money(report.pendingCents))}
+   ${stat('Parcelas vencidas',money(report.overdueCents))}
+   ${stat('Taxas registradas',money(report.feeCents))}
+   ${stat('Repasse líquido registrado',money(report.netSettledCents))}
+  </div>
+  <p class="muted">Conciliação associa um lançamento bancário a um recebimento existente; não adiciona receita em duplicidade. Os lembretes só geram rascunhos locais, sem disparar mensagens.</p>
+  <div class="action-row"><button class="btn sm" type="button" id="prepareBillingReminders">Preparar lembretes</button></div>
+  <form id="statementForm" class="form-stack">
+   <h3>Adicionar lançamento de extrato</h3>
+   <div class="field-row">
+    <label>Identificação da conta<input name="bankAccount" maxlength="80" required></label>
+    <label>Identificador bancário único<input name="externalId" maxlength="128" required></label>
+   </div>
+   <div class="field-row">
+    <label>Data<input type="date" name="bookedAt" value="${new Date().toISOString().slice(0,10)}" required></label>
+    <label>Entrada (R$)<input type="number" name="amount" step="0.01" min="0.01" required></label>
+   </div>
+   <label>Descrição<input name="description" maxlength="300"></label>
+   <button class="btn sm primary" type="submit">Registrar no extrato</button>
+  </form>
+  <h3>Últimos lançamentos</h3>
+  <div class="list">${entries.length?entries.map(row=>`<div class="list-item">
+   <div><strong>${money(row.amount_cents)}</strong> · ${esc(row.bank_account)}<br>
+    <small>${esc(row.booked_at)} · ${esc(row.description)}</small></div>
+   ${row.receipt_id?`<span class="muted">Conciliado #${row.receipt_id}</span>`:
+    `<button type="button" class="btn sm" data-match-entry="${row.id}">Conciliar</button>`}
+  </div>`).join(''):'<p class="muted">Nenhum lançamento importado</p>'}</div>
+ </div>`);
+ const reminders=$('#prepareBillingReminders');
+ if(reminders)reminders.onclick=async()=>{
+  try{
+   const drafts=await api('/api/billing/reminders/prepare',{method:'POST',body:{
+    asOf:new Date().toISOString().slice(0,10),daysAhead:3
+   }});
+   toast(drafts.length+' lembrete(s) em rascunho — nenhum envio realizado');
+  }catch(error){toast(error.message,true)}
+ };
+ const statement=$('#statementForm');
+ if(statement)statement.onsubmit=async e=>{
+  e.preventDefault();
+  try{
+   const fd=new FormData(statement),amountCents=Math.round(Number(fd.get('amount'))*100);
+   await api('/api/billing/statements',{method:'POST',body:{
+    bankAccount:fd.get('bankAccount'),externalId:fd.get('externalId'),
+    bookedAt:fd.get('bookedAt'),amountCents,description:fd.get('description')
+   }});
+   toast('Lançamento de extrato registrado');await billingFinanceModal();
+  }catch(error){toast(error.message,true)}
+ };
+ $$('[data-match-entry]').forEach(btn=>btn.onclick=async()=>{
+  const id=prompt('ID do recebimento na OS para vincular ao lançamento:');
+  if(!id||!/^[1-9]\d*$/.test(id))return;
+  try{
+   await api('/api/billing/statements/'+btn.dataset.matchEntry+'/match',{
+    method:'POST',body:{receiptId:Number(id)}
+   });
+   toast('Extrato conciliado sem duplicar receita');await billingFinanceModal();
+  }catch(error){toast(error.message,true)}
+ });
 }
