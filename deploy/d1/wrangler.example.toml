@@ -1,0 +1,17 @@
+# Example for one isolated company/unit; replace all placeholders locally.
+# The Worker is PRIVATE and requires the ASYNC_BACKEND_SERVICE_TOKEN
+# configured with: npx wrangler secret put ASYNC_BACKEND_SERVICE_TOKEN
+# No secrets, database IDs or account identifiers are checked into Git.
+name = "artisys-oficina-d1-unit-example"
+main = "../../src/workers/d1-workshop.js"
+compatibility_date = "2026-08-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+ASYNC_TENANT_COMPANY_ID = "2"
+ASYNC_TENANT_UNIT_ID = "4"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "oficina-empresa-2-unidade-4"
+database_id = "00000000-0000-0000-0000-000000000000"
