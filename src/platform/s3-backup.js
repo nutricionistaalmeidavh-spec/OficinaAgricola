@@ -103,7 +103,59 @@ export function createS3BackupClient({
       throw Error('Integridade do backup remoto não confirmada pelo storage');
     return {key,payloadSha256:hash,size,alreadyPresent:false};
   }
-  return Object.freeze({putFile});
+  async function putObject({key,data,mimeType='application/octet-stream'}){
+    const bytes=Buffer.from(data||[]);
+    if(!bytes.length||bytes.length>5*1024*1024)throw Error('Arquivo remoto excede limite ou está vazio');
+    const hash=sha256(bytes);
+    const {url,path}=urlFor(key);
+    const response=await httpFetch(url,{method:'PUT',redirect:'error',
+      headers:{
+        ...signedHeaders({method:'PUT',path,payloadHash:hash,metadataHash:hash}),
+        'Content-Length':String(bytes.length),'Content-Type':mimeType
+      },body:bytes
+    });
+    if(!response.ok)throw Error('S3 não confirmou upload remoto (HTTP '+response.status+')');
+    const check=await httpFetch(url,{method:'HEAD',redirect:'error',
+      headers:signedHeaders({method:'HEAD',path,payloadHash:sha256('')})
+    });
+    if(!check.ok||check.headers.get('x-amz-meta-sha256')!==hash||
+      Number(check.headers.get('content-length'))!==bytes.length)
+      throw Error('S3 não confirmou integridade do objeto enviado');
+    return {key,size:bytes.length,hash};
+  }
+  async function getObject({key,maxBytes=5*1024*1024}){
+    const {url,path}=urlFor(key);
+    const response=await httpFetch(url,{method:'GET',redirect:'error',
+      headers:signedHeaders({method:'GET',path,payloadHash:sha256('')})
+    });
+    if(!response.ok)throw Error('Arquivo remoto indisponível (HTTP '+response.status+')');
+    if(Number(response.headers.get('content-length'))>maxBytes)
+      throw Error('Arquivo remoto excede limite');
+    const chunks=[];let size=0;
+    for await(const chunk of response.body||[]){
+      size+=chunk.length;
+      if(size>maxBytes){
+        await response.body?.cancel?.().catch(()=>{});
+        throw Error('Arquivo remoto excede limite');
+      }
+      chunks.push(Buffer.from(chunk));
+    }
+    const bytes=Buffer.concat(chunks);
+    const expected=response.headers.get('x-amz-meta-sha256');
+    if(!expected||expected!==sha256(bytes))
+      throw Error('Integridade SHA-256 do objeto remoto não confirmada');
+    return bytes;
+  }
+  async function deleteObject({key}){
+    const {url,path}=urlFor(key);
+    const response=await httpFetch(url,{method:'DELETE',redirect:'error',
+      headers:signedHeaders({method:'DELETE',path,payloadHash:sha256('')})
+    });
+    if(!response.ok&&response.status!==404)
+      throw Error('Falha ao remover objeto remoto (HTTP '+response.status+')');
+    return {deleted:true};
+  }
+  return Object.freeze({putFile,putObject,getObject,deleteObject});
 }
 function safeArchiveFile(archive,relPath){
   const parts=splitKey(relPath);
