@@ -61,8 +61,8 @@ test('first launch provisions private PostgreSQL 16 cluster without npm or netwo
  });
  try{
    const config=await manager.ensureReady();
-   assert.match(config.registryUrl,/postgresql:\\/\\//);
-   assert.match(config.operationsUrl,/postgresql:\\/\\//);
+   assert.match(config.registryUrl,/^postgresql:/);
+   assert.match(config.operationsUrl,/^postgresql:/);
    assert.equal(config.port,55627);
    assert.ok(commands.some(x=>x.program==='initdb.exe'));
    assert.ok(commands.some(x=>x.program==='pg_ctl.exe'&&x.args.includes('start')));
