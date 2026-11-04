@@ -365,6 +365,7 @@ db.exec(`
   const outboxCols=new Set(db.prepare("PRAGMA table_info('domain_outbox')").all().map(x=>x.name));
   if(!outboxCols.has('next_attempt_at'))db.exec('ALTER TABLE domain_outbox ADD COLUMN next_attempt_at TEXT');
   db.exec('CREATE INDEX IF NOT EXISTS idx_outbox_retry ON domain_outbox(delivered_at,next_attempt_at,id)');
+  migrateLocalPaymentCollection(db);
   db.prepare('INSERT INTO schema_migrations(version,applied_at) VALUES(?,?)').run(version,nowIso());
   });
 }
