@@ -33,7 +33,7 @@ const ROUTES=[
  'POST /api/technicians /v1/technicians ADMIN',
  'GET /api/work-orders /v1/orders ALL',
  'GET /api/work-orders/page /v1/orders/page ALL',
- 'POST /api/work-orders /v1/orders OFFICE',
+ 'POST /api/work-orders /v1/orders OFFICE orderCreate',
  'GET /api/work-orders/:id /v1/orders/:id ALL',
  'PATCH /api/work-orders/:id /v1/orders/:id TECH',
  'POST /api/work-orders/:id/duplicate /v1/orders/:id/duplicate OFFICE',
@@ -136,6 +136,11 @@ export function mapLegacyNativeRoute(method,path){
   return Object.freeze({method:verb,path:target,roles:spec.roles,
    mapBody:(input={})=>{
     const body={...input};
+    if(spec.transform==='orderCreate'){
+      body.unitId=1;
+      delete body.createdBy;
+      delete body.changedBy;
+    }
     if(spec.transform==='status'){
       body.toStatus=body.toStatus??body.status;delete body.status;
     }else if(spec.transform==='order'||spec.transform==='receipt'||spec.transform==='reversePart'||spec.transform==='reverseReceipt'){
