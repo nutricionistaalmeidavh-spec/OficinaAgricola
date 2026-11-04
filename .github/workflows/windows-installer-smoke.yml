@@ -70,7 +70,16 @@ jobs:
       - name: Instalar compilador open source Lazarus/FPC + SVN
         shell: pwsh
         run: |
-          choco install lazarus --version=4.0.0 -y --no-progress
+          # Chocolatey community feed occasionally returns HTTP 504. Do not
+          # pretend the compiler was installed if all attempts fail.
+          $lazarusReady = $false
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            choco install lazarus --version=4.0.0 -y --no-progress
+            if ($LASTEXITCODE -eq 0) { $lazarusReady = $true; break }
+            Write-Warning "Lazarus 4.0.0 download failed (attempt $attempt/3)."
+            if ($attempt -lt 3) { Start-Sleep -Seconds (10 * $attempt) }
+          }
+          if (-not $lazarusReady) { throw 'Falha ao instalar Lazarus/FPC no builder após 3 tentativas' }
           if (-not (Get-Command svn -ErrorAction SilentlyContinue)) {
             choco install sliksvn --version=1.14.5 -y --no-progress
             if ($LASTEXITCODE -ne 0) { throw 'Falha ao instalar cliente SVN OSS' }
