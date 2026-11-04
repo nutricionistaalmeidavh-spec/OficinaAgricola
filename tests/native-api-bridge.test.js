@@ -38,3 +38,20 @@ test('bridge rejects unknown tenant, foreign endpoint and unsupported routes wit
  await assert.rejects(bridge({...common,backend:valid,unit:{...common.unit,role:'TECNICO'},method:'POST'}),/Permissão/i);
  assert.equal(calls,0);
 });
+
+
+test('native bridge never follows redirects with private service or user headers',async()=>{
+ const hits=[];
+ const bridge=createNativeApiBridge({fetchImpl:async(url,options)=>{
+  hits.push({url:String(url),options});
+  if(String(url).endsWith('/v1/internal/gateway-session'))return Response.json({ok:true});
+  return new Response(null,{status:302,headers:{location:'https://third-party.invalid/collect'}});
+ }});
+ const backend={endpoint:'http://127.0.0.1:3456',serviceToken:'s'.repeat(40),companyId:1,unitId:2};
+ await assert.rejects(bridge({backend,unit:{id:2,companyId:1,role:'ADMIN'},
+  user:{id:10,name:'Admin'},globalToken:'z'.repeat(43),
+  expiresAt:new Date(Date.now()+1800000).toISOString(),method:'GET',path:'/api/customers'
+ }),/redirecionamento|redirecion|backend/i);
+ assert.equal(hits.length,2);
+ assert.equal(hits.every(x=>x.options.redirect==='manual'),true);
+});
