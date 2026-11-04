@@ -2,6 +2,7 @@ import {createD1Port} from '../platform/async-sql-ports.js';
 import {createAsyncWorkshopServices} from '../platform/async-workshop-services.js';
 import {migrateAsyncTenantStore,claimAsyncTenantIdentity,assertAsyncTenantIdentity} from '../platform/async-tenant-migrations.js';
 import {createAsyncWorkshopHandler} from '../platform/async-workshop-handler.js';
+import {createR2ObjectStoreAdapter} from '../platform/r2-object-store.js';
 
 // Bind DB in Wrangler for each isolated tenant database, with nodejs_compat.
 // All routes require the private service token; this Worker is NOT public API.
@@ -14,7 +15,10 @@ export default {
      !Number.isSafeInteger(unitId)||unitId<1)
    return Response.json({error:'D1 privado sem identificação de empresa/unidade'}, {status:503});
   const port=createD1Port({binding:env.DB});
-  const services=createAsyncWorkshopServices(port);
+  const objectStore=env.OBJECTS
+   ?createR2ObjectStoreAdapter({bucket:env.OBJECTS,companyId,unitId})
+   :null;
+  const services=createAsyncWorkshopServices(port,{objectStore});
   return createAsyncWorkshopHandler({
    services,serviceToken:env.ASYNC_BACKEND_SERVICE_TOKEN,
    migrate:async()=>{
