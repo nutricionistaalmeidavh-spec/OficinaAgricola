@@ -1,3 +1,4 @@
+import {BILLING_EXTENSIONS_DDL} from './billing-finance-extensions.js';
 import {ADDITIONAL_TENANT_TABLES,ADDITIONAL_TENANT_INDEXES} from './async-tenant-extra-schema.js';
 import {PAYMENT_COLLECTION_DDL} from './payment-collection.js';
 import {BILLING_SCHEMA_DDL} from './billing-p3-p4.js';
@@ -274,4 +275,20 @@ export async function assertAsyncTenantIdentity(port,{companyId,unitId}={}){
  if(!actual||Number(actual.company_id)!==company||Number(actual.unit_id)!==unit)
    throw Error('Banco associado a outro tenant ou não inicializado');
  return {companyId:company,unitId:unit};
+}
+
+
+// Migração incremental para tenants PostgreSQL/D1 já provisionados.
+export async function migrateBillingFinanceExtensions(port){
+ if(!['postgres','d1'].includes(port?.engine))throw Error('Engine inválido para extensão financeira');
+ const version='2026-11-04-billing-p4-extras';
+ const record={sql:'INSERT INTO async_schema_migrations(version,applied_at) VALUES(?,?) ON CONFLICT(version) DO NOTHING',
+  params:[version,new Date().toISOString()]};
+ if(port.engine==='d1'){
+  await port.batch([...BILLING_EXTENSIONS_DDL.map(sql=>({sql,params:[]})),record]);
+ }else await port.transaction(async tx=>{
+  for(const sql of BILLING_EXTENSIONS_DDL)await tx.run(sql);
+  await tx.run(record.sql,record.params);
+ });
+ return {engine:port.engine,version};
 }
