@@ -6,6 +6,9 @@ import {migrateAsyncTenantStore} from '../src/platform/async-tenant-migrations.j
 import {createAsyncWorkshopServices} from '../src/platform/async-workshop-services.js';
 
 function localD1(db){
+ // Real D1 schedules batches atomically. Keep the in-memory SQLite fake
+ // serialized too, otherwise two async tests can open overlapping BEGINs.
+ let queue=Promise.resolve();
  return {
   prepare(sql){return {bind(...args){return {
    async first(){return db.prepare(sql).get(...args);},
@@ -13,11 +16,15 @@ function localD1(db){
    async run(){const result=db.prepare(sql).run(...args);return {meta:{changes:Number(result.changes)}};}
   }}}},
   async batch(statements){
-   db.exec('BEGIN IMMEDIATE');
-   try{
-    const output=[];for(const s of statements)output.push(await s.run());
-    db.exec('COMMIT');return output;
-   }catch(error){db.exec('ROLLBACK');throw error;}
+   const job=queue.then(async()=>{
+     db.exec('BEGIN IMMEDIATE');
+     try{
+       const output=[];for(const s of statements)output.push(await s.run());
+       db.exec('COMMIT');return output;
+     }catch(error){db.exec('ROLLBACK');throw error;}
+   });
+   queue=job.then(()=>undefined,()=>undefined);
+   return job;
   }
  };
 }
