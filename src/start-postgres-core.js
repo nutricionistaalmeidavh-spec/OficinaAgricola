@@ -1,15 +1,19 @@
 import {createServer} from 'node:http';
 import {createPostgresPort} from './platform/async-sql-ports.js';
 import {createAsyncWorkshopServices} from './platform/async-workshop-services.js';
-import {migrateAsyncTenantStore} from './platform/async-tenant-migrations.js';
+import {migrateAsyncTenantStore,claimAsyncTenantIdentity,assertAsyncTenantIdentity} from './platform/async-tenant-migrations.js';
 import {createAsyncWorkshopHandler} from './platform/async-workshop-handler.js';
 
 // Experimental, separately addressed async tenant API. The existing UI/main
 // runtime still uses SQLite until its entire business workflow is ported.
 const token=process.env.ASYNC_BACKEND_SERVICE_TOKEN;
 const connectionString=process.env.OFICINA_POSTGRES_URL;
-if(!token||token.length<32||!connectionString)
- throw Error('Backend PostgreSQL requer token privado e URL explícita');
+const companyId=Number(process.env.ASYNC_TENANT_COMPANY_ID);
+const unitId=Number(process.env.ASYNC_TENANT_UNIT_ID);
+if(!token||token.length<32||!connectionString||
+   !Number.isSafeInteger(companyId)||companyId<1||
+   !Number.isSafeInteger(unitId)||unitId<1)
+ throw Error('Backend PostgreSQL exige token, URL e identidade explícita de empresa/unidade');
 let Pool;
 try{({Pool}=await import('pg'));}
 catch{throw Error('Instale o driver open source pg explicitamente para este modo opcional');}
@@ -19,7 +23,12 @@ await pool.query('SELECT 1');
 const port=createPostgresPort({pool});
 const handler=createAsyncWorkshopHandler({
  services:createAsyncWorkshopServices(port),serviceToken:token,
- migrate:()=>migrateAsyncTenantStore(port)
+ migrate:async()=>{
+   const result=await migrateAsyncTenantStore(port);
+   await claimAsyncTenantIdentity(port,{companyId,unitId});
+   return result;
+ },
+ preflight:()=>assertAsyncTenantIdentity(port,{companyId,unitId})
 });
 const nodeServer=createServer(async(req,res)=>{
  const host='http://127.0.0.1';
