@@ -1,3 +1,4 @@
+import {loadTenantReminderSenders} from './platform/tenant-reminder-smtp.js';
 // Self-hosted, opt-in unified PostgreSQL gateway for P3/P4.
 // It replaces SQLite for this process only; main/legacy entry points stay
 // untouched until migration, restore and Windows E2E gates pass.
@@ -59,6 +60,7 @@ async function staticAsset(url,res){
  }catch{return respond(res,404,{},'Not found');}
 }
 const tenantPaymentConfigs=loadTenantPaymentConfigs(process.env.TENANCY_PAYMENT_CONFIG_FILE);
+const reminderSenderForUnit=loadTenantReminderSenders(process.env.TENANCY_REMINDER_SMTP_CONFIG_FILE);
 let tenantFactory;
 try{
  await registryPool.query('SELECT 1');
@@ -73,7 +75,8 @@ try{
    allowProvision:process.env.OFICINA_POSTGRES_PROVISION_NEW_UNITS==='true',
    schemaPrefix:process.env.OFICINA_POSTGRES_SCHEMA_PREFIX||'oficina',
    localStorageRoot:process.env.OFICINA_POSTGRES_STORAGE_ROOT||'./storage/postgres',
-   paymentOptionsForUnit:unit=>resolveTenantPaymentOptions(unit,tenantPaymentConfigs)
+   paymentOptionsForUnit:unit=>({...resolveTenantPaymentOptions(unit,tenantPaymentConfigs),
+      reminderSender:reminderSenderForUnit(unit)})
  });
  const gateway=createPostgresUnifiedGateway({
    registry,tenantHandlerForUnit:tenantFactory.handlerForUnit,
