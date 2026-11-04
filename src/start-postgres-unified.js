@@ -69,7 +69,8 @@ try{
  tenantFactory=createPostgresTenantRuntimeFactory({
    Pool,connectionString:operationsUrl,registry,serviceToken:token,
    allowProvision:process.env.OFICINA_POSTGRES_PROVISION_NEW_UNITS==='true',
-   schemaPrefix:process.env.OFICINA_POSTGRES_SCHEMA_PREFIX||'oficina'
+   schemaPrefix:process.env.OFICINA_POSTGRES_SCHEMA_PREFIX||'oficina',
+   localStorageRoot:process.env.OFICINA_POSTGRES_STORAGE_ROOT||'./storage/postgres'
  });
  const gateway=createPostgresUnifiedGateway({
    registry,tenantHandlerForUnit:tenantFactory.handlerForUnit,
