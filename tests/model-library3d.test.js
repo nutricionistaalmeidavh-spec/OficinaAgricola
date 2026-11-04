@@ -152,7 +152,7 @@ test('Ka Fox Palio incluem uma variante experimental de rodas reparadas sem perd
     assert.ok(record?.variants?.repaired?.sha256,'Variante rodas não cadastrada para '+id);
     assert.equal(record.variants.repaired.experimental,true);
     assert.equal(record.review_status,'PENDENTE_REVISAO_VISUAL');
-    assert.match(resolveEntry(manifest,id,'repaired').path,new RegExp('^curadoria/geometria/'+id+'-rodas\\\\.glb$'));
+    assert.equal(resolveEntry(manifest,id,'repaired').path,`curadoria/geometria/${id}-rodas.glb`);
     assert.match(assetUrl(resolveEntry(manifest,id,'repaired')),/curadoria\/geometria\/.+-rodas\.glb$/);
   }
   assert.throws(()=>resolveEntry(manifest,'fiat-uno','repaired'),/indisponível/i);
@@ -186,4 +186,14 @@ test('interface permite abrir rodas reparadas e identificar que são peças não
   assert.match(client,/variants\.includes\('repaired'\)/);
   assert.match(viewer,/original','restored','repaired/);
   assert.match(server,/models3d.*repaired/);
+});
+
+// Regressão de QA desktop: capturar o frame WebGL sem o page.screenshot
+// que travava durante renderização contínua no Chromium/SwiftShader.
+test('captura determinística do canvas 3D não depende de screenshot full-page do navegador',async()=>{
+  const viewer=await readFile(new URL('../public/model-viewer.js',import.meta.url),'utf8');
+  const qa=await readFile(new URL('../scripts/qa-model-library3d.mjs',import.meta.url),'utf8');
+  assert.match(viewer,/export function snapshotViewer\(/);
+  assert.match(qa,/snapshotViewer\(\)/);
+  assert.match(qa,/Buffer\.from\(.*base64/);
 });
