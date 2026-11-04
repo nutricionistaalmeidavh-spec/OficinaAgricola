@@ -63,5 +63,13 @@ try{
  assert.equal(summary.pendingCents,2500);
  const events=await port.first('SELECT COUNT(*) n FROM payment_events');
  assert.equal(events.n,1);
+ const concurrent={workOrderId:os.id,amountCents:500,
+   method:'PIX',requestId:'d1-local-concurrent-001'};
+ const [sameA,sameB]=await Promise.all([
+   service.receivePayment(concurrent),service.receivePayment(concurrent)
+ ]);
+ assert.equal(sameA.id,sameB.id);
+ assert.equal((await port.first('SELECT COUNT(*) n FROM payment_events')).n,2);
+ assert.equal((await service.financeSummary()).receivedCents,2500);
  console.log('Cloudflare D1 local Workerd: schema, OS, estoque, pagamento e idempotência OK');
 }finally{await mf.dispose();}
