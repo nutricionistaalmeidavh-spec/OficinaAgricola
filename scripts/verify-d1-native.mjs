@@ -19,6 +19,7 @@ let personalSession=null;
 const request=async(method,path,body)=>{
  const response=await fetch(base+path,{method,headers:{
    Authorization:'Bearer '+token,
+   ...(personalSession?{'X-Oficina-Session':personalSession}:{}),
    ...(body?{'Content-Type':'application/json'}:{})
  },body:body?JSON.stringify(body):undefined});
  const result=await response.json();
