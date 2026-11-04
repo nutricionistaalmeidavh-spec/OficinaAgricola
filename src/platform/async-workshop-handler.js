@@ -53,6 +53,10 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
      return json({ok:true,backend:'async-workshop'});
    if(path==='/v1/migrate'&&method==='POST'&&migrate)
      return json(await migrate());
+   // Internal operator-controlled identity provisioning. Called only after
+   // the trusted gateway validates global session AND tenant membership.
+   if(path==='/v1/internal/gateway-session'&&method==='POST')
+     return json(await services.provisionGatewaySession(await dataFrom(request)));
    if(path==='/v1/auth/bootstrap'&&method==='POST')
      return json(await services.bootstrapAdmin(await dataFrom(request)),201);
    if(path==='/v1/auth/login'&&method==='POST')
