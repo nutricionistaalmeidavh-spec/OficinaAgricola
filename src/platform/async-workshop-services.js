@@ -5,6 +5,7 @@ import {createAsyncWorkshopSales} from './async-workshop-sales.js';
 import {createAsyncWorkshopOperations} from './async-workshop-operations.js';
 import {createAsyncWorkshopFiscal} from './async-workshop-fiscal.js';
 import {createAsyncWorkshopFinance} from './async-workshop-finance.js';
+import {createAsyncWorkshopOrders} from './async-workshop-orders.js';
 
 // Async canonical service layer for PostgreSQL and D1. Each command is
 // explicitly transactional on its backend; never delegate to legacy SQLite.
@@ -255,9 +256,22 @@ export function createAsyncWorkshopServices(port,{fiscalProvider=null}={}){
    if(!Number.isSafeInteger(Number(expectedVersion))||Number(expectedVersion)!==Number(current.version))
      fail('Conflito de versão: recarregue a OS',409);
    assertTransition(current.status,toStatus);
-   const at=iso(),updated=select(`UPDATE work_orders SET status=?,version=version+1,
-      updated_at=? WHERE id=? AND version=? AND status=?`,[
-     toStatus,at,current.id,current.version,current.status
+   if(toStatus==='CANCELADA'){
+     const activeParts=await port.first(`SELECT COUNT(*) n FROM work_order_parts
+       WHERE work_order_id=? AND reversed_at IS NULL`,[current.id]);
+     if(Number(activeParts.n)>0)fail('A OS não pode ser cancelada enquanto houver peças consumidas sem estorno',409);
+     const activeReceipts=await port.first(`SELECT COUNT(*) n FROM receipts
+       WHERE work_order_id=? AND reversed_at IS NULL`,[current.id]);
+     if(Number(activeReceipts.n)>0)fail('A OS não pode ser cancelada enquanto houver recebimentos sem estorno',409);
+   }
+   const at=iso();
+   let completed=current.completed_at,delivered=current.delivered_at;
+   if(toStatus==='PRONTA')completed=at;
+   if(toStatus==='ENTREGUE')delivered=at;
+   if(toStatus==='EM_SERVICO'&&current.status==='PRONTA')completed=null;
+   const updated=select(`UPDATE work_orders SET status=?,completed_at=?,delivered_at=?,
+      version=version+1,updated_at=? WHERE id=? AND version=? AND status=?`,[
+     toStatus,completed,delivered,at,current.id,current.version,current.status
    ]);
    const history=select(`INSERT INTO work_order_status_history(
       work_order_id,from_status,to_status,reason,changed_at
@@ -448,6 +462,7 @@ export function createAsyncWorkshopServices(port,{fiscalProvider=null}={}){
    ...createAsyncWorkshopSales(port),
    ...createAsyncWorkshopOperations(port),
    ...createAsyncWorkshopFiscal(port,{provider:fiscalProvider}),
-   ...createAsyncWorkshopFinance(port)
+   ...createAsyncWorkshopFinance(port),
+   ...createAsyncWorkshopOrders(port,{createWorkOrder,transitionWorkOrder,getWorkOrder})
  });
 }
