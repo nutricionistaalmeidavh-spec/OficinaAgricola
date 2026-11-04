@@ -52,7 +52,8 @@ test('núcleo local não exige API ou SaaS externo', async () => {
   ]);
   const pkg = JSON.parse(pkgText);
   assert.equal(pkg.dependencies, undefined);
-  assert.equal(pkg.optionalDependencies, undefined);
+  // pg é driver OSS opcional, não dependência obrigatória do núcleo offline.
+  assert.deepEqual(pkg.optionalDependencies, {pg:'^8.23.1'});
   assert.doesNotMatch(runtime, /https?:\/\//);
   assert.doesNotMatch(sw, /https?:\/\//);
 });
