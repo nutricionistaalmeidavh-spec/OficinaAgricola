@@ -7,6 +7,7 @@ import { mkdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { openDatabase, migrate, nowIso, transaction } from '../db.js';
 import { migrateAssistencia } from '../assistencia-schema.js';
 import { createAssistenciaServer } from '../server-assistencia.js';
+import {validateTenantPaymentConfigs,resolveTenantPaymentOptions} from './tenant-payment.js';
 import { initializeAdmin, isSetupRequired } from '../setup.js';
 import { authTokenFrom, assertSameOrigin, prefersCookie, issueBrowserCookie, clearBrowserCookie, hardenHttpResponse } from './session-http.js';
 import { assertSecureNetwork } from './network.js';
@@ -56,6 +57,7 @@ export function createMultiTenantServer({
   tenantsRoot = './data/oficina-tenants',
   tls = null,
   tenantFiscalConfigs = {},
+  tenantPaymentConfigs = {},
   objectStoreForUnit = null,
   unitServerFactory = createAssistenciaServer,
   nativeBackendForUnit = null,
@@ -68,6 +70,7 @@ export function createMultiTenantServer({
     throw httpError('Banco legado já contém OS de várias unidades. Migração segura das OS e seus vínculos é obrigatória antes de ativar o modo multiempresa.',409);
   migrateTenantRegistry(registryDb,legacyDb);
   validateTenantFiscalConfigs(tenantFiscalConfigs);
+  validateTenantPaymentConfigs(tenantPaymentConfigs);
   const root=resolve(tenantsRoot);
   const cache=new Map();
   function unitRuntime(unitId,{staticOnly=false}={}) {
@@ -100,7 +103,8 @@ export function createMultiTenantServer({
     // A unit-specific S3 namespace is derived from trusted registry IDs, never
     // from request headers or client-controlled JSON.
     const objectStore=objectStoreForUnit?objectStoreForUnit(unit):null;
-    const srv=unitServerFactory({db,storageDir,eventRuntime,tls:null,fiscalProviderOverride,objectStore});
+    const paymentOptions=resolveTenantPaymentOptions(unit,tenantPaymentConfigs);
+    const srv=unitServerFactory({db,storageDir,eventRuntime,tls:null,fiscalProviderOverride,objectStore,paymentOptions});
     const runtime={db,srv,unit,storageDir,objectStore,eventRuntime,owned:!isLegacy,
       fiscalConfigured:isLegacy||Boolean(scopedFiscalProvider)};
     cache.set(id,runtime);
