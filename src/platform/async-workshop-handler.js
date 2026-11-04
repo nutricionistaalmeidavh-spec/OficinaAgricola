@@ -116,6 +116,26 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
    const checklist=path.match(/^\/v1\/checklists\/([1-9]\d*)$/);
    if(checklist&&method==='GET')
      return json(await services.getWorkOrderChecklist(Number(checklist[1])));
+   if(path==='/v1/fiscal/settings'&&method==='GET')
+     return json(await services.getFiscalSettings());
+   if(path==='/v1/fiscal/settings'&&method==='PATCH')
+     return json(await services.setFiscalSettings(await dataFrom(request)));
+   if(path==='/v1/fiscal'&&method==='GET')
+     return json(await services.listFiscalDocuments({
+       status:u.searchParams.get('status')||'',limit:u.searchParams.get('limit')||100
+     }));
+   const fiscal=path.match(/^\/v1\/fiscal\/([1-9]\d*)$/);
+   if(fiscal&&method==='GET')
+     return json(await services.getFiscalDocument(Number(fiscal[1])));
+   const fiscalEvents=path.match(/^\/v1\/fiscal\/([1-9]\d*)\/events$/);
+   if(fiscalEvents&&method==='GET')
+     return json(await services.getFiscalEvents(Number(fiscalEvents[1])));
+   const fiscalSubmit=path.match(/^\/v1\/fiscal\/([1-9]\d*)\/submit$/);
+   if(fiscalSubmit&&method==='POST')
+     return json(await services.submitFiscalDocument(Number(fiscalSubmit[1])));
+   const fiscalReconcile=path.match(/^\/v1\/fiscal\/([1-9]\d*)\/reconcile$/);
+   if(fiscalReconcile&&method==='POST')
+     return json(await services.reconcileFiscalDocument(Number(fiscalReconcile[1])));
    if(path==='/v1/services'&&method==='GET')
      return json(await services.listServices({
        search:u.searchParams.get('search')||'',
