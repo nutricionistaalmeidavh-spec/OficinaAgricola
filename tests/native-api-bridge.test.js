@@ -34,7 +34,7 @@ test('bridge rejects unknown tenant, foreign endpoint and unsupported routes wit
  const valid={endpoint:'http://127.0.0.1:3456',serviceToken:'t'.repeat(40),companyId:3,unitId:2};
  await assert.rejects(bridge({...common,backend:{...valid,companyId:7}}),/identidade|tenant|unidade/i);
  await assert.rejects(bridge({...common,backend:{...valid,endpoint:'http://foreign.example:3456'}}),/HTTPS|loopback/i);
- await assert.rejects(bridge({...common,backend:valid,path:'/api/dashboard'}),/não suportada|disponível/i);
+ await assert.rejects(bridge({...common,backend:valid,path:'/api/diagnostics/hardware'}),/não suportada|disponível/i);
  await assert.rejects(bridge({...common,backend:valid,unit:{...common.unit,role:'TECNICO'},method:'POST'}),/Permissão/i);
  assert.equal(calls,0);
 });
