@@ -281,10 +281,28 @@ async function openTenantAdmin(){
               <div class="card"><strong>${(dossier.attachments||[]).length}</strong><small>Anexos da origem</small></div>
             </div>
             <strong>Documentos fiscais</strong>
-            ${(dossier.fiscalDocuments||[]).map(doc=>'<div class="list-item"><small>'+esc(doc.kind)+' #'+doc.id+' · '+esc(doc.status)+' · '+money(doc.amount_cents)+'</small></div>').join('')||'<p class="muted">Nenhum documento fiscal</p>'}
+            ${(dossier.fiscalDocuments||[]).map(doc=>'<div class="list-item"><small>'+esc(doc.kind)+' #'+doc.id+' · '+esc(doc.status)+' · '+money(doc.amount_cents)+'</small>'+(['AUTORIZADA','AUTORIZADA_HOMOLOGACAO'].includes(doc.status)?'<button type="button" class="btn sm" data-fiscal-xml="'+doc.id+'">Baixar XML</button>':'')+'</div>').join('')||'<p class="muted">Nenhum documento fiscal</p>'}
             <strong>Anexos originais</strong>
             ${(dossier.attachments||[]).map(att=>'<div class="list-item"><small>'+esc(att.original_name)+' · '+esc(att.category)+'</small><button class="btn sm" type="button" data-os-evidence="'+att.id+'">Baixar evidência</button></div>').join('')||'<p class="muted">Nenhum anexo</p>'}
           </div>`);
+          for(const xmlBtn of document.querySelectorAll('[data-fiscal-xml]')){
+            xmlBtn.onclick=async()=>{
+              const fiscalId=Number(xmlBtn.dataset.fiscalXml);
+              if(!(dossier.fiscalDocuments||[]).some(doc=>doc.id===fiscalId))return;
+              const path='/api/tenancy/os-transfer/'+id+'/fiscal/'+fiscalId+'/xml';
+              const response=await (window.localRuntime?.request||fetch)(path,{
+                method:'GET',headers:window.OficinaTenant?.headers()||{},credentials:'same-origin'
+              });
+              if(!response.ok)throw new Error('XML fiscal de origem não disponível para download');
+              const blob=await response.blob();
+              const uri=URL.createObjectURL(blob);
+              try{
+                const link=document.createElement('a');link.href=uri;
+                link.download='Fiscal-'+fiscalId+'.xml';
+                document.body.append(link);link.click();link.remove();
+              }finally{setTimeout(()=>URL.revokeObjectURL(uri),500);}
+            };
+          }
           for(const fileBtn of document.querySelectorAll('[data-os-evidence]')){
             fileBtn.onclick=async()=>{
               const attachmentId=Number(fileBtn.dataset.osEvidence);
