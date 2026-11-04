@@ -9,7 +9,7 @@ test('Asaas gera boleto e fatura individual com valor, referência e cliente ser
   if(method==='POST')return {id:'pay_123',externalReference:body.externalReference,
     customer:body.customer,billingType:body.billingType,value:body.value,
     invoiceUrl:'https://sandbox.asaas.com/i/teste',status:'PENDING'};
-  return {id:'pay_123',externalReference:'billing-plan-1',
+  return {id:'pay_123',externalReference:'billing-plan-1',customer:'cus_123',
    billingType:'BOLETO',value:25.00,status:'RECEIVED'};
  };
  const resolveCustomer=async()=> 'cus_123';
