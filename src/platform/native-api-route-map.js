@@ -3,8 +3,9 @@ const ALL=Object.freeze(['ADMIN','ATENDIMENTO','TECNICO','FINANCEIRO']);
 const OFFICE=Object.freeze(['ADMIN','ATENDIMENTO']);
 const TECH=Object.freeze(['ADMIN','ATENDIMENTO','TECNICO']);
 const FIN=Object.freeze(['ADMIN','FINANCEIRO']);
+const SALES=Object.freeze(['ADMIN','ATENDIMENTO','FINANCEIRO']);
 const ADMIN=Object.freeze(['ADMIN']);
-const ROLES={ALL,OFFICE,TECH,FIN,ADMIN};
+const ROLES={ALL,OFFICE,TECH,FIN,ADMIN,SALES};
 const ROUTES=[
  'GET /api/dashboard /v1/dashboard ALL',
  'GET /api/reports /v1/reports/operations ALL',
@@ -15,12 +16,12 @@ const ROUTES=[
  'GET /api/machines/page /v1/machines/page ALL',
  'GET /api/machines/:id /v1/machines/:id ALL',
  'GET /api/machines/:id/history /v1/machines/:id/history ALL',
- 'GET /api/cash/current /v1/cash/current FIN',
- 'GET /api/cash/sessions /v1/cash/sessions FIN',
+ 'GET /api/cash/current /v1/cash/current SALES',
+ 'GET /api/cash/sessions /v1/cash/sessions SALES',
  'GET /api/schedule/page /v1/schedule/page ALL',
  'GET /api/expenses/page /v1/expenses/page FIN',
  'GET /api/fiscal/page /v1/fiscal/page FIN',
- 'GET /api/sales/page /v1/sales/page ALL',
+ 'GET /api/sales/page /v1/sales/page SALES',
  'GET /api/fiscal/:id/xml /v1/fiscal/:id/xml FIN',
  'PATCH /api/technicians/:id /v1/technicians/:id ADMIN',
  'GET /api/customers /v1/customers ALL',
@@ -86,13 +87,13 @@ const ROUTES=[
  'POST /api/fiscal/:id/reconcile /v1/fiscal/:id/reconcile FIN',
  'GET /api/services /v1/services ALL',
  'POST /api/services /v1/services OFFICE',
- 'GET /api/sales /v1/sales ALL',
- 'POST /api/sales /v1/sales OFFICE',
- 'GET /api/sales/:id /v1/sales/:id ALL',
- 'POST /api/sales/:id/cancel /v1/sales/:id/cancel OFFICE sale',
- 'POST /api/cash/open /v1/cash/open FIN',
- 'GET /api/cash/current/summary /v1/cash/summary FIN',
- 'POST /api/cash/current/close /v1/cash/close FIN',
+ 'GET /api/sales /v1/sales SALES',
+ 'POST /api/sales /v1/sales SALES',
+ 'GET /api/sales/:id /v1/sales/:id SALES',
+ 'POST /api/sales/:id/cancel /v1/sales/:id/cancel FIN sale',
+ 'POST /api/cash/open /v1/cash/open SALES',
+ 'GET /api/cash/current/summary /v1/cash/summary SALES',
+ 'POST /api/cash/current/close /v1/cash/close SALES',
  'GET /api/machines/:id/compatible-parts /v1/machines/:id/compatible-parts ALL',
  'GET /api/machines/:id/obd-scans /v1/machines/:id/obd-scans ALL',
  'POST /api/machines/:id/obd-scans /v1/machines/:id/obd-scans TECH',
