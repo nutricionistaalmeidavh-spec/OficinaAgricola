@@ -22,6 +22,7 @@ export const BILLING_SCHEMA_DDL=Object.freeze([
    status TEXT NOT NULL CHECK(status IN ('PENDING','PAID','FAILED')),
    provider_ref TEXT,
    payment_url TEXT,
+   emission_state TEXT NOT NULL DEFAULT 'READY' CHECK(emission_state IN ('READY','ISSUING','ISSUED')),
    receipt_id BIGINT UNIQUE REFERENCES receipts(id),
    created_at TEXT NOT NULL,updated_at TEXT NOT NULL,
    UNIQUE(plan_id,installment_number)
@@ -203,17 +204,33 @@ export function createBillingService(port,{receivePayment,getPaymentSummary,prov
   const provider=providers[installment.method];
   if(!provider||typeof provider.create!=='function'||typeof provider.status!=='function')
    fail('Provedor de '+installment.method+' não configurado',409);
-  // A interface nunca recebe token nem ID de cliente externo.
-  // Cada adaptador deve resolver o cliente na camada servidor, por unidade.
-  const result=await provider.create({
+  // Proteção de concorrência do lado do banco antes de qualquer operação externa.
+  // Falhas ambíguas ficam ISSUING e só podem ser recuperadas por consulta ao PSP.
+  const cmd={
    requestId:installment.id,workOrderId:Number(installment.work_order_id),
    amountCents:Number(installment.amount_cents),dueDate:installment.due_date
-  });
+  };
+  let result;
+  if(installment.emission_state==='ISSUING'){
+   if(typeof provider.recover!=='function')
+    fail('Emissão em andamento: recuperação externa é necessária',409);
+   result=await provider.recover(cmd);
+   if(!result)fail('Emissão em andamento: confirme com o provedor antes de reemitir',409);
+  }else if(installment.emission_state==='READY'){
+   const claim=await port.run(`UPDATE billing_installments SET emission_state='ISSUING',
+     updated_at=? WHERE id=? AND status='PENDING' AND provider_ref IS NULL
+     AND emission_state='READY'`,[new Date().toISOString(),installment.id]);
+   if(countChanges(claim)!==1)fail('Emissão em andamento: outra sessão já solicitou a cobrança',409);
+   // Nunca repetir automaticamente após falha ou timeout. Somente recover
+   // (consulta sem POST) pode liberar uma emissão anteriormente desconhecida.
+   result=await provider.create(cmd);
+  }else fail('Emissão externa inconsistente, conciliação necessária',409);
   const reference=text(result?.reference);
   if(!reference||reference.length>200)fail('Provedor não retornou referência de cobrança',409);
   const paymentUrl=validUrl(result?.paymentUrl);
-  await port.run(`UPDATE billing_installments SET provider_ref=?,payment_url=?,updated_at=?
-   WHERE id=? AND status='PENDING' AND provider_ref IS NULL`,[
+  await port.run(`UPDATE billing_installments SET provider_ref=?,payment_url=?,
+    emission_state='ISSUED',updated_at=?
+    WHERE id=? AND status='PENDING' AND provider_ref IS NULL AND emission_state='ISSUING'`,[
     reference,paymentUrl,new Date().toISOString(),installment.id
    ]);
   const current=await loadInstallment(installment.id);
