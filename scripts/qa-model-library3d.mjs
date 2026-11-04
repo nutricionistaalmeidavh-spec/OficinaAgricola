@@ -103,6 +103,39 @@ try{
   }
   await page.locator('#modalClose').click();
   await page.locator('#modal').waitFor({state:'hidden'});
+
+  // QA real dos três GLBs com rodas reconstruídas — quatro meshes de roda
+  // devem existir e renderizar com GLTFLoader e Meshopt no navegador.
+  const repairedModels=['fiat-palio','ford-ka','vw-fox'];
+  for(const assetId of repairedModels){
+    await page.locator('.ml-card[data-model-id="'+assetId+'"] [data-model-detail]').click();
+    await page.locator('#ml-variant').waitFor({state:'visible'});
+    await page.locator('#ml-variant').selectOption('repaired');
+    const optionText=await page.locator('#ml-variant option:checked').textContent();
+    if(!optionText?.includes('Rodas reconstruídas'))
+      throw new Error('Variante geométrica não exibida para '+assetId);
+    if(!(await page.locator('#ml-view-start').isEnabled())){
+      await page.locator('#ml-install').click();
+      await page.waitForFunction(
+        ()=>document.querySelector('#ml-view-start')?.disabled===false ||
+          (document.querySelector('#ml-viewer-message')?.textContent||'').startsWith('Falha na instalação'),
+        undefined,{timeout:120000});
+      const statusText=await page.locator('#ml-viewer-message').textContent();
+      if(statusText?.startsWith('Falha na instalação'))
+        throw new Error(assetId+': '+statusText);
+    }
+    await page.locator('#ml-view-start').click();
+    await page.waitForFunction(
+      ()=>document.querySelector('#ml-viewer-stage')?.dataset.generatedWheels==='4' ||
+        (document.querySelector('#ml-viewer-message')?.textContent||'').startsWith('Falha na visualização'),
+      undefined,{timeout:60000});
+    const wheels=await page.locator('#ml-viewer-stage').getAttribute('data-generated-wheels');
+    if(wheels!=='4')throw new Error(assetId+': rodas reais incompletas: '+(await page.locator('#ml-viewer-message').textContent()));
+    await page.locator('#ml-viewer-stage canvas').waitFor({state:'visible'});
+    await page.screenshot({path:path.join(output,'04-'+assetId+'-rodas-3d.png'),fullPage:true});
+    await page.locator('#modalClose').click();
+    await page.locator('#modal').waitFor({state:'hidden'});
+  }
   await page.reload({waitUntil:'domcontentloaded'});
   await page.locator('#appView').waitFor({state:'visible'});
   // O servidor local continua com GLB instalado mesmo após recarregar o navegador.
@@ -113,9 +146,13 @@ try{
   const data=await response.json();
   if(!data.models.some(x=>x.id==='fiat-uno'&&x.installed.restored))
     throw new Error('GLB não persistiu no servidor após reload');
+  for(const assetId of repairedModels){
+    if(!data.models.some(x=>x.id===assetId&&x.installed.repaired))
+      throw new Error('GLB de rodas não persistiu após recarga: '+assetId);
+  }
   await writeFile(path.join(output,'qa.json'),JSON.stringify({
     viewport:viewportName,model:'fiat-uno',variant:'restored',renderer:'Three.js WebGL',
-    persisted:true,canvas:dim,errors:browserErrors
+    persisted:true,canvas:dim,repairedModels,generatedWheels:12,errors:browserErrors
   },null,2));
   console.log('QA_GLTF_SUCCESS',viewportName,JSON.stringify(dim));
 }catch(err){
