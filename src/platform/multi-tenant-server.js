@@ -18,7 +18,7 @@ import { auditInvariants } from '../services/reconciliation.js';
 import {
   migrateTenantRegistry, registerInitialAdmin, listUserUnits, requireUnitMembership,
   requireCompanyAdmin, createTenantCompany, createTenantUnit, grantUnitMembership,
-  changeUnitMembership, listUnitMembers, markLegacyRegistryLink, listTenantAudit, requireCompanyAdmin
+  changeUnitMembership, listUnitMembers, markLegacyRegistryLink, listTenantAudit
 } from './tenant-registry.js';
 
 const json=(res,status,data)=>{if(res.writableEnded)return;res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(data));};
