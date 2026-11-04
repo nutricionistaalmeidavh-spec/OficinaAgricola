@@ -5,6 +5,8 @@ import {openDatabase,migrate} from '../src/db.js';
 import {migrateAssistencia} from '../src/assistencia-schema.js';
 import {createCommonDataAdapter} from '../src/platform/common-data-adapter.js';
 import {createAsyncWorkshopAuth} from '../src/platform/async-workshop-auth.js';
+import {createAsyncWorkshopServices} from '../src/platform/async-workshop-services.js';
+import {createAsyncWorkshopHandler} from '../src/platform/async-workshop-handler.js';
 
 test('common authentication uses existing password hash, scoped session, and role authorization',async()=>{
  const db=openDatabase(':memory:');
@@ -45,4 +47,42 @@ test('common auth rejects inactive or expired sessions, and cross-database sessi
   db1.prepare('UPDATE sessions SET expires_at=?').run('2020-01-01T00:00:00.000Z');
   await assert.rejects(first.validateSession(login.token),/Sessão inválida/);
  }finally{db1.close();db2.close();}
+});
+
+test('private SQL handler exposes unit-owned authentication only behind backend service token',async()=>{
+ const db=openDatabase(':memory:');
+ try{
+  migrate(db);migrateAssistencia(db);
+  const services=createAsyncWorkshopServices(createCommonDataAdapter({engine:'sqlite',db}));
+  const secret='r'.repeat(48);
+  const handler=createAsyncWorkshopHandler({services,serviceToken:secret});
+  const request=(path,body,authorization='Bearer '+secret)=>handler(new Request('http://localhost'+path,{
+   method:'POST',headers:{authorization,'content-type':'application/json'},body:JSON.stringify(body)
+  }));
+  const noToken=await request('/v1/auth/bootstrap',{username:'u1',name:'U',password:'Password2026!'},'');
+  assert.equal(noToken.status,401);
+  const admin=await request('/v1/auth/bootstrap',{
+   username:'gestor',name:'Administrador',password:'StrongPass2026!'
+  });
+  assert.equal(admin.status,201);
+  const adminData=await admin.json();
+  assert.equal(adminData.role,'ADMIN');
+  const logged=await request('/v1/auth/login',{
+   username:'gestor',password:'StrongPass2026!'
+  });
+  assert.equal(logged.status,200);
+  const auth=await logged.json();
+  assert.equal(auth.user.role,'ADMIN');
+  assert.ok(auth.token);
+  const forbidden=await request('/v1/auth/users',{
+   username:'tecnico',name:'Técnico',password:'StrongPass2026!',role:'TECNICO'
+  });
+  assert.equal(forbidden.status,401,'user creation requires a personal session in addition to service auth');
+  const created=await request('/v1/auth/users',{
+   username:'tecnico',name:'Técnico',password:'StrongPass2026!',role:'TECNICO',
+   sessionToken:auth.token
+  });
+  assert.equal(created.status,201);
+  assert.equal((await created.json()).role,'TECNICO');
+ }finally{db.close();}
 });
