@@ -126,7 +126,9 @@ const validUrl=value=>{
 
 export function createBillingService(port,{receivePayment,getPaymentSummary,providers={}}={}){
  if(!port||!['sqlite','postgres','d1'].includes(port.engine)||
-   !['first','all','run','batch','transaction'].every(fn=>typeof port[fn]==='function'))
+   !['first','all','run'].every(fn=>typeof port[fn]==='function')||
+   (port.engine==='d1'&&typeof port.batch!=='function')||
+   (port.engine!=='d1'&&typeof port.transaction!=='function'))
   fail('Porta SQL canônica obrigatória');
  if(typeof receivePayment!=='function'||typeof getPaymentSummary!=='function')
   fail('Livro de recebimento canônico obrigatório');
