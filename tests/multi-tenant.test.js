@@ -107,6 +107,21 @@ test('HTTP isolation: company and unit records, member roles and revoked access'
   assert.equal((await request('GET','/api/health')).status,200,'health must remain public');
   const unit=await request('POST','/api/tenancy/units',{companyId:newCompany.data.id,code:'FILIAL',name:'Filial Norte'});
   assert.equal(unit.status,201,JSON.stringify(unit.data));
+  // Shared catalog is explicit and audited, never a silent stock transfer.
+  const sharedSource=await request('POST','/api/parts',{sku:'SHARED-001',description:'Peça compartilhada',quantity:8,salePriceCents:6000},second);
+  assert.equal(sharedSource.status,200,JSON.stringify(sharedSource.data));
+  assert.equal((await request('POST','/api/tenancy/share-part',{sourceUnitId:1,targetUnitId:second,partId:sku.data.id})).status,403,'cross-company sharing forbidden');
+  const shared=await request('POST','/api/tenancy/share-part',{sourceUnitId:second,targetUnitId:unit.data.id,partId:sharedSource.data.id});
+  assert.equal(shared.status,200,JSON.stringify(shared.data));
+  assert.equal(shared.data.created,true);
+  const targetPart=await request('GET','/api/parts',undefined,unit.data.id);
+  assert.equal(targetPart.data.length,1);
+  assert.equal(targetPart.data[0].sku,'SHARED-001');
+  assert.equal(targetPart.data[0].quantity,0,'catalog copy must not manufacture physical stock');
+  const repeat=await request('POST','/api/tenancy/share-part',{sourceUnitId:second,targetUnitId:unit.data.id,partId:sharedSource.data.id});
+  assert.equal(repeat.status,200);
+  assert.equal(repeat.data.targetPartId,shared.data.targetPartId,'retries do not duplicate catalog entries');
+  assert.equal(repeat.data.created,false);
   const member=await request('POST','/api/tenancy/memberships',{unitId:unit.data.id,username:'technician',name:'Técnico Filial',password:'StrongP@ss2026',role:'TECNICO'});
   assert.equal(member.status,201,JSON.stringify(member.data));
   const staff=await request('POST','/api/auth/login',{username:'technician',password:'StrongP@ss2026'});
