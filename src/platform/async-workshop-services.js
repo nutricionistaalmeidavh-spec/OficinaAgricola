@@ -10,6 +10,7 @@ import {createAsyncWorkshopInventory} from './async-workshop-inventory.js';
 import {createAsyncWorkshopAutomotive} from './async-workshop-automotive.js';
 import {createAsyncWorkshopAuth} from './async-workshop-auth.js';
 import {createAsyncWorkshopCrm} from './async-workshop-crm.js';
+import {createAsyncWorkshopAttachments} from './async-workshop-attachments.js';
 
 // Async canonical service layer for PostgreSQL and D1. Each command is
 // explicitly transactional on its backend; never delegate to legacy SQLite.
@@ -31,7 +32,7 @@ async function atomic(port,queries){
  });
 }
 const select=(sql,params=[])=>({sql,params});
-export function createAsyncWorkshopServices(port,{fiscalProvider=null}={}){
+export function createAsyncWorkshopServices(port,{fiscalProvider=null,objectStore=null}={}){
  if(!['sqlite','d1','postgres'].includes(port?.engine))fail('Serviço exige adaptador SQL comum válido');
  async function createCustomer(input={}){
    const name=text(input.name);if(!name)fail('Nome do cliente obrigatório');
@@ -471,6 +472,7 @@ export function createAsyncWorkshopServices(port,{fiscalProvider=null}={}){
    ...createAsyncWorkshopInventory(port),
    ...createAsyncWorkshopAutomotive(port),
    ...createAsyncWorkshopAuth(port),
-   ...createAsyncWorkshopCrm(port)
+   ...createAsyncWorkshopCrm(port),
+   ...createAsyncWorkshopAttachments(port,{objectStore})
  });
 }
