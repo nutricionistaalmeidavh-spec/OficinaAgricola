@@ -31,6 +31,15 @@ try{
  });
  assert.equal(order.status,'ENTRADA');
  assert.ok(Number(order.os_number)>0);
+ // Multi-user concurrency must not allocate MAX(os_number)+1 twice.
+ // PostgreSQL's unique index is an invariant, not a reason to lose an OS.
+ const simultaneous=await Promise.all(Array.from({length:12},(_,i)=>
+  service.createWorkOrder({customerId:customer.id,machineId:machine.id,
+   problemReported:'PG concorrência '+i})
+ ));
+ assert.equal(new Set(simultaneous.map(os=>Number(os.os_number))).size,12,
+   'each concurrent OS must receive a unique canonical number');
+
  const part=await service.createPart({
   sku:'PG-PARITY-001',description:'Componente de regressão',salePriceCents:6000
  });
