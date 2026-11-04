@@ -16,7 +16,7 @@ function paintable(id,mesh){
 
 export async function mountViewer({id,variant='original',element,statusElement}){
   active?.dispose();
-  if(!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)||!['original','restored'].includes(variant))
+  if(!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)||!['original','restored','repaired'].includes(variant))
     throw new Error('Modelo 3D inválido');
   if(!element?.isConnected)throw new Error('Janela 3D não disponível');
   if(statusElement)statusElement.textContent='Carregando modelo 3D local...';
