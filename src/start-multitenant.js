@@ -6,6 +6,7 @@ import { createMultiTenantServer } from './platform/multi-tenant-server.js';
 import { resolveServerConfig, listLanUrls } from './platform/network.js';
 import { startMultiTenantBackupSchedule } from './platform/tenant-backup.js';
 import { createS3BackupClient } from './platform/s3-backup.js';
+import { loadTenantFiscalConfigs } from './platform/tenant-fiscal.js';
 
 // Explicit backend selection. Never pretend that D1/R2/PostgreSQL are active
 // while writing user data to an unrelated SQLite database.
@@ -24,7 +25,8 @@ const tls=process.env.HTTPS_CERT_FILE&&process.env.HTTPS_KEY_FILE?{
   cert:readFileSync(process.env.HTTPS_CERT_FILE),
   key:readFileSync(process.env.HTTPS_KEY_FILE)
 }:null;
-const server=createMultiTenantServer({registryDb,legacyDb,legacyDatabasePath,legacyStorageDir,tenantsRoot,tls});
+const tenantFiscalConfigs=loadTenantFiscalConfigs(process.env.TENANCY_FISCAL_CONFIG_FILE);
+const server=createMultiTenantServer({registryDb,legacyDb,legacyDatabasePath,legacyStorageDir,tenantsRoot,tls,tenantFiscalConfigs});
 const {host,port}=resolveServerConfig(process.env);
 // Remote copies are opt-in, while SQLite + local disk remain canonical and free.
 const backupS3Endpoint=String(process.env.OFICINA_BACKUP_S3_ENDPOINT||'').trim();
