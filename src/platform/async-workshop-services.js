@@ -22,7 +22,7 @@ async function atomic(port,queries){
 }
 const select=(sql,params=[])=>({sql,params});
 export function createAsyncWorkshopServices(port){
- if(!['d1','postgres'].includes(port?.engine))fail('Serviço exige D1 ou PostgreSQL nativo');
+ if(!['sqlite','d1','postgres'].includes(port?.engine))fail('Serviço exige adaptador SQL comum válido');
  async function createCustomer(input={}){
    const name=text(input.name);if(!name)fail('Nome do cliente obrigatório');
    const customerId=id(),at=iso();
@@ -112,7 +112,7 @@ export function createAsyncWorkshopServices(port){
    const delta=q*allowed[type],at=iso(),movementId=id();
    const update=select(`UPDATE parts SET quantity=quantity+?,updated_at=?
      WHERE id=? AND active=1 AND quantity+?>=-0.00000001`,[delta,at,p,delta]);
-   if(port.engine==='d1'){
+   if(port.engine!=='postgres'){
      const result=await atomic(port,[
        update,
        select(`INSERT INTO inventory_movements(
@@ -163,7 +163,7 @@ export function createAsyncWorkshopServices(port){
    ) SELECT ?,'OS_RECEIPT',?,'PAID',?,?,? FROM receipts WHERE id=?`,[
      eventId,receiptId,amount,method,at,receiptId
    ]);
-   if(port.engine==='d1'){
+   if(port.engine!=='postgres'){
      const output=await atomic(port,[insert,event]);
      if(changes(output[0])!==1){
        // D1 batch is atomic but an identical replay may have won the race
@@ -234,7 +234,7 @@ export function createAsyncWorkshopServices(port){
      ) SELECT ?,?,?,?,? WHERE changes()=1`,[
      current.id,current.status,toStatus,text(reason),at
    ]);
-   if(port.engine==='d1'){
+   if(port.engine!=='postgres'){
      const results=await atomic(port,[updated,history]);
      if(changes(results[0])!==1)fail('Conflito de versão durante mudança de estado',409);
    }else await port.transaction(async tx=>{
@@ -288,7 +288,7 @@ export function createAsyncWorkshopServices(port){
    ) VALUES(?,?,?,?,?,?,?)`,[
      id(),quoteId,item.kind,item.description,item.quantity,item.unitPriceCents,item.totalCents
    ]));
-   if(port.engine==='d1'){
+   if(port.engine!=='postgres'){
      const result=await atomic(port,[update,upsert,clear,...addLines]);
      if(changes(result[0])!==1||changes(result[1])!==1)
        fail('Conflito de versão ou orçamento aprovado',409);
@@ -319,7 +319,7 @@ export function createAsyncWorkshopServices(port){
      approved_at=?,updated_at=? WHERE id=? AND approval_status IN ('RASCUNHO','AGUARDANDO')`,[
      at,at,quote.id
    ]);
-   if(port.engine==='d1'){
+   if(port.engine!=='postgres'){
      const result=await atomic(port,[
        orderUpdate,quoteUpdate,
        select(`INSERT INTO work_order_status_history(work_order_id,from_status,to_status,reason,changed_at)
