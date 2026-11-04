@@ -1,3 +1,4 @@
+import {assertCommonDataContract} from './common-data-adapter.js';
 import {createHash,randomBytes,scrypt,scryptSync,timingSafeEqual} from 'node:crypto';
 
 // Global registry: one explicitly provisioned PostgreSQL database for users,
@@ -100,8 +101,9 @@ async function platformAdmin(p,userId){
  if(!found)fail('Permissão: administração da plataforma necessária');
 }
 export function createPostgresTenantRegistry(port){
- if(port?.engine!=='postgres'||!['first','all','run','transaction'].every(k=>typeof port[k]==='function'))
-   throw Error('Registry PostgreSQL exige contrato SQL assíncrono transacional real');
+ assertCommonDataContract(port,{interactiveTransactions:true});
+ if(port.engine!=='postgres')
+   throw Error('Registry exige PostgreSQL; nenhum fallback para SQLite ou D1');
  // In-process throttling protects the basic local gateway; production edge
  // should additionally apply global rate limits if horizontally scaled.
  const attempts=new Map();
