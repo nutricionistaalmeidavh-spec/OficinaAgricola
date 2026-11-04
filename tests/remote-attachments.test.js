@@ -64,3 +64,19 @@ test('simultaneous uploads with same request ID keep one canonical row and one r
   assert.equal(s.objects.size,1,'second temporary upload is cleaned after losing idempotency race');
  }finally{s.close();}
 });
+
+test('S3 upload returning error after PUT still cleans the remote key before aborting SQLite',async()=>{
+ const s=init();
+ try{
+  const failing={
+    ...s.objectStore,
+    async putObject({key,data}){
+      s.objects.set(key,Buffer.from(data));
+      throw Error('S3 HEAD did not confirm integrity');
+    }
+  };
+  await assert.rejects(saveRemoteAttachment(s.db,s.os.id,payload,{objectStore:failing}),/S3 HEAD/);
+  assert.equal(s.objects.size,0,'orphan must be removed even if upload throws after PUT');
+  assert.equal(s.db.prepare('SELECT COUNT(*) n FROM attachments').get().n,0);
+ }finally{s.close();}
+});
