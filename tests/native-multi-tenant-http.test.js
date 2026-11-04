@@ -43,7 +43,7 @@ test('native tenant dispatch validates global login and tenant, never reads shad
  assert.deepEqual((await result.json()).map(x=>x.name),['PG-only customer']);
  assert.equal(calls.length,1);
  assert.equal(calls[0].unit.companyId,1);
- const unsupported=await fetch(base+'/api/dashboard',{headers});
+ const unsupported=await fetch(base+'/api/diagnostics/hardware',{headers});
  assert.equal(unsupported.status,400,'mock gateway deliberately rejects unknown routes');
  assert.equal(legacy.prepare('SELECT COUNT(*) n FROM customers').get().n,1);
  const denied=await fetch(base+'/api/customers');
