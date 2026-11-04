@@ -30,6 +30,14 @@ test('transferred OS dossier exposes original evidence to authorized administrat
   const attachment=saveAttachment(sourceDb,os.id,{category:'DIAGNOSTICO',mimeType:'application/pdf',
     originalName:'prova.pdf',base64:evidence.toString('base64'),
     storageDir:join(dir,'uploads')});
+  const authorizedXml='<nfeProc><NFe>authorized-origin-only</NFe></nfeProc>';
+  const fiscalDoc=sourceDb.prepare(`INSERT INTO fiscal_documents(
+    kind,origin_type,origin_id,status,amount_cents,snapshot_json,snapshot_hash,
+    request_id,authorized_xml,created_at,updated_at
+  ) VALUES ('NFE','OS',?,'AUTORIZADA',15000,'{}','test-hash',
+    'dossier-origin-xml',?,'2026-11-03T00:00:00.000Z','2026-11-03T00:00:00.000Z')`)
+    .run(os.id,authorizedXml);
+  const fiscalId=Number(fiscalDoc.lastInsertRowid);
   const server=createMultiTenantServer({
     registryDb:registry,legacyDb:legacy,tenantsRoot:join(root,'tenants'),
     legacyStorageDir:join(root,'legacy-uploads')
@@ -71,6 +79,14 @@ test('transferred OS dossier exposes original evidence to authorized administrat
   assert.equal(downloaded.status,200);
   assert.deepEqual(downloaded.body,evidence);
   assert.equal((await request(file.replace('/'+attachment.id+'/file','/9999/file'),{token,binary:true})).status,404);
+  const xmlUrl='/api/tenancy/os-transfer/'+moved.body.transferId+'/fiscal/'+fiscalId+'/xml';
+  assert.equal((await request(xmlUrl,{binary:true})).status,401);
+  const xml=await request(xmlUrl,{token,binary:true});
+  assert.equal(xml.status,200);
+  assert.deepEqual(xml.body,Buffer.from(authorizedXml));
+  assert.equal((await request(xmlUrl.replace('/'+fiscalId+'/xml','/999999/xml'),{token,binary:true})).status,404);
+  assert.equal(sourceDb.prepare('SELECT COUNT(*) n FROM fiscal_documents').get().n,1);
+
   const received=await request('/api/work-orders',{token,method:'GET'});
   assert.equal(received.status,409,'unit selection remains compulsory');
 });
