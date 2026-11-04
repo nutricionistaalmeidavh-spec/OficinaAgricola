@@ -1,0 +1,134 @@
+// Explicit reviewed legacy-to-native API allowlist. No generic path rewriting.
+const ALL=Object.freeze(['ADMIN','ATENDIMENTO','TECNICO','FINANCEIRO']);
+const OFFICE=Object.freeze(['ADMIN','ATENDIMENTO']);
+const TECH=Object.freeze(['ADMIN','ATENDIMENTO','TECNICO']);
+const FIN=Object.freeze(['ADMIN','FINANCEIRO']);
+const ADMIN=Object.freeze(['ADMIN']);
+const ROLES={ALL,OFFICE,TECH,FIN,ADMIN};
+const ROUTES=[
+ 'GET /api/customers /v1/customers ALL',
+ 'POST /api/customers /v1/customers OFFICE',
+ 'PATCH /api/customers/:id /v1/customers/:id OFFICE',
+ 'GET /api/machines /v1/machines ALL',
+ 'POST /api/machines /v1/machines OFFICE',
+ 'PATCH /api/machines/:id /v1/machines/:id OFFICE',
+ 'GET /api/technicians /v1/technicians ALL',
+ 'POST /api/technicians /v1/technicians ADMIN',
+ 'GET /api/work-orders /v1/orders ALL',
+ 'GET /api/work-orders/page /v1/orders/page ALL',
+ 'POST /api/work-orders /v1/orders OFFICE',
+ 'GET /api/work-orders/:id /v1/orders/:id ALL',
+ 'PATCH /api/work-orders/:id /v1/orders/:id TECH',
+ 'POST /api/work-orders/:id/duplicate /v1/orders/:id/duplicate OFFICE',
+ 'POST /api/work-orders/:id/status /v1/orders/:id/status TECH status',
+ 'GET /api/work-orders/:id/history /v1/orders/:id/history ALL',
+ 'GET /api/work-orders/:id/quote /v1/orders/:id/quote ALL',
+ 'PUT /api/work-orders/:id/quote /v1/orders/:id/quote OFFICE',
+ 'POST /api/work-orders/:id/quote/submit /v1/orders/:id/quote/submit OFFICE',
+ 'POST /api/work-orders/:id/quote/approve /v1/orders/:id/quote/approve OFFICE',
+ 'POST /api/work-orders/:id/quote/reject /v1/orders/:id/quote/reject OFFICE',
+ 'GET /api/parts /v1/parts ALL',
+ 'POST /api/parts /v1/parts OFFICE',
+ 'GET /api/parts/page /v1/parts/page ALL',
+ 'GET /api/parts/:id /v1/parts/:id ALL',
+ 'PATCH /api/parts/:id /v1/parts/:id OFFICE',
+ 'GET /api/parts/:id/fitments /v1/parts/:id/fitments ALL',
+ 'POST /api/parts/:id/fitments /v1/parts/:id/fitments OFFICE',
+ 'DELETE /api/parts/:id/fitments/:fitmentId /v1/parts/:id/fitments/:fitmentId OFFICE',
+ 'POST /api/inventory/movements /v1/stock OFFICE',
+ 'GET /api/inventory/low-stock /v1/parts/low-stock ALL',
+ 'GET /api/work-orders/:id/parts /v1/orders/:id/parts ALL',
+ 'POST /api/work-orders/:id/parts /v1/orders/:id/parts TECH order',
+ 'POST /api/work-orders/:id/parts/:itemId/reverse /v1/orders/:id/parts/:itemId/reverse TECH reversePart',
+ 'GET /api/schedule /v1/schedule ALL',
+ 'POST /api/schedule /v1/schedule TECH',
+ 'PATCH /api/schedule/:id /v1/schedule/:id TECH',
+ 'GET /api/checklist-templates /v1/checklist-templates ALL',
+ 'POST /api/checklist-templates /v1/checklist-templates ADMIN',
+ 'GET /api/checklist-templates/:id /v1/checklist-templates/:id ALL',
+ 'GET /api/work-orders/:id/checklists /v1/orders/:id/checklists ALL',
+ 'POST /api/work-orders/:id/checklists /v1/orders/:id/checklists TECH order',
+ 'GET /api/work-orders/:id/attachments /v1/orders/:id/attachments ALL',
+ 'POST /api/work-orders/:id/attachments /v1/orders/:id/attachments TECH',
+ 'GET /api/attachments/:id/file /v1/attachments/:id/file ALL',
+ 'GET /api/work-orders/:id/payment /v1/orders/:id/payment ALL',
+ 'GET /api/work-orders/:id/receipts /v1/orders/:id/receipts ALL',
+ 'POST /api/work-orders/:id/receipts /v1/payments FIN receipt',
+ 'POST /api/work-orders/:id/receipts/:receiptId/reverse /v1/orders/:id/receipts/:receiptId/reverse FIN reverseReceipt',
+ 'GET /api/expenses /v1/expenses FIN',
+ 'POST /api/expenses /v1/expenses FIN',
+ 'PATCH /api/expenses/:id /v1/expenses/:id FIN',
+ 'GET /api/finance/summary /v1/reports/finance FIN',
+ 'GET /api/fiscal /v1/fiscal FIN',
+ 'GET /api/fiscal/settings /v1/fiscal/settings FIN',
+ 'PATCH /api/fiscal/settings /v1/fiscal/settings ADMIN',
+ 'POST /api/fiscal/drafts /v1/fiscal/drafts FIN',
+ 'GET /api/fiscal/:id /v1/fiscal/:id FIN',
+ 'GET /api/fiscal/:id/events /v1/fiscal/:id/events FIN',
+ 'POST /api/fiscal/:id/submit /v1/fiscal/:id/submit FIN',
+ 'POST /api/fiscal/:id/reconcile /v1/fiscal/:id/reconcile FIN',
+ 'GET /api/services /v1/services ALL',
+ 'POST /api/services /v1/services OFFICE',
+ 'GET /api/sales /v1/sales ALL',
+ 'POST /api/sales /v1/sales OFFICE',
+ 'GET /api/sales/:id /v1/sales/:id ALL',
+ 'POST /api/sales/:id/cancel /v1/sales/:id/cancel OFFICE sale',
+ 'POST /api/cash/open /v1/cash/open FIN',
+ 'GET /api/cash/current/summary /v1/cash/summary FIN',
+ 'POST /api/cash/current/close /v1/cash/close FIN',
+ 'GET /api/machines/:id/compatible-parts /v1/machines/:id/compatible-parts ALL',
+ 'GET /api/machines/:id/obd-scans /v1/machines/:id/obd-scans ALL',
+ 'POST /api/machines/:id/obd-scans /v1/machines/:id/obd-scans TECH',
+ 'GET /api/machines/:id/maintenance-plans /v1/machines/:id/maintenance-plans ALL',
+ 'POST /api/machines/:id/maintenance-plans /v1/machines/:id/maintenance-plans OFFICE',
+ 'GET /api/machines/:id/maintenance /v1/machines/:id/maintenance ALL',
+ 'POST /api/machines/:id/maintenance /v1/machines/:id/maintenance OFFICE',
+ 'POST /api/maintenance-plans/:id/complete /v1/maintenance-plans/:id/complete TECH',
+ 'GET /api/maintenance-alerts /v1/maintenance-alerts ALL',
+ 'GET /api/vehicles/plate/:plate /v1/vehicles/plate/:plate ALL',
+ 'GET /api/crm/tasks /v1/crm/tasks ALL',
+ 'POST /api/crm/tasks /v1/crm/tasks OFFICE',
+ 'POST /api/crm/tasks/:id/complete /v1/crm/tasks/:id/complete OFFICE',
+ 'POST /api/crm/maintenance/sync /v1/crm/maintenance/sync OFFICE',
+ 'GET /api/fleets /v1/fleets ALL',
+ 'POST /api/fleets /v1/fleets OFFICE',
+ 'POST /api/fleets/:id/vehicles /v1/fleets/:id/vehicles OFFICE',
+ 'GET /api/technical-references /v1/technical-references ALL',
+ 'POST /api/technical-references /v1/technical-references OFFICE'
+];
+const definitions=ROUTES.map(line=>{
+ const [method,legacy,native,role,transform='identity']=line.split(' ');
+ const names=[];
+ const expression=new RegExp('^'+legacy.replace(/:([A-Za-z]+)/g,(_,name)=>{
+  names.push(name);
+  return name==='plate'?'([A-Z0-9-]{1,16})':'([1-9][0-9]*)';
+ })+'$');
+ return Object.freeze({method,legacy,native,roles:ROLES[role],transform,names,expression});
+});
+export function mapLegacyNativeRoute(method,path){
+ if(typeof method!=='string'||typeof path!=='string'||!path.startsWith('/api/')||
+    path.includes('%')||path.includes('\\')||path.includes('//'))return null;
+ const verb=method.toUpperCase();
+ for(const spec of definitions){
+  if(spec.method!==verb)continue;
+  const match=spec.expression.exec(path);
+  if(!match)continue;
+  const values=match.slice(1);
+  let target=spec.native;
+  spec.names.forEach((name,index)=>{target=target.replace(':'+name,values[index]);});
+  return Object.freeze({method:verb,path:target,roles:spec.roles,
+   mapBody:(input={})=>{
+    const body={...input};
+    if(spec.transform==='status'){
+      body.toStatus=body.toStatus??body.status;delete body.status;
+    }else if(spec.transform==='order'||spec.transform==='receipt'||spec.transform==='reversePart'||spec.transform==='reverseReceipt'){
+      body.workOrderId=Number(values[0]);
+      if(spec.transform==='reversePart')body.itemId=Number(values[1]);
+      if(spec.transform==='reverseReceipt')body.receiptId=Number(values[1]);
+    }else if(spec.transform==='sale')body.saleId=Number(values[0]);
+    return body;
+   }});
+ }
+ return null;
+}
+export const nativeRouteCoverage=Object.freeze(definitions.map(x=>x.method+' '+x.legacy));
