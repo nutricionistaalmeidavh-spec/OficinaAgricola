@@ -80,6 +80,7 @@ const ROUTES=[
  'POST /api/billing/settlements /v1/billing/settlements FIN',
  'GET /api/billing/report /v1/billing/report FIN',
  'GET /api/billing/statements /v1/billing/statements FIN',
+ 'GET /api/billing/receipts/available /v1/billing/receipts/available FIN',
  'POST /api/billing/statements /v1/billing/statements FIN',
  'POST /api/billing/statements/:entryId/match /v1/billing/statements/:entryId/match FIN',
  'POST /api/billing/reminders/prepare /v1/billing/reminders/prepare FIN',
