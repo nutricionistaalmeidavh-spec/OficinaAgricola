@@ -142,3 +142,31 @@ O núcleo atual oferece um **serviço de domínio assíncrono separado**, que ai
 - Compartilhamento entre filiais: catálogos, clientes, estoque e continuidade operacional de OS com dossiê de evidências e livros preservados na origem. Não é uma migração de titularidade fiscal nem transação distribuída. Sincronização contínua, compensação automática e automatização da análise LGPD seguem pendentes.
 - Relatórios consolidados da empresa, testes completos de carga, restore do conjunto e QA E2E da UI no Linux.
 - Nenhum merge/deploy sem gates aprovados e revisão de isolamento.
+
+
+## Pré-validação de recuperação multiempresa (sem modificar dados ativos)
+
+Após recuperar **cada** arquivo remoto para staging, monte um catálogo local
+`recovery-set.json` com o snapshot de registro e todas as unidades:
+
+```json
+{
+  "registryArchive": "/srv/oficina/staging/registro-verificado",
+  "unitArchives": [
+    {"companyId": 1, "unitId": 1, "archivePath": "/srv/oficina/staging/matriz-verificada"},
+    {"companyId": 1, "unitId": 2, "archivePath": "/srv/oficina/staging/filial-verificada"}
+  ]
+}
+```
+
+Execute `node scripts/verify-tenant-recovery-set.mjs recovery-set.json`.
+O comando valida SHA-256/manifestos, SQLite quick_check, chaves estrangeiras,
+identidade empresa/unidade do catálogo, completude do registro e coerência
+temporal dos snapshots (até 15 minutos por padrão), sem sobrescrever
+arquivos ativos. Um conjunto incompleto, duplicado ou defasado é recusado.
+
+**Importante:** snapshots tomados em momentos próximos não são uma transação
+atômica entre múltiplos bancos. Para recuperação consistente, produza um
+conjunto de backups com escrita pausada e faça ensaio de restauração offline
+antes do cutover. O comando **não** realiza cutover, não configura produção,
+não migra PostgreSQL/D1 e não substitui backups isolados por um único snapshot.
