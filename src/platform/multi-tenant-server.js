@@ -53,6 +53,7 @@ export function createMultiTenantServer({
   tenantsRoot = './data/oficina-tenants',
   tls = null,
   tenantFiscalConfigs = {},
+  objectStoreForUnit = null,
   unitServerFactory = createAssistenciaServer
 } = {}) {
   migrate(legacyDb);
@@ -86,7 +87,10 @@ export function createMultiTenantServer({
     // Legacy can still use the existing single-company local provider,
     // but never leak process-wide credentials into an unrelated unit.
     const fiscalProviderOverride=isLegacy&&!configPresent?undefined:scopedFiscalProvider;
-    const srv=unitServerFactory({db,storageDir,eventRuntime,tls:null,fiscalProviderOverride});
+    // A unit-specific S3 namespace is derived from trusted registry IDs, never
+    // from request headers or client-controlled JSON.
+    const objectStore=objectStoreForUnit?objectStoreForUnit(unit):null;
+    const srv=unitServerFactory({db,storageDir,eventRuntime,tls:null,fiscalProviderOverride,objectStore});
     const runtime={db,srv,unit,storageDir,eventRuntime,owned:!isLegacy,
       fiscalConfigured:isLegacy||Boolean(scopedFiscalProvider)};
     cache.set(id,runtime);
