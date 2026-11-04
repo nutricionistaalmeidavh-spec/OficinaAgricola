@@ -74,7 +74,7 @@
         '<div class="ml-viewer-actions">',
         '<label class="ml-variant-label">Versão<select id="ml-variant">',
         variants.map(v=>'<option value="'+v+'"'+(v===first?' selected':'')+'>'+(
-          v==='repaired'?'Rodas reconstruídas (experimental)':v==='restored'?'Materiais restaurados (experimental)':'Original')+'</option>').join(''),
+          v==='repaired'?(target.variants.repaired.geometry==='REUSED_SOURCE_WHEELS'?'Rodas originais reposicionadas (experimental)':'Rodas reconstruídas (experimental)'):v==='restored'?'Materiais restaurados (experimental)':'Original')+'</option>').join(''),
         '</select></label>',
         '<button type="button" class="btn" id="ml-view-start">Abrir visualização 3D</button>',
         (isAdmin?'<button type="button" class="btn" id="ml-install">Baixar modelo</button><label class="btn ml-import-btn">Importar GLB local<input type="file" id="ml-import-file" accept=".glb,model/gltf-binary"></label>':''),
