@@ -5,6 +5,12 @@ const TABLES=[
 `CREATE TABLE IF NOT EXISTS async_schema_migrations(
   version TEXT PRIMARY KEY,applied_at TEXT NOT NULL
 )`,
+`CREATE TABLE IF NOT EXISTS async_tenant_identity(
+  id INTEGER PRIMARY KEY CHECK(id=1),
+  company_id INTEGER NOT NULL,
+  unit_id INTEGER NOT NULL,
+  assigned_at TEXT NOT NULL
+)`,
 `CREATE TABLE IF NOT EXISTS customers(
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,document TEXT NOT NULL DEFAULT '',phone TEXT NOT NULL DEFAULT '',
@@ -199,4 +205,24 @@ export async function migrateAsyncTenantStore(port){
    });
  }
  return {engine:port.engine,version:VERSION,tables:ddl.length};
+}
+
+/**
+ * Operational DB is permanently bound to one company/unit.
+ * Every backend bootstrap must claim the binding before serving requests.
+ * This prevents accidental reuse of a D1 binding or PostgreSQL database by
+ * different tenants. Never silently change its owner.
+ */
+export async function claimAsyncTenantIdentity(port,{companyId,unitId}={}){
+ if(!port||!['postgres','d1'].includes(port.engine))throw Error('Backend SQL inválido');
+ const company=Number(companyId),unit=Number(unitId);
+ if(!Number.isSafeInteger(company)||company<1||!Number.isSafeInteger(unit)||unit<1)
+   throw Error('Empresa e unidade obrigatórias para backend assíncrono');
+ const at=new Date().toISOString();
+ await port.run(`INSERT INTO async_tenant_identity(id,company_id,unit_id,assigned_at)
+   VALUES(1,?,?,?) ON CONFLICT(id) DO NOTHING`,[company,unit,at]);
+ const current=await port.first('SELECT company_id,unit_id FROM async_tenant_identity WHERE id=1');
+ if(!current||Number(current.company_id)!==company||Number(current.unit_id)!==unit)
+   throw Error('Banco já pertence a outro tenant; operação bloqueada sem migração auditada');
+ return {companyId:company,unitId:unit};
 }
