@@ -68,3 +68,31 @@ test('D1 async workshop posts stock and receipts atomically without double payme
   assert.equal(summary.pendingCents,500);
  }finally{db.close();}
 });
+
+test('async D1 quote approval and fiscal draft preserve original amounts and idempotency',async()=>{
+ const db=openDatabase(':memory:');
+ try{
+  const port=createD1Port({binding:localD1(db)});
+  await migrateAsyncTenantStore(port);
+  const ws=createAsyncWorkshopServices(port);
+  const c=await ws.createCustomer({name:'Cliente Fiscal'});
+  const machine=await ws.createMachine({customerId:c.id,type:'AUTOMOVEL'});
+  const os=await ws.createWorkOrder({customerId:c.id,machineId:machine.id,problemReported:'Troca'});
+  await ws.transitionWorkOrder({workOrderId:os.id,toStatus:'DIAGNOSTICO',expectedVersion:os.version});
+  const quote=await ws.saveQuote({workOrderId:os.id,items:[
+    {kind:'PECA',description:'Filtro',quantity:2,unitPriceCents:1500},
+    {kind:'MAO_DE_OBRA',description:'Serviço',quantity:1,unitPriceCents:1200}
+  ],discountCents:200});
+  assert.equal(quote.total_cents,4000);
+  const approved=await ws.approveQuote({workOrderId:os.id});
+  assert.equal(approved.approval_status,'APROVADO');
+  assert.equal((await ws.getWorkOrder(os.id)).quote_total_cents,4000);
+  const fiscal=await ws.createFiscalDraft({originType:'OS',originId:os.id,kind:'NFE',requestId:'d1-fiscal-001'});
+  const again=await ws.createFiscalDraft({originType:'OS',originId:os.id,kind:'NFE',requestId:'d1-fiscal-001'});
+  assert.equal(fiscal.id,again.id);
+  assert.equal(fiscal.amount_cents,2800);
+  assert.equal(fiscal.status,'RASCUNHO');
+  assert.equal((await port.all('SELECT * FROM fiscal_events WHERE document_id=?',[fiscal.id])).length,1);
+  assert.equal((await port.all('SELECT * FROM fiscal_documents')).length,1);
+ }finally{db.close();}
+});
