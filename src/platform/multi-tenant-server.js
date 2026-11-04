@@ -19,7 +19,7 @@ import { dispatchOutbox } from './outbox.js';
 import { auditInvariants } from '../services/reconciliation.js';
 import {
   migrateTenantRegistry, registerInitialAdmin, listUserUnits, requireUnitMembership,
-  requireCompanyAdmin, createTenantCompany, createTenantUnit, grantUnitMembership,
+  requireCompanyAdmin, requireCompanyReportingAdmin, createTenantCompany, createTenantUnit, grantUnitMembership,
   changeUnitMembership, listUnitMembers, markLegacyRegistryLink, listTenantAudit
 } from './tenant-registry.js';
 
@@ -198,7 +198,7 @@ export function createMultiTenantServer({
       return json(res,200,listTenantAudit(registryDb,user.id,positive(url.searchParams.get('companyId'))));
     if(path==='/api/tenancy/company-summary'&&method==='GET'){
       const companyId=positive(url.searchParams.get('companyId'));
-      requireCompanyAdmin(registryDb,user.id,companyId);
+      requireCompanyReportingAdmin(registryDb,user.id,companyId);
       const parseDate=(key,fallback)=>{
         const value=url.searchParams.get(key);
         if(value===null)return fallback;
