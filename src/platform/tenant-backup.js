@@ -7,10 +7,12 @@ import { validateBackupRestoration } from './backup-scheduler.js';
 import { mirrorVerifiedTenantBackups } from './s3-backup.js';
 
 const ARCHIVE=/^20\d{2}-\d{2}-\d{2}T[0-9-]+Z-[0-9a-f]{8}$/i;
-function archiveRecords(root){
+function archiveRecords(root,tenant=null){
   if(!existsSync(root))return [];
   return readdirSync(root,{withFileTypes:true}).filter(e=>e.isDirectory()&&ARCHIVE.test(e.name))
-    .map(e=>{const path=join(root,e.name);try{const m=verifyBackup(path);return {path,time:Date.parse(m.createdAt)};}catch{return null;}})
+    .map(e=>{const path=join(root,e.name);try{const m=verifyBackup(path);
+      if(tenant&&(Number(m.tenant?.companyId)!==tenant.companyId||Number(m.tenant?.unitId)!==tenant.unitId))return null;
+      return {path,time:Date.parse(m.createdAt)};}catch{return null;}})
     .filter(x=>x&&Number.isFinite(x.time)).sort((a,b)=>b.time-a.time);
 }
 function verifyRegistryRestoration(archive){
@@ -38,23 +40,24 @@ export function runMultiTenantBackupCycle({
     const dir=join(tenantsRoot,'company-'+unit.company_id,'unit-'+unit.id);
     jobs.push({databasePath:legacy?legacyDatabasePath:join(dir,'oficina.sqlite'),
       uploadsPath:legacy?legacyStorageDir:join(dir,'uploads'),
-      target:join(backupRoot,'company-'+unit.company_id,'unit-'+unit.id),kind:'unit'});
+      target:join(backupRoot,'company-'+unit.company_id,'unit-'+unit.id),kind:'unit',
+      tenant:{companyId:unit.company_id,unitId:unit.id}});
   }
   const safeRetention=Math.min(60,Math.max(2,Number(retention)||7));
   const done=[];
   for(const job of jobs){
     if(!existsSync(job.databasePath)){done.push({kind:job.kind,skipped:true,reason:'database-not-initialized'});continue;}
     mkdirSync(job.target,{recursive:true});
-    const existing=archiveRecords(job.target);
+    const existing=archiveRecords(job.target,job.tenant);
     if(existing.length&&now.getTime()-existing[0].time<minIntervalMs){
       done.push({kind:job.kind,created:false,verified:true,backupDir:existing[0].path});
       continue;
     }
-    const result=createBackup({databasePath:job.databasePath,uploadsPath:job.uploadsPath,backupRoot:job.target,now});
+    const result=createBackup({databasePath:job.databasePath,uploadsPath:job.uploadsPath,backupRoot:job.target,now,tenant:job.tenant});
     verifyBackup(result.backupDir);
     if(job.kind==='registry')verifyRegistryRestoration(result.backupDir);
     else validateBackupRestoration(result.backupDir);
-    const valid=archiveRecords(job.target);
+    const valid=archiveRecords(job.target,job.tenant);
     for(const obsolete of valid.slice(safeRetention))rmSync(obsolete.path,{recursive:true,force:true});
     done.push({kind:job.kind,created:true,verified:true,backupDir:result.backupDir});
   }
