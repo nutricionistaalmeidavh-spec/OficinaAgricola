@@ -20,11 +20,14 @@ export function createWorkOrder(db,input){
   if(Number(machine.customer_id)!==Number(customer.id)) throw new Error('Máquina não pertence ao cliente selecionado');
   if(input.technicianId && !db.prepare('SELECT id FROM technicians WHERE id=? AND active=1').get(input.technicianId)) throw new Error('Técnico não encontrado');
   const priority=input.priority??'NORMAL'; if(!PRIORITIES.has(priority)) throw new Error('Prioridade inválida');
+  const unitId=input.unitId==null?1:Number(input.unitId);
+  if(!Number.isSafeInteger(unitId)||unitId<1||!db.prepare('SELECT id FROM shop_units WHERE id=? AND active=1').get(unitId))
+    throw new Error('Unidade da OS inválida');
   return transaction(db,()=>{
     const next=Number(db.prepare('SELECT COALESCE(MAX(os_number),0)+1 next FROM work_orders').get().next);
     const t=nowIso();
-    const r=db.prepare(`INSERT INTO work_orders(os_number,customer_id,machine_id,entered_at,problem_reported,diagnosis,technician_id,estimated_delivery,priority,internal_notes,status,snapshot_customer,snapshot_machine,created_at,updated_at)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(next,customer.id,machine.id,input.enteredAt??t,text(input.problemReported),text(input.diagnosis),input.technicianId??null,input.estimatedDelivery??null,priority,text(input.internalNotes),'ENTRADA',customerSnapshot(customer),machineSnapshot(machine),t,t);
+    const r=db.prepare(`INSERT INTO work_orders(os_number,customer_id,machine_id,entered_at,problem_reported,diagnosis,technician_id,estimated_delivery,priority,internal_notes,status,snapshot_customer,snapshot_machine,unit_id,created_at,updated_at)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(next,customer.id,machine.id,input.enteredAt??t,text(input.problemReported),text(input.diagnosis),input.technicianId??null,input.estimatedDelivery??null,priority,text(input.internalNotes),'ENTRADA',customerSnapshot(customer),machineSnapshot(machine),unitId,t,t);
     const id=Number(r.lastInsertRowid);
     db.prepare(`INSERT INTO work_order_status_history(work_order_id,from_status,to_status,reason,changed_by,changed_at) VALUES(?,?,?,?,?,?)`).run(id,null,'ENTRADA','Abertura da OS',input.createdBy??null,t);
     return getWorkOrder(db,id);
@@ -115,7 +118,8 @@ export function duplicateWorkOrder(db,id,input={}){
     priority:input.copyPriority===false?'NORMAL':old.priority,
     internalNotes:input.copyInternalNotes?old.internal_notes:'',
     estimatedDelivery:null,
-    createdBy:input.createdBy??null
+    createdBy:input.createdBy??null,
+    unitId:input.unitId??old.unit_id??1
   });
 }
 
