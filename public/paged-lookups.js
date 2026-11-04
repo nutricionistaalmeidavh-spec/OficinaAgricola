@@ -27,7 +27,7 @@ function attachPagedLookup(select,{resource,placeholder='Pesquisar por nome...',
     const blank=new Option(message,'');select.add(blank);
     const combined=[...(retained?[retained]:[]),...items.map(item=>({
       id:String(item.id),
-      label: resource==='customers'?item.name:resource==='parts'?item.sku+' — '+item.description:
+      label: resource==='customers'?item.name:resource==='parts'?item.sku+' — '+item.description+' · '+(typeof money==='function'?money(item.sale_price_cents):'R$ '+(Number(item.sale_price_cents||0)/100).toFixed(2))+' · saldo '+Number(item.quantity||0):
         resource==='work-orders'?'OS #'+item.os_number+' · '+(item.customer_name||'Cliente'):
         [item.brand,item.model,item.type,item.license_plate].filter(Boolean).join(' ')
     }))];
