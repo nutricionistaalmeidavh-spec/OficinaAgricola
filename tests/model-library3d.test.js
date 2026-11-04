@@ -131,3 +131,13 @@ test('Política CSP mantém scripts locais e permite apenas WebAssembly Meshopt'
   assert.match(session,/script-src 'self' 'wasm-unsafe-eval'/);
   assert.doesNotMatch(session,/script-src[^;]+unsafe-eval(?!')/);
 });
+
+// A escolha de variante e cor muda somente a visualização, sem dados editados.
+// Ao fechar, não deve mostrar prompt de descarte de formulário.
+test('prévia 3D não aciona guarda de alterações de formulários',async()=>{
+  const core=await readFile(new URL('../public/app-core.js',import.meta.url),'utf8');
+  const modalClient=await readFile(new URL('../public/model-library3d.js',import.meta.url),'utf8');
+  assert.match(core,/function showModal\(title,html,onSubmit,\{entityKey=null,trackChanges=true\}/);
+  assert.match(core,/trackChanges\s*&&\s*modalSession/);
+  assert.match(modalClient,/trackChanges:false/);
+});
