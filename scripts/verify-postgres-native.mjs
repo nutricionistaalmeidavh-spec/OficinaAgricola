@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import { createPostgresPort } from '../src/platform/async-sql-ports.js';
 import { createAsyncWorkshopServices } from '../src/platform/async-workshop-services.js';
 import { migrateAsyncTenantStore } from '../src/platform/async-tenant-migrations.js';
+import {openDatabase,migrate} from '../src/db.js';
+import {migrateAssistencia} from '../src/assistencia-schema.js';
+import {createCommonDataAdapter} from '../src/platform/common-data-adapter.js';
+import {importCanonicalSqliteTenant} from '../src/platform/tenant-migration-import.js';
 
 // Safety: only run on CI against an ephemeral loopback PostgreSQL instance.
 if(process.env.CI!=='true'||!process.env.POSTGRES_TEST_URL)
@@ -130,5 +134,37 @@ try{
  assert.equal((await service.listServiceRecords(machine.id)).length,1);
  await assert.rejects(service.completeMaintenancePlan(plan.id,{performedAt:'2026-11-04'}),
    /já concluído/);
- console.log('PostgreSQL 16 real: OS, caixa, estorno, estoque, aplicações de peças e manutenção preventiva OK');
+
+ // Import must take place in an isolated, unpublished staging schema.
+ await pool.query('CREATE SCHEMA IF NOT EXISTS import_staging');
+ const stagePool=new Pool({connectionString:process.env.POSTGRES_TEST_URL,
+  options:'-c search_path=import_staging',max:2,statement_timeout:15000});
+ const source=openDatabase(':memory:');
+ try{
+  migrate(source);migrateAssistencia(source);
+  const sourceCore=createAsyncWorkshopServices(createCommonDataAdapter({
+   engine:'sqlite',db:source
+  }));
+  const sourceCustomer=await sourceCore.createCustomer({name:'Import SQLite PG'});
+  const sourceMachine=await sourceCore.createMachine({
+   customerId:sourceCustomer.id,type:'TRATOR',brand:'John Deere'
+  });
+  await sourceCore.createWorkOrder({customerId:sourceCustomer.id,machineId:sourceMachine.id,
+   problemReported:'Histórico importado'});
+  const precisionPart=await sourceCore.createPart({
+   sku:'PRECISION-IMPORT',description:'Componente precisão'
+  });
+  await sourceCore.postStockMovement({partId:precisionPart.id,
+   type:'ENTRADA',quantity:1.123456789012});
+  const stage=createPostgresPort({pool:stagePool});
+  await migrateAsyncTenantStore(stage,{seed:false});
+  const imported=await importCanonicalSqliteTenant({
+   sourceDb:source,targetPort:stage,companyId:404,unitId:11
+  });
+  assert.equal(imported.verified,true);
+  assert.equal((await stage.first('SELECT quantity FROM parts WHERE id=?',
+   [precisionPart.id])).quantity,1.123456789012);
+  assert.equal((await stage.first('SELECT COUNT(*) n FROM work_orders')).n,1);
+ }finally{source.close();await stagePool.end();}
+ console.log('PostgreSQL 16 real: native domain, automotive and 46-table zero-loss staging migration OK');
 }finally{await pool.end();}
