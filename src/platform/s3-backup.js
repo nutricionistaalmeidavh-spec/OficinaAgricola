@@ -1,5 +1,6 @@
 import { createHash, createHmac } from 'node:crypto';
-import { createReadStream, statSync, lstatSync, realpathSync } from 'node:fs';
+import { createReadStream, createWriteStream, openSync, rmSync, statSync, lstatSync, realpathSync } from 'node:fs';
+import { pipeline } from 'node:stream/promises';
 import { resolve, relative, join, sep } from 'node:path';
 import { verifyBackup } from './backup.js';
 
@@ -146,6 +147,43 @@ export function createS3BackupClient({
       throw Error('Integridade SHA-256 do objeto remoto não confirmada');
     return bytes;
   }
+  async function downloadObject({key,filePath,expectedSize,expectedSha256}={}){
+    if(!Number.isSafeInteger(expectedSize)||expectedSize<0||
+       !/^[a-f0-9]{64}$/.test(String(expectedSha256||'')))
+      throw Error('Tamanho ou SHA-256 esperado do backup inválido');
+    const {url,path}=urlFor(key);
+    const response=await httpFetch(url,{method:'GET',redirect:'error',
+      headers:signedHeaders({method:'GET',path,payloadHash:sha256('')})
+    });
+    if(!response.ok)throw Error('Objeto de backup remoto indisponível (HTTP '+response.status+')');
+    const length=response.headers.get('content-length');
+    if(length!==null&&Number(length)!==expectedSize)
+      throw Error('Tamanho de backup remoto diverge do manifesto');
+    const metadata=response.headers.get('x-amz-meta-sha256');
+    if(metadata&&metadata!==expectedSha256)
+      throw Error('Integridade SHA-256 do backup remoto diverge do manifesto');
+    if(!response.body)throw Error('Resposta de backup remoto sem corpo');
+    // The file is created EXCLUSIVELY. Never truncate a pre-existing backup.
+    const fd=openSync(filePath,'wx',0o600);
+    const digest=createHash('sha256');
+    let bytes=0;
+    try{
+      await pipeline(response.body,async function* verifyChunks(source){
+        for await(const chunk of source){
+          bytes+=chunk.length;
+          if(bytes>expectedSize)throw Error('Backup remoto excede tamanho do manifesto');
+          digest.update(chunk);
+          yield chunk;
+        }
+      },createWriteStream(filePath,{fd,autoClose:true}));
+      if(bytes!==expectedSize||digest.digest('hex')!==expectedSha256)
+        throw Error('Falha de integridade SHA-256 do backup remoto');
+      return {key,size:bytes,sha256:expectedSha256,filePath};
+    }catch(error){
+      rmSync(filePath,{force:true});
+      throw error;
+    }
+  }
   async function deleteObject({key}){
     const {url,path}=urlFor(key);
     const response=await httpFetch(url,{method:'DELETE',redirect:'error',
@@ -155,7 +193,7 @@ export function createS3BackupClient({
       throw Error('Falha ao remover objeto remoto (HTTP '+response.status+')');
     return {deleted:true};
   }
-  return Object.freeze({putFile,putObject,getObject,deleteObject});
+  return Object.freeze({putFile,putObject,getObject,downloadObject,deleteObject});
 }
 function safeArchiveFile(archive,relPath){
   const parts=splitKey(relPath);
