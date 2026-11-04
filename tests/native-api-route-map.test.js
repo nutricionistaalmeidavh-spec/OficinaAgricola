@@ -21,6 +21,9 @@ test('native bridge preserves status and converts legacy receipt and inventory c
  assert.deepEqual(payment.mapBody({amountCents:1500,method:'PIX',requestId:'r-1'}),
   {amountCents:1500,method:'PIX',requestId:'r-1',workOrderId:7});
  const stock=mapLegacyNativeRoute('POST','/api/inventory/movements');
+ const create=mapLegacyNativeRoute('POST','/api/work-orders');
+ assert.equal(create.mapBody({customerId:1,unitId:999}).unitId,1,
+  'a physically isolated unit must use its one local shop-unit marker');
  assert.equal(stock.path,'/v1/stock');
  assert.deepEqual(stock.mapBody({partId:3,type:'ENTRADA',quantity:2}),
   {partId:3,type:'ENTRADA',quantity:2});
