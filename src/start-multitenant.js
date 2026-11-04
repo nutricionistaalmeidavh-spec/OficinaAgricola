@@ -1,3 +1,4 @@
+import {loadTenantReminderSenders} from './platform/tenant-reminder-smtp.js';
 import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { resolveDatabasePath, resolveStoragePath } from './platform/data-location.js';
@@ -31,6 +32,7 @@ const tls=process.env.HTTPS_CERT_FILE&&process.env.HTTPS_KEY_FILE?{
 }:null;
 const tenantFiscalConfigs=loadTenantFiscalConfigs(process.env.TENANCY_FISCAL_CONFIG_FILE);
 const tenantPaymentConfigs=loadTenantPaymentConfigs(process.env.TENANCY_PAYMENT_CONFIG_FILE);
+const reminderSenderForUnit=loadTenantReminderSenders(process.env.TENANCY_REMINDER_SMTP_CONFIG_FILE);
 // No native backend is selected without an explicit, approved per-unit map.
 const nativeBackendForUnit=loadNativeTenantBackends(process.env.TENANCY_NATIVE_BACKENDS_FILE);
 const objectStoreForUnit=objectsEngine==='s3'?(unit=>createS3BackupClient({
@@ -44,7 +46,8 @@ const objectStoreForUnit=objectsEngine==='s3'?(unit=>createS3BackupClient({
 })):null;
 const server=createMultiTenantServer({
   registryDb,legacyDb,legacyDatabasePath,legacyStorageDir,tenantsRoot,tls,
-  tenantFiscalConfigs,tenantPaymentConfigs,objectStoreForUnit,nativeBackendForUnit
+  tenantFiscalConfigs,tenantPaymentConfigs,objectStoreForUnit,nativeBackendForUnit,
+  reminderSenderForUnit
 });
 const {host,port}=resolveServerConfig(process.env);
 // Remote copies are opt-in, while SQLite + local disk remain canonical and free.
