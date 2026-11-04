@@ -358,6 +358,17 @@ export function createBillingService(port,{receivePayment,getPaymentSummary,prov
   // LIMIT bound parameter works on SQLite, D1 and PostgreSQL.
   return port.all('SELECT * FROM billing_bank_entries ORDER BY booked_at DESC,id DESC LIMIT ?',[n]);
  }
+ async function listAvailableReceipts({limit=100}={}){
+  const n=Number(limit);
+  if(!Number.isInteger(n)||n<1||n>200)fail('Limite de recebimentos inválido');
+  return port.all(`SELECT r.id,r.work_order_id,r.amount_cents,r.method,r.received_at,
+    wo.os_number,c.name AS customer_name FROM receipts r
+    JOIN work_orders wo ON wo.id=r.work_order_id
+    JOIN customers c ON c.id=wo.customer_id
+    WHERE r.reversed_at IS NULL AND NOT EXISTS(
+      SELECT 1 FROM billing_bank_entries bank WHERE bank.receipt_id=r.id
+    ) ORDER BY r.received_at DESC,r.id DESC LIMIT ?`,[n]);
+ }
  async function financeReport({asOf=new Date().toISOString().slice(0,10)}={}){
   const day=isoDay(asOf);
   const installments=await port.first(`SELECT
@@ -386,7 +397,7 @@ export function createBillingService(port,{receivePayment,getPaymentSummary,prov
  return Object.freeze({
   createPlan,getPlan:loadPlan,getPlanForOrder,getInstallment:loadInstallment,activateInstallment,
   syncInstallment,confirmManual,recordSettlement,importStatement,matchStatement,
-  prepareReminders,financeReport,listStatements,
+  prepareReminders,financeReport,listStatements,listAvailableReceipts,
   capabilities:()=>({manual:true,boleto:Boolean(providers.BOLETO),
    paymentLink:Boolean(providers.PAYMENT_LINK)})
  });
