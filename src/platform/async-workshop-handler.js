@@ -198,6 +198,46 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
      return json(await services.cancelSale({
        ...await dataFrom(request),saleId:Number(saleCancel[1])
      }));
+   const fitments=path.match(/^\/v1\/parts\/([1-9]\d*)\/fitments$/);
+   if(fitments&&method==='GET')
+     return json(await services.listPartFitments(Number(fitments[1])));
+   if(fitments&&method==='POST')
+     return json(await services.savePartFitment(Number(fitments[1]),
+       await dataFrom(request)),201);
+   const fitmentDelete=path.match(/^\/v1\/parts\/([1-9]\d*)\/fitments\/([1-9]\d*)$/);
+   if(fitmentDelete&&method==='DELETE')
+     return json(await services.deletePartFitment(Number(fitmentDelete[1]),
+       Number(fitmentDelete[2])));
+   const compatible=path.match(/^\/v1\/machines\/([1-9]\d*)\/compatible-parts$/);
+   if(compatible&&method==='GET')
+     return json(await services.listCompatibleParts(Number(compatible[1])));
+   const scans=path.match(/^\/v1\/machines\/([1-9]\d*)\/obd-scans$/);
+   if(scans&&method==='GET')
+     return json(await services.listDiagnosticScans(Number(scans[1])));
+   if(scans&&method==='POST')
+     return json(await services.createDiagnosticScan(Number(scans[1]),
+       await dataFrom(request)),201);
+   const plans=path.match(/^\/v1\/machines\/([1-9]\d*)\/maintenance-plans$/);
+   if(plans&&method==='GET')
+     return json(await services.listMaintenancePlans(Number(plans[1])));
+   if(plans&&method==='POST')
+     return json(await services.createMaintenancePlan(Number(plans[1]),
+       await dataFrom(request)),201);
+   if(path==='/v1/maintenance-alerts'&&method==='GET')
+     return json(await services.listMaintenanceAlerts({
+       today:u.searchParams.get('today')||undefined,
+       limit:u.searchParams.get('limit')||undefined
+     }));
+   const completePlan=path.match(/^\/v1\/maintenance-plans\/([1-9]\d*)\/complete$/);
+   if(completePlan&&method==='POST')
+     return json(await services.completeMaintenancePlan(Number(completePlan[1]),
+       await dataFrom(request)));
+   const maintenance=path.match(/^\/v1\/machines\/([1-9]\d*)\/maintenance$/);
+   if(maintenance&&method==='GET')
+     return json(await services.listServiceRecords(Number(maintenance[1])));
+   if(maintenance&&method==='POST')
+     return json(await services.createServiceRecord(Number(maintenance[1]),
+       await dataFrom(request)),201);
    if(path==='/v1/parts'&&method==='GET')
      return json(await services.listParts({
        search:u.searchParams.get('search')||'',
