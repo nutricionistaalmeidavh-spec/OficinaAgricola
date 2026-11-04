@@ -99,5 +99,8 @@ test('D1 native schema covers every canonical SQLite business table and column',
    const extra=[...names(old)].filter(column=>!names(native).has(column));
    assert.deepEqual(extra,[],table+' has missing domain columns in D1');
   }
+  const indexes=db=>db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'").all().map(x=>x.name);
+  const missingIndexes=indexes(old).filter(name=>!indexes(native).includes(name));
+  assert.deepEqual(missingIndexes,[],'D1 must preserve all legacy index names for pagination, filters and uniqueness');
  }finally{old.close();native.close();}
 });
