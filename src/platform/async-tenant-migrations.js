@@ -206,13 +206,14 @@ export function asyncTenantSchema(engine){
  }
  return statements;
 }
-export async function migrateAsyncTenantStore(port){
+export async function migrateAsyncTenantStore(port,{seed=true}={}){
  if(!port||!['postgres','d1'].includes(port.engine))
    throw Error('Migrate exige PostgreSQL ou Cloudflare D1 real');
  const ddl=asyncTenantSchema(port.engine);
  const now=new Date().toISOString();
  const record={sql:'INSERT INTO async_schema_migrations(version,applied_at) VALUES(?,?) ON CONFLICT(version) DO NOTHING',
    params:[VERSION,now]};
+ if(typeof seed!=='boolean')throw Error('Opção seed deve ser explícita e booleana');
  const seeds=[
    {sql:`INSERT INTO company_settings(id,updated_at) VALUES(1,?)
      ON CONFLICT(id) DO NOTHING`,params:[now]},
@@ -224,11 +225,11 @@ export async function migrateAsyncTenantStore(port){
  if(port.engine==='d1'){
    // Cloudflare D1's batch executes atomically. Never use a fake
    // interactive BEGIN/COMMIT sequence on the D1 binding.
-   await port.batch([...ddl.map(sql=>({sql,params:[]})),...seeds,record]);
+   await port.batch([...ddl.map(sql=>({sql,params:[]})),...(seed?seeds:[]),record]);
  }else{
    await port.transaction(async tx=>{
      for(const sql of ddl)await tx.run(sql);
-     for(const item of seeds)await tx.run(item.sql,item.params);
+     if(seed)for(const item of seeds)await tx.run(item.sql,item.params);
      await tx.run(record.sql,record.params);
    });
  }
