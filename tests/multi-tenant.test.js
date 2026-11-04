@@ -65,6 +65,11 @@ test('HTTP isolation: company and unit records, member roles and revoked access'
   const bAgain=await request('GET','/api/customers',undefined,second);
   assert.deepEqual(aAgain.data.map(x=>x.name),['Cliente somente matriz']);
   assert.deepEqual(bAgain.data.map(x=>x.name),['Cliente da empresa B']);
+  const companySummary=await request('GET','/api/tenancy/company-summary?companyId='+newCompany.data.id);
+  assert.equal(companySummary.status,200,JSON.stringify(companySummary.data));
+  assert.equal(companySummary.data.totals.customers,1,'company reports must only include their units');
+  assert.equal(companySummary.data.units.length,1);
+  assert.equal((await request('GET','/api/tenancy/company-summary?companyId=999')).status,403);
   const vehicle=await request('POST','/api/machines',{customerId:aAgain.data[0].id,type:'AUTOMOVEL',brand:'Volkswagen'},1);
   assert.equal(vehicle.status,200,JSON.stringify(vehicle.data));
   const order=await request('POST','/api/work-orders',{customerId:aAgain.data[0].id,machineId:vehicle.data.id,problemReported:'Revisão'},1);
