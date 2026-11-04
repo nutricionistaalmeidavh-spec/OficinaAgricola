@@ -4,7 +4,7 @@
 
 - Implementado: registro central de empresas, unidades e vínculos; autenticação central; RBAC por unidade; gateway HTTP que encaminha toda rota operacional autorizada para SQLite exclusivo e diretório de uploads exclusivo da unidade.
 - Implementado: migração aditiva dos usuários legados (Matriz 1/1 preservada), painel de cadastro de empresas/unidades/vínculos, seletor, revogação, isolamento da fila offline por unidade, links públicos de aprovação vinculados à unidade e backups verificados de registro e unidades.
-- **Ainda não implementado:** motor PostgreSQL, D1, armazenamento R2/MinIO, sincronização contínua interunidades, transferência de OS e integração fiscal multiempresa. Transferências manuais de estoque passam por protocolo de retomada, sem transação SQL distribuída. NÃO declarar multibackend pronto para produção.
+- **Ainda não implementado:** motor PostgreSQL/D1 e armazenamento R2/MinIO como backend primário, sincronização contínua interunidades, transferência de OS e integração fiscal multiempresa. Existe replicação **opcional de backups verificados** para MinIO/R2, mas os dados operacionais permanecem no SQLite/disco. Transferências manuais de estoque passam por protocolo de retomada, sem transação SQL distribuída.
 - A main continua usando o modo legado. O modo multiempresa é opt-in e depende de revisão.
 - Resumo gerencial autorizado entre unidades da mesma empresa: quantidades operacionais e consolidação financeira por livro de pagamentos e despesas efetivamente pagas. Não substitui contabilidade, apuração fiscal ou conciliação bancária.
 - Se o banco antigo tiver ordens de serviço com unit_id diferente da Matriz (1), o gateway **recusa iniciar** até executar migração específica e auditada. Nunca reatribui as OS para a Matriz silenciosamente.
@@ -65,10 +65,20 @@ Backups: snapshots consistentes, verificados por restauração e integridade par
 - A operação gera evento `STOCK_TRANSFER_COMPLETED` no registro central quando finalizada. Não lança valores no financeiro e não substitui documento fiscal de movimentação física.
 - **Limite operacional:** não há transação atômica entre dois SQLite. Em falha parcial, o estado PENDING e o replay são o controle de recuperação. Exigir reconciliação periódica, teste de desastres e fluxo de atendimento para transferências que não sejam concluídas.
 
+## Cópia de backups para MinIO / Cloudflare R2 (opcional)
+
+O core mantém SQLite e anexos no disco, ambos 100% self-hosted. A replicação S3 **não muda o banco operacional nem o caminho usado para ler anexos**, portanto não substitui um adaptador de armazenamento de objetos para o sistema inteiro.
+
+- Configure `OFICINA_BACKUP_S3_ENDPOINT`, `OFICINA_BACKUP_S3_BUCKET`, `OFICINA_BACKUP_S3_REGION`, `OFICINA_BACKUP_S3_PREFIX`, `OFICINA_BACKUP_S3_ACCESS_KEY_ID`, `OFICINA_BACKUP_S3_SECRET_ACCESS_KEY` no ambiente privado do serviço. Todas são opcionais; sem endpoint, nenhuma requisição remota ocorre.
+- Endpoint HTTPS obrigatório fora de loopback; MinIO local em `http://127.0.0.1:9000` é aceito para laboratório. MinIO é open source e pode ser executado pelo cliente. Cloudflare R2 é uma alternativa explícita, sujeita ao preço e limites próprios.
+- Cada backup local é criado com snapshot SQLite consistente e validado antes do envio. O cliente S3 usa AWS SigV4 sem dependências NPM adicionais, assina o SHA-256, faz PUT dos arquivos e HEAD para conferir metadados de integridade e tamanho. O `manifest.json` é enviado por último.
+- Se o storage externo falhar, o backup local permanece intacto e a próxima execução pode repetir o upload do mesmo arquivo de backup. As credenciais nunca são incluídas em logs ou commits.
+- **Limitações:** não há backup remoto contínuo, versão retida/expirada remotamente ou restauração remota automática. É necessário testar a restauração manual com arquivos recuperados do bucket; o bucket deve ser privado, com controle próprio de acesso e redundância.
+
 ## Pendências técnicas para declarar implementação integral
 
 - Banco PostgreSQL e Cloudflare D1: reescrever interface síncrona DatabaseSync para repositórios assíncronos com compatibilidade transacional, testes de paridade, concorrência e regressão; não há adaptação segura sem isso.
-- Arquivos MinIO/R2: conectar provedores S3 compatíveis a uploads, PDFs, anexos, expiração e backups; disco local já funciona.
+- Arquivos MinIO/R2: replicação opcional de backups completos já implementada, mas faltam adaptadores primários de upload, leitura, PDFs e anexos, ciclo de vida/expiração e restore remoto.
 - Compartilhamento entre filiais: cópia manual auditada e idempotente de peças (estoque inicial zero) e contatos básicos de clientes (sem notas privadas, com base legal e referência obrigatórias). Transferência manual de estoque agora registra saída/entrada canônicas com intenção persistida e retomada por ID; não é transação distribuída. ADMIN em ambas as unidades. Transferência de OS, sincronização contínua e automatização da base legal permanecem pendentes.
 - Relatórios consolidados da empresa, testes completos de carga, restore do conjunto e QA E2E da UI no Linux.
 - Nenhum merge/deploy sem gates aprovados e revisão de isolamento.
