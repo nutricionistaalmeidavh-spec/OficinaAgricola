@@ -262,7 +262,7 @@ export function createMultiTenantServer({
       const unit=requireUnitMembership(registryDb,user.id,positive(url.searchParams.get('unitId')));
       if(unit.role!=='ADMIN')throw httpError('Administração da unidade é necessária',403);
       const records=unitRuntime(unit.id).db.prepare(`SELECT id,os_number,problem_reported,status
-        FROM work_orders WHERE status IN ('ENTRADA','DIAGNOSTICO')
+        FROM work_orders WHERE status NOT IN ('ENTREGUE','CANCELADA','TRANSFERIDA')
         ORDER BY id DESC LIMIT 100`).all();
       return json(res,200,{orders:records,limit:100});
     }
