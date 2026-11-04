@@ -2,6 +2,7 @@ import {randomBytes,createHash} from 'node:crypto';
 import {assertTransition,calculateQuote} from '../domain.js';
 import {createAsyncWorkshopCatalog} from './async-workshop-catalog.js';
 import {createAsyncWorkshopSales} from './async-workshop-sales.js';
+import {createAsyncWorkshopOperations} from './async-workshop-operations.js';
 
 // Async canonical service layer for PostgreSQL and D1. Each command is
 // explicitly transactional on its backend; never delegate to legacy SQLite.
@@ -421,6 +422,7 @@ export function createAsyncWorkshopServices(port){
    createPart,postStockMovement,receivePayment,financeSummary,
    transitionWorkOrder,saveQuote,approveQuote,createFiscalDraft,
    ...createAsyncWorkshopCatalog(port),
-   ...createAsyncWorkshopSales(port)
+   ...createAsyncWorkshopSales(port),
+   ...createAsyncWorkshopOperations(port)
  });
 }
