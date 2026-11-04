@@ -15,7 +15,7 @@ import { financeSummary } from '../services/finance.js';
 import { sharePartCatalog, shareCustomer } from './tenant-catalog-sharing.js';
 import { transferTenantStock, retryTenantStockTransfer, listTenantStockTransfers } from './tenant-stock-transfer.js';
 import { resolveTenantFiscalProvider, validateTenantFiscalConfigs } from './tenant-fiscal.js';
-import { transferTenantWorkOrder, retryTenantWorkOrderTransfer } from './tenant-os-transfer.js';
+import { transferTenantWorkOrder, retryTenantWorkOrderTransfer, getTenantTransferDossier } from './tenant-os-transfer.js';
 import { seedDefaultChecklists, recoverOrphanAttachments } from '../services/operations.js';
 import { createEventRuntime } from './event-runtime.js';
 import { dispatchOutbox } from './outbox.js';
@@ -210,6 +210,12 @@ export function createMultiTenantServer({
       const body=await readJson(req);
       return json(res,200,sharePartCatalog({...body,registryDb,unitRuntime,actorUserId:user.id}));
     }
+    const transferDossier=path.match(/^\/api\/tenancy\/os-transfer\/(\d+)\/dossier$/);
+    if(transferDossier&&method==='GET'){
+      return json(res,200,getTenantTransferDossier({
+        registryDb,unitRuntime,actorUserId:user.id,transferId:positive(transferDossier[1])
+      }));
+    }
     if(path==='/api/tenancy/transferable-orders'&&method==='GET'){
       const unit=requireUnitMembership(registryDb,user.id,positive(url.searchParams.get('unitId')));
       if(unit.role!=='ADMIN')throw httpError('Administração da unidade é necessária',403);
@@ -262,7 +268,7 @@ export function createMultiTenantServer({
         const {db}=unitRuntime(u.id);
         const customerCount=db.prepare('SELECT COUNT(*) n FROM customers WHERE active=1').get().n;
         const workOrderCount=db.prepare('SELECT COUNT(*) n FROM work_orders').get().n;
-        const openOrders=db.prepare("SELECT COUNT(*) n FROM work_orders WHERE status NOT IN ('ENTREGUE','CANCELADA')").get().n;
+        const openOrders=db.prepare("SELECT COUNT(*) n FROM work_orders WHERE status NOT IN ('ENTREGUE','CANCELADA','TRANSFERIDA')").get().n;
         const partsCount=db.prepare('SELECT COUNT(*) n FROM parts WHERE active=1').get().n;
         // Reuse canonical finance rules per physical unit: paid/returned events
         // and paid expenses only, with no direct cross-company SQL joins.
