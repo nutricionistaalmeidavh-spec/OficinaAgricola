@@ -7,7 +7,7 @@ const FINANCE=['ADMIN','FINANCEIRO'];
 const ADMIN=['ADMIN'];
 const SERVICE_ROUTES=new Set([
  '/v1/health','/v1/migrate','/v1/auth/bootstrap','/v1/auth/login',
- '/v1/auth/users','/v1/auth/logout'
+ '/v1/auth/users','/v1/auth/logout','/v1/internal/gateway-session'
 ]);
 export function serviceOnlyNativeRoute(path){
  return SERVICE_ROUTES.has(path);
@@ -23,7 +23,7 @@ export function requiredNativeRoles(method,path){
  if(/^\/v1\/orders\/\d+\/(?:receipts|payment)(?:\/|$)/.test(route))return FINANCE;
  if(verb==='GET'||verb==='HEAD')return ALL;
  if(/^\/v1\/(?:technicians|crm\/maintenance\/sync)(?:\/|$)/.test(route))return ADMIN;
- if(/^\/v1\/stock(?:\/|$)/.test(route))return ['ADMIN','TECNICO'];
- if(/^\/v1\/(?:maintenance-plans|machines\/\d+\/(?:obd-scans|maintenance|maintenance-plans)|orders\/\d+\/(?:status|parts))(?:\/|$)/.test(route))return TECH;
+ if(/^\/v1\/stock(?:\/|$)/.test(route))return OFFICE;
+ if(/^\/v1\/(?:maintenance-plans|machines\/\d+\/(?:obd-scans|maintenance|maintenance-plans)|orders\/\d+\/(?:status|parts)|schedule)(?:\/|$)/.test(route))return TECH;
  return OFFICE;
 }
