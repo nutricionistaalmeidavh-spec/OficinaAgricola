@@ -153,7 +153,6 @@ try {
   # Mesmo pacote verifica retenção; matriz entre versões distintas é gate comercial separado.
   Stop-Process -Id $appProcess.Id -Force
   Wait-Process -Id $appProcess.Id -ErrorAction SilentlyContinue
-  $appProcess = $null
   $reinstall = Start-Process -FilePath $installer.FullName -ArgumentList @('/S',"/D=$installDir") -Wait -PassThru
   if ($reinstall.ExitCode -ne 0) { throw "Falha na reinstalação: $($reinstall.ExitCode)" }
   $appProcess = Start-Process -FilePath $exe.FullName -PassThru
