@@ -1,3 +1,4 @@
+import {requestPayloadLimit} from './platform/billing-http-limits.js';
 import {startBillingReminderScheduler} from './platform/billing-reminder-scheduler.js';
 import { createServer } from 'node:http';
 import {publicErrorMessage} from './platform/public-errors.js';
@@ -274,7 +275,7 @@ export function createAppServer({db=openDatabase(),storageDir=process.env.STORAG
       if(url.pathname.startsWith('/api/billing/')){
         const user=validateSession(db,tokenFrom(req));roleGuard(user,ROLE_FIN);
         const method=req.method,path=url.pathname;
-        const body=method==='POST'?await readJson(req,path==='/api/billing/statements/import'?1150000:16384):{};
+        const body=method==='POST'?await readJson(req,requestPayloadLimit(method,path,16384)):{};
         const data={...body,requestId:body.requestId??req.headers['idempotency-key']};
         const capture=pattern=>path.match(pattern);
         let result;
