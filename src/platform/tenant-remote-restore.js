@@ -70,14 +70,19 @@ export async function restoreMirroredTenantBackup({client,remoteArchive,restoreR
     for(const entry of manifest.files){
       const parts=safeSegments(entry.path,'manifesto');
       const file=join(stage,...parts);
-      const data=await client.getObject({
-        key:prefix+'/'+parts.join('/'),
-        maxBytes:entry.size
-      });
-      if(!Buffer.isBuffer(data)||data.length!==entry.size||hash(data)!==entry.sha256)
-        throw Error('Falha de integridade SHA-256 do backup remoto: '+entry.path);
+      const key=prefix+'/'+parts.join('/');
       mkdirSync(join(stage,...parts.slice(0,-1)),{recursive:true,mode:0o700});
-      writeFileSync(file,data,{flag:'wx',mode:0o600});
+      if(typeof client.downloadObject==='function'){
+        // Streaming avoids loading entire SQLite snapshots into Node memory.
+        await client.downloadObject({
+          key,filePath:file,expectedSize:entry.size,expectedSha256:entry.sha256
+        });
+      }else{
+        const data=await client.getObject({key,maxBytes:entry.size});
+        if(!Buffer.isBuffer(data)||data.length!==entry.size||hash(data)!==entry.sha256)
+          throw Error('Falha de integridade SHA-256 do backup remoto: '+entry.path);
+        writeFileSync(file,data,{flag:'wx',mode:0o600});
+      }
     }
     writeFileSync(join(stage,'manifest.json'),manifestRaw,{flag:'wx',mode:0o600});
     verifyBackup(stage);
