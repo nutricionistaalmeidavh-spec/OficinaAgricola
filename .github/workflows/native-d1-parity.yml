@@ -6,7 +6,6 @@ on:
     paths:
       - "src/platform/async-**"
       - "src/platform/billing-p3-p4.js"
-      - "src/platform/asaas-**"
       - "tests/billing-p3-p4.test.js"
       - "src/workers/d1-workshop.js"
       - "scripts/verify-d1-native.mjs"
