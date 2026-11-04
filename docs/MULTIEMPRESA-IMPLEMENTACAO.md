@@ -4,9 +4,9 @@
 
 - Implementado: registro central de empresas, unidades e vínculos; autenticação central; RBAC por unidade; gateway HTTP que encaminha toda rota operacional autorizada para SQLite exclusivo e diretório de uploads exclusivo da unidade.
 - Implementado: migração aditiva dos usuários legados (Matriz 1/1 preservada), painel de cadastro de empresas/unidades/vínculos, seletor, revogação, isolamento da fila offline por unidade, links públicos de aprovação vinculados à unidade e backups verificados de registro e unidades.
-- **Ainda não implementado:** motor PostgreSQL, D1, armazenamento R2/MinIO, sincronização interunidades, catálogo compartilhado e consolidação financeira global. NÃO declarar multibackend pronto para produção.
+- **Ainda não implementado:** motor PostgreSQL, D1, armazenamento R2/MinIO, sincronização ampla interunidades, transferência de estoque/OS e compartilhamento de clientes com justificativa legal/auditoria. NÃO declarar multibackend pronto para produção.
 - A main continua usando o modo legado. O modo multiempresa é opt-in e depende de revisão.
-- Resumo operacional autorizado entre unidades da mesma empresa já implementado, sem confundir contagens com consolidação fiscal/contábil.
+- Resumo gerencial autorizado entre unidades da mesma empresa: quantidades operacionais e consolidação financeira por livro de pagamentos e despesas efetivamente pagas. Não substitui contabilidade, apuração fiscal ou conciliação bancária.
 - Se o banco antigo tiver ordens de serviço com unit_id diferente da Matriz (1), o gateway **recusa iniciar** até executar migração específica e auditada. Nunca reatribui as OS para a Matriz silenciosamente.
 
 ## Provedores configuráveis com falha explícita
@@ -46,10 +46,18 @@ Backups: snapshots consistentes, verificados por restauração e integridade par
 4. Aprovação pública usa token e identificador explícito de unidade, verificados no banco daquela unidade.
 5. Senha global nunca é copiada para bancos operacionais. Contas técnicas locais recebem hashes de senhas aleatórias.
 
+## Consolidação gerencial e compartilhamento de catálogo
+
+- `GET /api/tenancy/company-summary?companyId=...&from=...&to=...` retorna dados por unidade e totais financeiros em centavos; `from` e `to` usam ISO UTC. Apenas administrador da empresa acessa o consolidado. A regra reutiliza `financeSummary` sobre cada SQLite isolado, sem trocar contabilidade pelo dashboard.
+- `GET /api/tenancy/shareable-parts?unitId=...` lista no máximo 100 peças ativas por consulta, apenas para administrador da unidade.
+- `POST /api/tenancy/share-part` recebe `sourceUnitId`, `targetUnitId`, `partId`, exige administração nas duas unidades e que pertençam à mesma empresa, gera auditoria de solicitação/conclusão e não transfere estoque. Requisição repetida devolve o cadastro original e não duplicará a peça.
+- O modal **Gerenciar empresas** contém Resumo da empresa (com valores financeiros) e Compartilhar catálogo. Nenhuma transferência ocorre automaticamente.
+- Auditoria grava em registro central e inserção no banco da unidade ocorre em transação própria. Não há transação distribuída: se uma queda interromper a operação entre essas etapas, revisar eventos `CATALOG_SHARE_REQUESTED` sem `CATALOG_SHARE_COMPLETED`, antes de promover a funcionalidade a sincronização automática.
+
 ## Pendências técnicas para declarar implementação integral
 
 - Banco PostgreSQL e Cloudflare D1: reescrever interface síncrona DatabaseSync para repositórios assíncronos com compatibilidade transacional, testes de paridade, concorrência e regressão; não há adaptação segura sem isso.
 - Arquivos MinIO/R2: conectar provedores S3 compatíveis a uploads, PDFs, anexos, expiração e backups; disco local já funciona.
-- Compartilhamento aprovado entre filiais: clientes e catálogo de peças comuns, transferência de OS e estoque com auditoria e autorização explícita. Hoje cada unidade tem dados operacionais independentes.
+- Compartilhamento entre filiais: já existe cópia manual auditada e idempotente de metadados de peças entre unidades da mesma empresa, autorizada por ADMIN em ambas, com estoque inicial zero e sem movimentos. Clientes, transferência de OS/estoque e sincronização contínua permanecem pendentes.
 - Relatórios consolidados da empresa, testes completos de carga, restore do conjunto e QA E2E da UI no Linux.
 - Nenhum merge/deploy sem gates aprovados e revisão de isolamento.
