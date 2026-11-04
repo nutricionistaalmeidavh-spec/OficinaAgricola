@@ -23,6 +23,7 @@ export const BILLING_SCHEMA_DDL=Object.freeze([
    provider_ref TEXT,
    payment_url TEXT,
    emission_state TEXT NOT NULL DEFAULT 'READY' CHECK(emission_state IN ('READY','ISSUING','ISSUED')),
+   attempt_no INTEGER NOT NULL DEFAULT 0 CHECK(attempt_no>=0),
    receipt_id BIGINT UNIQUE REFERENCES receipts(id),
    created_at TEXT NOT NULL,updated_at TEXT NOT NULL,
    UNIQUE(plan_id,installment_number)
@@ -240,7 +241,7 @@ export function createBillingService(port,{receivePayment,getPaymentSummary,prov
  async function finalize(row,method){
   const receipt=await receivePayment({
    workOrderId:Number(row.work_order_id),amountCents:Number(row.amount_cents),
-   method,requestId:'billing:'+row.id
+   method,requestId:'billing:'+row.id+':'+Number(row.attempt_no??0)
   });
   await port.run(`UPDATE billing_installments SET status='PAID',receipt_id=?,updated_at=?
    WHERE id=? AND status='PENDING'`,[receipt.id,new Date().toISOString(),row.id]);
