@@ -5,6 +5,9 @@ on:
     branches: [feat/oficina-3d-rodas-curadas-20261104]
     paths:
       - .github/workflows/miniaturas-rodas-reparadas.yml
+      - tests/model-library3d.test.js
+      - public/carros3d/top20.json
+      - src/services/model-library3d.js
   workflow_dispatch:
 
 permissions:
