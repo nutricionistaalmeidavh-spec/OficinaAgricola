@@ -74,11 +74,24 @@ try{
    assert.equal(machine.status,200,JSON.stringify(machine.data));
    const order=await call('/api/work-orders',{method:'POST',token,body:{
      customerId:customer.data.id,machineId:machine.data.id,
-     problemReported:'Motor falhando',unitId:999,createdBy:999
+     problemReported:'Motor falhando',unitId:999,createdBy:999,requestId:'p4-os-001'
    }});
    assert.equal(order.status,200,JSON.stringify(order.data));
    assert.equal(order.data.status,'ENTRADA');
    assert.equal(order.data.unit_id,1,'tenant internal unit id must be 1');
+   const retry=await call('/api/work-orders',{method:'POST',token,body:{
+     customerId:customer.data.id,machineId:machine.data.id,
+     problemReported:'Motor falhando',unitId:999,createdBy:999,requestId:'p4-os-001'
+   }});
+   assert.equal(retry.status,200,JSON.stringify(retry.data));
+   assert.equal(retry.data.id,order.data.id,'repeated queued HTTP writes must not duplicate an OS');
+   const query=new URLSearchParams({
+     method:'POST',path:'/api/work-orders',requestId:'p4-os-001'
+   });
+   const confirmed=await call('/api/commands/status?'+query.toString(),{token});
+   assert.equal(confirmed.status,200,JSON.stringify(confirmed.data));
+   assert.equal(confirmed.data.status,'CONFIRMED');
+   assert.equal(confirmed.data.result.id,order.data.id);
    const orders=await call('/api/work-orders',{token});
    assert.equal(orders.status,200,JSON.stringify(orders.data));
    assert.equal(orders.data.length,1);
