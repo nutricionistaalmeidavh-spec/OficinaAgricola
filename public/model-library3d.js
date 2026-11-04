@@ -94,7 +94,7 @@
     const stageElement=document.querySelector('#ml-viewer-stage');
     let variant=select.value,viewer=null;
     let installed={...(car._installedVariants||{})},busy=false;
-    function updateControls(){
+    function updateControls({preserveMessage=false}={}){
       variant=select.value;
       const ready=Boolean(installed[variant]);
       openBtn.disabled=!ready||busy;
@@ -103,7 +103,7 @@
         installBtn.textContent=ready?'Modelo instalado':'Baixar '+formatMB(target.variants[variant]?.bytes);
       }
       if(colorInput)colorInput.disabled=!ready||busy;
-      if(!busy&&!stageElement.querySelector('canvas'))message.textContent=ready?'Modelo disponível offline neste servidor':'Modelo ainda não instalado neste servidor';
+      if(!busy&&!preserveMessage&&!stageElement.querySelector('canvas'))message.textContent=ready?'Modelo disponível offline neste servidor':'Modelo ainda não instalado neste servidor';
     }
     async function preview(){
       if(!installed[variant]||busy)return;
@@ -115,7 +115,7 @@
         viewer=await mod.mountViewer({id:target.id,variant:targetVariant,element:stageElement,statusElement:message});
       }catch(error){
         if(stageElement.isConnected)message.textContent='Falha na visualização: '+(error.message||error);
-      }finally{busy=false;if(stageElement.isConnected)updateControls()}
+      }finally{busy=false;if(stageElement.isConnected)updateControls({preserveMessage:true})}
     }
     select.addEventListener('change',()=>{
       import('/model-viewer.js').then(mod=>mod.closeViewer()).catch(()=>{});
