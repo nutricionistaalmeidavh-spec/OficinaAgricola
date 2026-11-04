@@ -20,9 +20,9 @@ function machineLabel(m){return [m.brand,m.model,m.type,m.internal_id?`(${m.inte
 function machineOptions(machines,customerId,selected){return machines.filter(m=>String(m.customer_id)===String(customerId)).map(m=>`<option value="${m.id}" ${String(m.id)===String(selected)?'selected':''}>${esc(machineLabel(m))}</option>`).join('')}
 
 async function editFullWorkOrder(id){
-  const [os,customers,machines,techs]=await Promise.all([api(`/api/work-orders/${id}`),api('/api/customers?includeInactive=1'),api('/api/machines?includeInactive=1'),api('/api/technicians')]);
+  const [os,techs]=await Promise.all([api(`/api/work-orders/${id}`),api('/api/technicians')]);
   showModal(`Editar OS #${os.os_number}`,`<form class="form-stack">
-    <div class="field-row"><label>Cliente<select name="customerId" id="editOsCustomer" required>${customers.map(c=>`<option value="${c.id}" ${c.id===os.customer_id?'selected':''}>${esc(c.name)}</option>`).join('')}</select></label><label>Equipamento<select name="machineId" id="editOsMachine" required>${machineOptions(machines,os.customer_id,os.machine_id)}</select></label></div>
+    <div class="field-row"><label>Cliente<select name="customerId" id="editOsCustomer" required><option value="">Pesquise o cliente</option></select></label><label>Equipamento<select name="machineId" id="editOsMachine" required><option value="">Pesquise o equipamento</option></select></label></div>
     <label>Problema relatado<textarea name="problemReported" required>${esc(os.problem_reported)}</textarea></label>
     <label>Diagnóstico<textarea name="diagnosis">${esc(os.diagnosis)}</textarea></label>
     <div class="field-row"><label>Técnico<select name="technicianId"><option value="">Não definido</option>${techs.map(t=>`<option value="${t.id}" ${t.id===os.technician_id?'selected':''}>${esc(t.name)}</option>`).join('')}</select></label><label>Prioridade<select name="priority">${['BAIXA','NORMAL','ALTA','URGENTE'].map(p=>`<option ${p===os.priority?'selected':''}>${p}</option>`).join('')}</select></label></div>
@@ -34,7 +34,11 @@ async function editFullWorkOrder(id){
     const o=formObj(fd); const body={expectedVersion:os.version,customerId:Number(o.customerId),machineId:Number(o.machineId),problemReported:o.problemReported,diagnosis:o.diagnosis,technicianId:o.technicianId?Number(o.technicianId):null,priority:o.priority,enteredAt:new Date(o.enteredAt).toISOString(),estimatedDelivery:o.estimatedDelivery?new Date(o.estimatedDelivery).toISOString():null,internalNotes:o.internalNotes};
     await api(`/api/work-orders/${id}`,{method:'PATCH',body}); toast('OS atualizada e alteração registrada'); await refreshCurrentPage();
   });
-  $('#editOsCustomer').onchange=e=>{const opts=machineOptions(machines,e.target.value,null);renderRegion($('#editOsMachine'),opts||'<option value="">Nenhum equipamento deste cliente</option>')};
+  attachPagedLookup($('#editOsCustomer'),{resource:'customers',label:'cliente',selected:{id:os.customer_id,label:os.customer_name}});
+  const machineLookup=attachPagedLookup($('#editOsMachine'),{resource:'machines',label:'equipamento',
+    selected:{id:os.machine_id,label:[os.machine_brand,os.machine_model].filter(Boolean).join(' ')},
+    customerId:()=>$('#editOsCustomer')?.value});
+  $('#editOsCustomer').addEventListener('change',()=>{machineLookup.clear();void machineLookup.reload()});
 }
 
 async function showWorkOrderHistory(id){
@@ -58,10 +62,10 @@ async function downloadWorkOrderPdf(id,number){
 async function duplicateWorkOrderUi(id){
   const requestId=newCommandId();
   const safe=async p=>{try{return await api(p)}catch{return null}};
-  const [os,quote,customers,machines]=await Promise.all([api(`/api/work-orders/${id}`),safe(`/api/work-orders/${id}/quote`),api('/api/customers'),api('/api/machines')]);
+  const [os,quote]=await Promise.all([api(`/api/work-orders/${id}`),safe(`/api/work-orders/${id}/quote`)]);
   showModal(`Duplicar OS #${os.os_number}`,`<form class="form-stack">
     <div class="card"><strong>Será criada uma nova OS independente, com novo número.</strong><br><small>Pagamentos, recebimentos, peças baixadas e movimentações de estoque não serão copiados.</small></div>
-    <div class="field-row"><label>Novo cliente<select name="customerId" id="dupCustomer" required>${customers.map(c=>`<option value="${c.id}" ${c.id===os.customer_id?'selected':''}>${esc(c.name)}</option>`).join('')}</select></label><label>Equipamento<select name="machineId" id="dupMachine" required>${machineOptions(machines,os.customer_id,os.machine_id)}</select></label></div>
+    <div class="field-row"><label>Novo cliente<select name="customerId" id="dupCustomer" required><option value="">Pesquise o cliente</option></select></label><label>Equipamento<select name="machineId" id="dupMachine" required><option value="">Pesquise o equipamento</option></select></label></div>
     <label>Problema/serviço base<textarea name="problemReported" required>${esc(os.problem_reported)}</textarea></label>
     <label>Diagnóstico/descrição reutilizável<textarea name="diagnosis">${esc(os.diagnosis)}</textarea></label>
     <label>Observações internas<textarea name="internalNotes">${esc(os.internal_notes)}</textarea></label>
@@ -78,5 +82,9 @@ async function duplicateWorkOrderUi(id){
     });
     toast(`Nova OS #${created.os_number} criada`); await refreshCurrentPage();
   });
-  $('#dupCustomer').onchange=e=>{const opts=machineOptions(machines,e.target.value,null);renderRegion($('#dupMachine'),opts||'<option value="">Nenhum equipamento deste cliente</option>')};
+  attachPagedLookup($('#dupCustomer'),{resource:'customers',label:'cliente',selected:{id:os.customer_id,label:os.customer_name}});
+  const machineLookup=attachPagedLookup($('#dupMachine'),{resource:'machines',label:'equipamento',
+    selected:{id:os.machine_id,label:[os.machine_brand,os.machine_model].filter(Boolean).join(' ')},
+    customerId:()=>$('#dupCustomer')?.value});
+  $('#dupCustomer').addEventListener('change',()=>{machineLookup.clear();void machineLookup.reload()});
 }
