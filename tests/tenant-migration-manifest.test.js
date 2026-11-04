@@ -9,6 +9,7 @@ import {migrateAssistencia} from '../src/assistencia-schema.js';
 import {createCommonDataAdapter} from '../src/platform/common-data-adapter.js';
 import {createAsyncWorkshopServices} from '../src/platform/async-workshop-services.js';
 import {buildCanonicalSqliteManifest,verifyCanonicalTargetManifest} from '../src/platform/tenant-migration-manifest.js';
+import {markLegacyRegistryLink} from '../src/platform/tenant-registry.js';
 
 test('explicit migration manifest fingerprints ALL canonical SQLite tables without mutating existing customer database',async()=>{
  const db=openDatabase(':memory:');
@@ -105,5 +106,17 @@ test('manifest recognizes runtime remote-upload idempotency table used by existi
   const manifest=buildCanonicalSqliteManifest(db);
   assert.ok(manifest.tables.tenant_remote_upload_requests,
    'runtime tables must be exported, not dropped or treated as unknown');
+ }finally{db.close();}
+});
+
+test('legacy registry marker is metadata, not a customer-domain table to import',()=>{
+ const db=openDatabase(':memory:');
+ try{
+  migrate(db);migrateAssistencia(db);markLegacyRegistryLink(db);
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM tenant_registry_link").get().n,1);
+  const manifest=buildCanonicalSqliteManifest(db);
+  assert.ok(manifest.tables.customers,'canonical customer tables remain in the snapshot');
+  assert.equal(Object.hasOwn(manifest.tables,'tenant_registry_link'),false,
+   'registry link metadata is never imported into another tenant backend');
  }finally{db.close();}
 });
