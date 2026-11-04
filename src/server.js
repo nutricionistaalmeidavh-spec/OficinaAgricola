@@ -373,5 +373,10 @@ export function createAppServer({db=openDatabase(),storageDir=process.env.STORAG
       json(res,404,{error:'Rota não encontrada'});
     }catch(error){console.error('[request]',req.method,url.pathname.startsWith('/api/public/approval/')?'/api/public/approval/[redacted]':url.pathname,error.message);json(res,statusFor(error),{error:publicErrorMessage(error)})}
   });
+  httpServer.once('listening',()=>{
+    const stop=startBillingReminderScheduler(billing,{onError:error=>
+      console.error('[billing-reminders] Falha:',error.message)});
+    httpServer.once('close',stop);
+  });
+  return httpServer;
 }
-
