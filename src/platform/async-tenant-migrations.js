@@ -135,6 +135,13 @@ const TABLES=[
   relative_path TEXT NOT NULL,size_bytes INTEGER NOT NULL,
   created_at TEXT NOT NULL
 )`,
+`CREATE TABLE IF NOT EXISTS tenant_remote_upload_requests(
+  work_order_id INTEGER NOT NULL REFERENCES work_orders(id),
+  request_id TEXT NOT NULL,
+  payload_hash TEXT NOT NULL,
+  attachment_id INTEGER NOT NULL REFERENCES attachments(id),
+  PRIMARY KEY(work_order_id,request_id)
+)`,
 `CREATE TABLE IF NOT EXISTS fiscal_documents(
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   kind TEXT NOT NULL,origin_type TEXT NOT NULL,
