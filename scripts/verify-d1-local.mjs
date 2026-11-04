@@ -11,7 +11,8 @@ let Miniflare;
 try{({Miniflare}=await import('miniflare'));}
 catch{throw Error('Instale miniflare open source explicitamente somente no CI');}
 const mf=new Miniflare({
- modules:true,compatibilityDate:'2026-11-03',
+ // D1 binding APIs used here do not need a future compatibility date.
+ modules:true,compatibilityDate:'2025-08-01',
  script:"export default {fetch(){return new Response('D1 offline testing')}}",
  d1Databases:{DB:'e5accc11-2e2e-4444-8888-555555555555'}
 });
