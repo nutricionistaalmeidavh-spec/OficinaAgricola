@@ -135,3 +135,23 @@ test('P4 mostra recebimentos elegíveis por OS, sem pedir IDs numéricos ao oper
   assert.equal((await billing.listAvailableReceipts()).length,0);
  }finally{db.close();}
 });
+
+test('P3 impede emissão duplicada quando duas sessões tentam ativar a mesma parcela',async()=>{
+ let releases,created=0;
+ const barrier=new Promise(resolve=>{releases=resolve});
+ const provider={create:async()=>{created++;await barrier;return {
+  reference:'boleto-unico',paymentUrl:'https://www.asaas.com/i/boleto'
+ }},status:async()=>({reference:'boleto-unico',status:'PENDING',amountCents:10001})};
+ const {db,order,billing}=await setup({providers:{BOLETO:provider}});
+ try{
+  const plan=await billing.createPlan({workOrderId:order.id,amountCents:10001,
+   count:1,firstDueDate:'2026-12-15',method:'BOLETO',requestId:'concorrente-1'});
+  const one=billing.activateInstallment(plan.installments[0].id);
+  // O segundo pedido chega enquanto o primeiro ainda aguarda o PSP.
+  await new Promise(resolve=>setImmediate(resolve));
+  await assert.rejects(billing.activateInstallment(plan.installments[0].id),/emissão.*andamento/i);
+  releases();
+  await one;
+  assert.equal(created,1);
+ }finally{releases();db.close();}
+});
