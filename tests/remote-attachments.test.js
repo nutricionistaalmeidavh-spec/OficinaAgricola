@@ -51,3 +51,16 @@ test('remote attachment validates type and maximum 5 MB before uploading',async(
   assert.equal(s.uploads.length,0);
  }finally{s.close();}
 });
+
+test('simultaneous uploads with same request ID keep one canonical row and one remote object',async()=>{
+ const s=init();
+ try{
+  const [a,b]=await Promise.all([
+    saveRemoteAttachment(s.db,s.os.id,payload,{objectStore:s.objectStore}),
+    saveRemoteAttachment(s.db,s.os.id,payload,{objectStore:s.objectStore})
+  ]);
+  assert.equal(a.id,b.id);
+  assert.equal(s.db.prepare('SELECT COUNT(*) n FROM attachments').get().n,1);
+  assert.equal(s.objects.size,1,'second temporary upload is cleaned after losing idempotency race');
+ }finally{s.close();}
+});
