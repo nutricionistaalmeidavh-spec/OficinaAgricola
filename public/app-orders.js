@@ -288,7 +288,7 @@ async function displayBillingPlan(plan,workOrderId){
    toast(row.status==='PAID'?'Cobrança recebida e conciliada':'Cobrança ainda pendente');
   }catch(error){toast(error.message,true);btn.disabled=false}
  });
-  $('[data-refund-billing]').forEach(btn=>btn.onclick=async()=>{
+  $$('[data-refund-billing]').forEach(btn=>btn.onclick=async()=>{
    try{
     if(btn.dataset.refundId){
      const refund=await api('/api/billing/refunds/'+btn.dataset.refundId+'/sync',
