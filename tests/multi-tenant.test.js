@@ -118,6 +118,18 @@ test('HTTP isolation: company and unit records, member roles and revoked access'
   const revocation=await request('PATCH','/api/tenancy/memberships',{unitId:unit.data.id,userId:member.data.id,role:'TECNICO',active:false});
   assert.equal(revocation.status,200);
   assert.equal((await request('GET','/api/customers',undefined,unit.data.id,staffToken)).status,403);
+  // Financial consolidation must use canonical payment events and paid expenses,
+  // never mixing independent companies or duplicating a receipt as revenue.
+  const consolidated=await request('GET','/api/tenancy/company-summary?companyId='+newCompany.data.id+'&from=2026-01-01T00%3A00%3A00.000Z&to=2027-12-31T23%3A59%3A59.999Z');
+  assert.equal(consolidated.status,200,JSON.stringify(consolidated.data));
+  assert.equal(consolidated.data.totals.finance.expensesCents,5500);
+  assert.equal(consolidated.data.totals.finance.receivedCents,0);
+  assert.equal(consolidated.data.totals.finance.resultCents,-5500);
+  assert.equal(consolidated.data.units.find(x=>x.id===unit.data.id).finance.expensesCents,0);
+  const otherConsolidated=await request('GET','/api/tenancy/company-summary?companyId=1');
+  assert.equal(otherConsolidated.status,200);
+  assert.equal(otherConsolidated.data.totals.finance.expensesCents,0,'other company expense must never be included');
+  assert.equal((await request('GET','/api/tenancy/company-summary?companyId='+newCompany.data.id+'&from=invalid')).status,400);
   const audit=await request('GET','/api/tenancy/audit?companyId='+newCompany.data.id);
   assert.equal(audit.status,200,JSON.stringify(audit.data));
   assert.ok(audit.data.some(entry=>entry.action==='MEMBERSHIP_CHANGED'&&entry.target_user_id===member.data.id));
