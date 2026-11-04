@@ -4,7 +4,7 @@
 
 - Implementado: registro central de empresas, unidades e vínculos; autenticação central; RBAC por unidade; gateway HTTP que encaminha toda rota operacional autorizada para SQLite exclusivo e diretório de uploads exclusivo da unidade.
 - Implementado: migração aditiva dos usuários legados (Matriz 1/1 preservada), painel de cadastro de empresas/unidades/vínculos, seletor, revogação, isolamento da fila offline por unidade, links públicos de aprovação vinculados à unidade e backups verificados de registro e unidades.
-- **Implementado na branch:** storage S3 para novos anexos/PDFs anexados (MinIO/R2 opcional), emissor fiscal por empresa com CNPJ fixado, transferência controlada de OS em estágio inicial e portas SQL assíncronas nativas para desenvolvimento PostgreSQL/D1. **Ainda pendente:** migração dos módulos operacionais a PostgreSQL/D1, transferência de OS com vínculos financeiros/fiscais/estoque e anexos existentes, sincronização contínua e restauração remota automática. O backend SQLite/disco continua sendo o core R$ 0.
+- **Implementado na branch:** anexos S3 opcionais para novos uploads, emissores fiscais segregados por CNPJ, transferência operacional de OS inclusive complexas com dossiê financeiro/fiscal na origem, recuperação remota para staging verificado e núcleo SQL assíncrono experimental para PostgreSQL e D1. **Ainda pendente:** migração integral da UI e de todas as rotas antigas para PostgreSQL/D1, execução transacional completa por empresa, reconciliação/retention de objetos e restore coordenado de registro + filiais. Core SQLite + disco continua R$ 0.
 - A main continua usando o modo legado. O modo multiempresa é opt-in e depende de revisão.
 - Resumo gerencial autorizado entre unidades da mesma empresa: quantidades operacionais e consolidação financeira por livro de pagamentos e despesas efetivamente pagas. Não substitui contabilidade, apuração fiscal ou conciliação bancária.
 - Se o banco antigo tiver ordens de serviço com unit_id diferente da Matriz (1), o gateway **recusa iniciar** até executar migração específica e auditada. Nunca reatribui as OS para a Matriz silenciosamente.
@@ -75,6 +75,16 @@ Por padrão, o core mantém SQLite e anexos no disco (100% self-hosted). Além d
 - Se o storage externo falhar, o backup local permanece intacto e a próxima execução pode repetir o upload do mesmo arquivo de backup. As credenciais nunca são incluídas em logs ou commits.
 - **Limitações:** não há backup remoto contínuo, versão retida/expirada remotamente ou restauração remota automática. É necessário testar a restauração manual com arquivos recuperados do bucket; o bucket deve ser privado, com controle próprio de acesso e redundância.
 
+### Recuperação remota verificada, sem risco de sobrescrever dados
+
+A cópia S3 foi estendida com download de objetos em streaming, verificação incremental SHA-256 e staging isolado em disco. O comando de recuperação opcional não exige Cloudflare ou serviço pago (MinIO self-hosted funciona):
+
+    node scripts/stage-remote-backup.mjs registry/<identificador-do-backup> /srv/oficina/staging
+
+Ele utiliza as variáveis privadas OFICINA_BACKUP_S3_* já configuradas, reconstrói o manifesto e confirma a integridade de cada arquivo. O arquivo final fica em pasta nova `verified-...`; **não modifica banco operacional, diretório de anexos ou registro atual**. Entradas do manifesto com `../`, symlink ou nomes inválidos são recusadas. O estágio limita a quantidade e tamanho de arquivos para reduzir riscos de exaustão de recursos.
+
+A restauração de um conjunto multiempresa **exige desligar o serviço e recuperar registro + todos os bancos da mesma rodada**, validando memberships e integridade após a restauração. Não automatizar substituição parcial de arquivos vivos.
+
 ## Anexos como objetos principais S3 (MinIO/R2)
 
 - Defina `OFICINA_OBJECT_STORAGE=s3` e `OFICINA_ATTACHMENT_S3_ENDPOINT`, `_BUCKET`, `_REGION`, `_PREFIX`, `_ACCESS_KEY_ID`, `_SECRET_ACCESS_KEY` com os prefixos completos `OFICINA_ATTACHMENT_S3_...`. Todas as credenciais ficam no ambiente privado, sem arquivo de secrets no Git.
@@ -99,6 +109,7 @@ Por padrão, o core mantém SQLite e anexos no disco (100% self-hosted). Além d
 - A intenção durável guarda ID de origem, destino, base legal, referência e versão da OS na origem. A atualização de estado usa controle de versão para falhar em caso de alteração concorrente. Se o servidor cair depois de copiar destino, `POST /api/tenancy/os-transfer/retry` retoma por `transferId` sem duplicar OS e mantém auditoria.
 - `GET /api/tenancy/os-transfers?companyId=...` lista histórico auditado apenas para ADMIN de **todas** as unidades da empresa. `GET /api/tenancy/os-transfer/:id/dossier` exige ADMIN nas **duas** unidades envolvidas e consulta, na fonte original, orçamento, itens, recebimentos, eventos de pagamento, consumos de estoque, despesas, fiscal, anexos, checklists, agenda e alterações da OS, sem replicar livros.
 - `GET /api/tenancy/os-transfer/:id/attachments/:attachmentId/file` exige a mesma autorização, verifica se o anexo pertence à OS original e baixa com restrição de diretório, verificação de tamanho e acesso ao storage correto (disco ou S3). O painel mostra os históricos e baixa os arquivos autenticadamente.
+- `GET /api/tenancy/os-transfer/:id/fiscal/:documentId/xml` libera somente o XML **já autorizado** e originalmente emitido (sem reemitir), após verificar ADMIN em ambas as filiais e que o documento pertence à OS original.
 - **Limite fiscal:** transferência operacional não transfere titularidade de NF-e/NFS-e, obrigações de estorno, crédito de estoque já consumido, conta a receber ou certificado de emitente. Essas obrigações permanecem na empresa/unidade original; movimentações físicas novas exigem operação de estoque/documentação própria.
 - Não existem transações distribuídas entre os bancos das filiais: a continuidade depende de saga e reconciliação em falhas parciais. Para operações históricas irregulares, auditar antes de transferir, sem copiar automaticamente lançamentos com inconsistências.
 
@@ -107,10 +118,12 @@ Por padrão, o core mantém SQLite e anexos no disco (100% self-hosted). Além d
 - `src/platform/async-sql-ports.js` disponibiliza portas PostgreSQL (com pool do driver OSS `pg` injetado) e Cloudflare D1 (binding nativo de Worker) para consultas parametrizadas, execuções e transações suportadas.
 - PostgreSQL oferece `BEGIN/COMMIT/ROLLBACK` por conexão; D1 oferece `batch` atômico. D1 não permite simular transações interativas de múltiplas chamadas; a porta falha explicitamente nesses casos.
 - **O domínio principal ainda usa `DatabaseSync` síncrono**. Não ativar PostgreSQL/D1 como armazenamento canônico até migrar serviços, migrações SQL, identidade, outbox e testes com bancos reais. A existência dessas portas não significa que os módulos de OS/estoque/fiscal já operem nativamente neles.
+- Existe um **núcleo assíncrono independente** (`async-workshop-services.js`) para clientes, veículos, OS, peças, movimentações de estoque, pagamentos e resumo financeiro, com entradas experimentais PostgreSQL localhost e Worker D1. Seus comandos não usam SQLite legado. Os testes reais de PostgreSQL 16 e Workerd/D1 local são executados no GitHub Actions sem conectar dados de clientes ou infraestrutura paga.
+- **Paridade parcial:** as interfaces completas de orçamento/fiscal, autenticação/RBAC, relatórios, anexos e aplicação desktop/PWA ainda dependem do runtime legado. Não dirigir clientes ao backend nativo experimental como se fosse sistema completo.
 
 ## Pendências técnicas para declarar implementação integral
 
-- Banco PostgreSQL e Cloudflare D1: portas assíncronas parametrizadas estão prontas para receber drivers nativos, mas **falta adaptar cada serviço, as migrações e testes de integração com instâncias reais**. Nunca alegar armazenamento primário concluído.
+- Banco PostgreSQL e Cloudflare D1: núcleo operacional assíncrono e testes contra PostgreSQL 16 real / D1 local já implementados; ainda falta adaptar todas as rotas, login, RBAC, anexos, fiscal, domínio completo e a UI, com paridade E2E no backend selecionado. Sem fallback disfarçado.
 - Arquivos MinIO/R2: anexos novos e PDFs anexados já têm backend S3 primário opcional. Faltam política de retenção, varredura de órfãos, restore remoto testado e cópia automatizada dos objetos legados.
 - Compartilhamento entre filiais: catálogos, clientes, estoque e continuidade operacional de OS com dossiê de evidências e livros preservados na origem. Não é uma migração de titularidade fiscal nem transação distribuída. Sincronização contínua, compensação automática e automatização da análise LGPD seguem pendentes.
 - Relatórios consolidados da empresa, testes completos de carga, restore do conjunto e QA E2E da UI no Linux.
