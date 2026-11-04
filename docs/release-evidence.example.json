@@ -1,0 +1,20 @@
+{
+  "_notice": "TEMPLATE: nenhum teste foi concluído neste arquivo; não usar dados inventados.",
+  "version": "1.0.0",
+  "commit": "0000000000000000000000000000000000000000",
+  "automated": {
+    "ci": {"status":"PENDING","observedAt":null,"evidenceRef":""},
+    "qa": {"status":"PENDING","observedAt":null,"evidenceRef":""},
+    "windows": {"status":"PENDING","observedAt":null,"evidenceRef":""},
+    "backup": {"status":"PENDING","observedAt":null,"evidenceRef":""}
+  },
+  "manual": {
+    "disaster": {"status":"PENDING","observedAt":null,"evidenceRef":"","mode":"REAL","restoreRef":""},
+    "fiscal": {
+      "nfe": {"status":"PENDING","observedAt":null,"evidenceRef":"","environment":"HOMOLOGACAO","authority":"SEFAZ","protocolRef":""},
+      "nfse": {"status":"PENDING","observedAt":null,"evidenceRef":"","environment":"HOMOLOGACAO","authority":"MUNICIPIO","protocolRef":""}
+    },
+    "diagnostics": {"status":"PENDING","observedAt":null,"evidenceRef":"","mode":"REAL","adapter":"","vehicleRef":""},
+    "printing": {"status":"PENDING","observedAt":null,"evidenceRef":"","mode":"REAL","printer":"","spoolRef":""}
+  }
+}
