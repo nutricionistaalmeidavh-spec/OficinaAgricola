@@ -1,3 +1,4 @@
+import {BILLING_EXTENSIONS_DDL,createBillingFinanceExtensions} from './billing-finance-extensions.js';
 import {createHash,randomBytes} from 'node:crypto';
 
 // P3/P4: schema isolado do livro canônico receipts/payment_events.
@@ -62,7 +63,8 @@ export const BILLING_SCHEMA_DDL=Object.freeze([
    status TEXT NOT NULL DEFAULT 'DRAFT' CHECK(status IN ('DRAFT','CANCELLED')),
    created_at TEXT NOT NULL,
    UNIQUE(installment_id,kind,due_date)
- )`
+ )`,
+ ...BILLING_EXTENSIONS_DDL
 ]);
 export function migrateLocalBilling(db){for(const sql of BILLING_SCHEMA_DDL)db.exec(sql);}
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
@@ -124,7 +126,7 @@ const validUrl=value=>{
  return raw;
 };
 
-export function createBillingService(port,{receivePayment,getPaymentSummary,providers={}}={}){
+export function createBillingService(port,{receivePayment,getPaymentSummary,providers={},reversePayment=null,reminderSender=null}={}){
  if(!port||!['sqlite','postgres','d1'].includes(port.engine)||
    !['first','all','run'].every(fn=>typeof port[fn]==='function')||
    (port.engine==='d1'&&typeof port.batch!=='function')||
@@ -414,11 +416,14 @@ export function createBillingService(port,{receivePayment,getPaymentSummary,prov
    bankEntries:Number(bank.imported),bankMatched:Number(bank.matched)
   };
  }
+ const extensions=createBillingFinanceExtensions({port,importStatement,prepareReminders,
+  loadInstallment,providers,reversePayment,reminderSender});
  return Object.freeze({
+  ...extensions,
   createPlan,getPlan:loadPlan,getPlanForOrder,getInstallment:loadInstallment,activateInstallment,
   syncInstallment,confirmManual,recordSettlement,importStatement,matchStatement,
   prepareReminders,financeReport,listStatements,listAvailableReceipts,
   capabilities:()=>({manual:true,boleto:Boolean(providers.BOLETO),
-   paymentLink:Boolean(providers.PAYMENT_LINK)})
+   paymentLink:Boolean(providers.PAYMENT_LINK),...extensions.billingExtrasCapabilities()})
  });
 }
