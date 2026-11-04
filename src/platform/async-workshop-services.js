@@ -1,3 +1,4 @@
+import {createPostgresQuoteApprovals} from './async-quote-approval.js';
 import {randomBytes,createHash} from 'node:crypto';
 import {assertTransition,calculateQuote} from '../domain.js';
 import {createAsyncWorkshopCatalog} from './async-workshop-catalog.js';
@@ -477,7 +478,8 @@ export function createAsyncWorkshopServices(port,{fiscalProvider=null,objectStor
    ...createAsyncWorkshopAutomotive(port),
    ...createAsyncWorkshopAuth(port),
    ...createAsyncWorkshopCrm(port),
-   ...createAsyncWorkshopAttachments(port,{objectStore})
+   ...createAsyncWorkshopAttachments(port,{objectStore}),
+   ...(port.engine==='postgres'?createPostgresQuoteApprovals(port):{})
  };
  return Object.freeze({...services,...createAsyncLegacyViews(port,services)});
 }
