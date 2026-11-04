@@ -152,9 +152,14 @@ test('Ka Fox Palio incluem uma variante experimental de rodas reparadas sem perd
     assert.ok(record?.variants?.repaired?.sha256,'Variante rodas não cadastrada para '+id);
     assert.equal(record.variants.repaired.experimental,true);
     assert.equal(record.review_status,'PENDENTE_REVISAO_VISUAL');
-    assert.equal(resolveEntry(manifest,id,'repaired').path,`curadoria/geometria/${id}-rodas.glb`);
-    assert.match(assetUrl(resolveEntry(manifest,id,'repaired')),/curadoria\/geometria\/.+-rodas\.glb$/);
+    assert.equal(resolveEntry(manifest,id,'repaired').path,`curadoria/rodas-reparadas/${id}-rodas.glb`);
+    assert.match(assetUrl(resolveEntry(manifest,id,'repaired')),/curadoria\/rodas-reparadas\/.+-rodas\.glb$/);
   }
+  for(const id of ['ford-ka','vw-fox']) {
+    assert.equal(manifest.models.find(x=>x.id===id).variants.repaired.geometry,'REUSED_SOURCE_WHEELS');
+    assert.equal(manifest.models.find(x=>x.id===id).variants.repaired.generatedWheels,0);
+  }
+  assert.equal(manifest.models.find(x=>x.id==='fiat-palio').variants.repaired.geometry,'PROCEDURAL_APPROXIMATION');
   assert.throws(()=>resolveEntry(manifest,'fiat-uno','repaired'),/indisponível/i);
   validateCatalog(manifest);
 });
@@ -166,7 +171,7 @@ test('GLB reparado segue as mesmas regras de integridade e cache das outras vari
     const entry3d={...entry(bin),variants:{
       ...entry(bin).variants,
       repaired:{ref:'0123456789abcdef0123456789abcdef01234567',
-        path:'curadoria/geometria/fiat-uno-rodas.glb',
+        path:'curadoria/rodas-reparadas/fiat-uno-rodas.glb',
         sha256:createHash('sha256').update(bin).digest('hex'),bytes:bin.length,experimental:true}
     }};
     const catalog={models:[entry3d]};
