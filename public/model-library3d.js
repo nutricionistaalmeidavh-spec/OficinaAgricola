@@ -62,7 +62,12 @@
       ' · <strong>Licença:</strong> '+escapeHtml(target.credit.license||'Não informada')+'</p>':'';
     const notes=[...(target.notes||[])];
     if(target.variants?.restored)notes.push('Versão restaurada experimental; não corrige necessariamente rodas ou outras malhas ausentes');
-    if(target.variants?.repaired)notes.push('Rodas reconstruídas proceduralmente (experimental): não são peças originais do fabricante. O modelo permanece em curadoria visual.');
+    if(target.variants?.repaired){
+      const reuse=target.variants.repaired.geometry==='REUSED_SOURCE_WHEELS';
+      notes.push(reuse?
+        'Rodas originais reposicionadas nas quatro posições corretas, verificadas por renderização 3D; modelo ainda em curadoria visual.':
+        'Rodas complementares criadas por geometria aproximada, não OEM. Modelo ainda em curadoria visual.');
+    }
     notes.push('Modelo ainda não homologado para identificação de geração e inspeção de peças');
     const warning=notes.map(note=>'<li>'+escapeHtml(note)+'</li>').join('');
     const stage=blocked?'<div class="ml-not-available">'+escapeHtml(target.blockReason||'Modelo não identificado no acervo')+'</div>':
@@ -74,7 +79,7 @@
         '<div class="ml-viewer-actions">',
         '<label class="ml-variant-label">Versão<select id="ml-variant">',
         variants.map(v=>'<option value="'+v+'"'+(v===first?' selected':'')+'>'+(
-          v==='repaired'?'Rodas reconstruídas (experimental)':v==='restored'?'Materiais restaurados (experimental)':'Original')+'</option>').join(''),
+          v==='repaired'?(target.variants.repaired.geometry==='REUSED_SOURCE_WHEELS'?'Rodas originais reposicionadas (experimental)':'Rodas complementares (experimental)'):v==='restored'?'Materiais restaurados (experimental)':'Original')+'</option>').join(''),
         '</select></label>',
         '<button type="button" class="btn" id="ml-view-start">Abrir visualização 3D</button>',
         (isAdmin?'<button type="button" class="btn" id="ml-install">Baixar modelo</button><label class="btn ml-import-btn">Importar GLB local<input type="file" id="ml-import-file" accept=".glb,model/gltf-binary"></label>':''),
