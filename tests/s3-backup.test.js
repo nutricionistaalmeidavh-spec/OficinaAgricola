@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openDatabase, migrate } from '../src/db.js';
@@ -15,7 +15,7 @@ test('S3-compatible MinIO backup mirrors signed objects and verifies each remote
     const chunks=[];for await(const chunk of req)chunks.push(chunk);
     const raw=Buffer.concat(chunks);
     headersSeen.push({method:req.method,path:req.url,authorization:req.headers.authorization,
-      hash:req.headers['x-amz-content-sha256'],date:req.headers['x-amz-date']});
+      hash:req.headers['x-amz-content-sha256'],date:req.headers['x-amz-date'],length:req.headers['content-length']});
     if(req.method==='PUT'){
       const actual=createHash('sha256').update(raw).digest('hex');
       if(actual!==req.headers['x-amz-content-sha256']){res.writeHead(400);res.end();return;}
@@ -55,10 +55,28 @@ test('S3-compatible MinIO backup mirrors signed objects and verifies each remote
   assert.ok(paths.some(path=>path.endsWith('/uploads/check.txt')));
   assert.ok(headersSeen.every(x=>x.authorization?.startsWith('AWS4-HMAC-SHA256 ')&&x.date&&/^[a-f0-9]{64}$/.test(x.hash)));
   assert.ok(headersSeen.every(x=>!x.path.includes('test-secret')));
+  assert.ok(headersSeen.filter(x=>x.method==='PUT').every(x=>Number.isSafeInteger(Number(x.length))),'S3 PUT must send a fixed Content-Length');
 });
 test('S3 backups reject insecure public endpoints and missing credentials',()=>{
   const settings={bucket:'office',region:'us-east-1',accessKeyId:'x',secretAccessKey:'y'};
   assert.throws(()=>createS3BackupClient({...settings,endpoint:'http://example.org'}),/HTTPS/);
   assert.throws(()=>createS3BackupClient({...settings,endpoint:'https://example.org',secretAccessKey:''}),/credenciais/i);
   assert.throws(()=>createS3BackupClient({...settings,endpoint:'https://user:pass@example.org'}),/endpoint/i);
+});
+
+test('backup mirror rejects symbolic links instead of uploading files outside the archive',{skip:process.platform==='win32'},async t=>{
+  const root=mkdtempSync(join(tmpdir(),'oficina-s3-link-'));
+  t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const dbPath=join(root,'db.sqlite');const db=openDatabase(dbPath);migrate(db);db.close();
+  const uploads=join(root,'uploads');mkdirSync(uploads);
+  const privateFile=join(root,'private-secret.txt');writeFileSync(privateFile,'do-not-exfiltrate');
+  symlinkSync(privateFile,join(uploads,'out-of-root.txt'));
+  const backupRoot=join(root,'backups');
+  const archive=createBackup({databasePath:dbPath,uploadsPath:uploads,backupRoot:join(backupRoot,'registry')});
+  const writes=[];
+  const client={async putFile(arg){writes.push(arg.key);}};
+  await assert.rejects(()=>mirrorVerifiedTenantBackups({
+    records:[{backupDir:archive.backupDir,created:true,verified:true}],backupRoot,client
+  }),/link simbólico|symlink/i);
+  assert.ok(!writes.includes('registry/out-of-root.txt'));
 });
