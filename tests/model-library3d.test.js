@@ -121,3 +121,11 @@ test('interface tem o Top 20, carregamento de GLB real, OrbitControls e decodifi
   assert.match(sw,/model-viewer\.js/);
   assert.doesNotMatch(index,/https:\/\/(?:cdn|unpkg|jsdelivr)/i);
 });
+
+// Os GLBs usam EXT_meshopt_compression (WebAssembly). Uma política CSP de
+// script-src 'self' sem wasm-unsafe-eval bloqueia o decoder no Chromium.
+test('Política CSP mantém scripts locais e permite apenas WebAssembly Meshopt',async()=>{
+  const session=await readFile(new URL('../src/platform/session-http.js',import.meta.url),'utf8');
+  assert.match(session,/script-src 'self' 'wasm-unsafe-eval'/);
+  assert.doesNotMatch(session,/script-src[^;]+unsafe-eval(?!')/);
+});
