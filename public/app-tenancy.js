@@ -15,6 +15,7 @@ async function openTenantAdmin(){
       ${context.platformAdmin?'<button type="button" class="btn" id="createTenantCompany">+ Empresa</button>':''}
       ${managed.length?'<button type="button" class="btn" id="createTenantUnit">+ Unidade</button>':''}
       ${managed.length?'<button type="button" class="btn" id="addTenantMember">+ Vincular usuário</button>':''}
+      ${managed.length?'<button type="button" class="btn" id="editTenantMember">Alterar acessos</button>':''}
     </div>
     <div class="list">${units.map(u=>'<div class="list-item"><div><strong>'+esc(u.companyName)+' / '+esc(u.name)+'</strong><br><small>'+esc(u.code)+' · '+esc(u.role)+'</small></div></div>').join('')}</div>
   </div>`);
@@ -37,6 +38,32 @@ async function openTenantAdmin(){
     await api('/api/tenancy/units',{method:'POST',body:formObj(fd)});
     toast('Unidade cadastrada');location.reload();
   });
+  const edit=$('#editTenantMember');
+  if(edit)edit.onclick=async()=>{
+    showModal('Alterar acesso de colaborador',`<form class="form-stack">
+      <label>Unidade<select name="unitId" id="membershipUnit">${unitOptions}</select></label>
+      <label>Colaborador<select name="userId" id="membershipUser" required></select></label>
+      <label>Papel<select name="role"><option>ATENDIMENTO</option><option>TECNICO</option><option>FINANCEIRO</option><option>ADMIN</option></select></label>
+      <label>Status<select name="active"><option value="true">Ativo</option><option value="false">Revogar acesso</option></select></label>
+      <button class="btn primary" type="submit">Atualizar vínculo</button>
+    </form>`,async fd=>{
+      const data=formObj(fd);
+      await api('/api/tenancy/memberships',{method:'PATCH',body:{unitId:Number(data.unitId),userId:Number(data.userId),role:data.role,active:data.active==='true'}});
+      toast('Acesso atualizado');location.reload();
+    });
+    const unitPicker=$('#membershipUnit'),userPicker=$('#membershipUser');
+    const load=async()=>{
+      const members=await api('/api/tenancy/memberships?unitId='+encodeURIComponent(unitPicker.value));
+      userPicker.replaceChildren();
+      for(const member of members){
+        const option=document.createElement('option');option.value=String(member.id);
+        option.textContent=member.name+' — '+member.role+(member.membershipActive?'':' (revogado)');
+        userPicker.append(option);
+      }
+    };
+    unitPicker.onchange=()=>void load().catch(error=>toast(error.message,true));
+    await load();
+  };
   const invite=$('#addTenantMember');
   if(invite)invite.onclick=()=>showModal('Vincular usuário à unidade',`<form class="form-stack">
     <label>Unidade<select name="unitId">${unitOptions}</select></label>
