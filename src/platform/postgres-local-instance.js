@@ -90,11 +90,14 @@ export function createPortablePostgresController({
        fail('Porta PostgreSQL ocupada por outro servidor; inicialização bloqueada');
    });
  }
- async function provisionDatabases(config){
+ async function provisionDatabases(config,{fresh=false}={}){
    await dbQuery(connectionUrl(config.port,config.password,'postgres'),async pool=>{
      for(const db of [REGISTRY,OPERATIONS]){
        const found=await pool.query('SELECT 1 FROM pg_database WHERE datname=$1',[db]);
-       if(found.rows.length===0)await pool.query('CREATE DATABASE "'+db+'"');
+       if(found.rows.length===0){
+         if(!fresh)fail('Banco PostgreSQL desapareceu: restauração obrigatória, sem recriação silenciosa');
+         await pool.query('CREATE DATABASE "'+db+'"');
+       }
      }
    });
  }
@@ -157,8 +160,9 @@ export function createPortablePostgresController({
        owned=true;
      }
      await verifyRunning(config);
-     await provisionDatabases(config);
+     await provisionDatabases(config,{fresh:!hasConfig});
      activeConfig=Object.freeze({
+       newInstall:!hasConfig,
        port:config.port,
        registryUrl:connectionUrl(config.port,config.password,REGISTRY),
        operationsUrl:connectionUrl(config.port,config.password,OPERATIONS)
