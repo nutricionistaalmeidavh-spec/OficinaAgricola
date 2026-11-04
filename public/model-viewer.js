@@ -130,6 +130,19 @@ export async function mountViewer({id,variant='original',element,statusElement})
     });
     mutationObserver.observe(document.querySelector('#modal')||document.body,{attributes:true,subtree:true,childList:true});
     loop();
+    // Captura pontual de um frame GLB (útil para QA), sem pedir ao
+    // Chromium um screenshot full-page durante a animação WebGL.
+    // Render + toDataURL na mesma tarefa evita buffer esvaziado.
+    active.snapshot=()=>{
+      if(disposed||!gltf||!renderer.domElement.isConnected)
+        throw new Error('Visualização 3D não está ativa');
+      controls.update();
+      renderer.render(scene,camera);
+      const data=renderer.domElement.toDataURL('image/png');
+      if(!data.startsWith('data:image/png;base64,'))
+        throw new Error('Falha ao capturar frame do modelo 3D');
+      return data;
+    };
     if(statusElement)statusElement.textContent='Arraste para girar · Pince para ampliar · Visualização experimental';
     return {
       dispose:cleanup,
@@ -148,6 +161,11 @@ export async function mountViewer({id,variant='original',element,statusElement})
       }
     };
   }catch(error){cleanup();throw error}
+}
+
+export function snapshotViewer(){
+  if(!active?.snapshot)throw new Error('Modelo 3D não carregado para captura');
+  return active.snapshot();
 }
 
 export function closeViewer(){active?.dispose()}
