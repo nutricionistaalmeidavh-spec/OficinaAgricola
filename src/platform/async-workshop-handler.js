@@ -1,3 +1,4 @@
+import {requiredNativeRoles,serviceOnlyNativeRoute} from './async-workshop-policy.js';
 // Private service-to-service HTTP boundary for native async D1/PG operations.
 // No arbitrary SQL endpoint, browser CORS allowance or client-side secrets.
 const headers={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store',
@@ -36,6 +37,18 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
    // operational query; prevents a wrongly mapped company from reading data.
    if(preflight&&path!=='/v1/migrate'&&path!=='/v1/health')
      await preflight();
+   // Service authentication does not authorize individual employees.
+   // Reject every operational call without a tenant-specific user session.
+   if(!serviceOnlyNativeRoute(path)){
+     const personalToken=request.headers.get('x-oficina-session')||'';
+     if(personalToken.length<32)
+       throw Object.assign(new Error('Sessão do usuário obrigatória'),{status:401});
+     if(typeof services.validateSession!=='function')
+       throw Error('Autenticação nativa não configurada');
+     const actor=await services.validateSession(personalToken);
+     if(!requiredNativeRoles(method,path).includes(actor?.role))
+       throw Object.assign(new Error('Permissão insuficiente na unidade'),{status:403});
+   }
    if(path==='/v1/health'&&method==='GET')
      return json({ok:true,backend:'async-workshop'});
    if(path==='/v1/migrate'&&method==='POST'&&migrate)
