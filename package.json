@@ -21,6 +21,7 @@
     "db:benchmark": "node scripts/benchmark-db.mjs",
     "db:health": "node scripts/db-health.mjs",
     "start:multi": "node src/start-multitenant.js",
-    "dev:multi": "node --watch src/start-multitenant.js"
+    "dev:multi": "node --watch src/start-multitenant.js",
+    "start:postgres-core": "node src/start-postgres-core.js"
   }
 }
