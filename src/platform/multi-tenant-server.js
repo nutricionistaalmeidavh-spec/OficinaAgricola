@@ -210,6 +210,14 @@ export function createMultiTenantServer({
       const body=await readJson(req);
       return json(res,200,sharePartCatalog({...body,registryDb,unitRuntime,actorUserId:user.id}));
     }
+    if(path==='/api/tenancy/transferable-orders'&&method==='GET'){
+      const unit=requireUnitMembership(registryDb,user.id,positive(url.searchParams.get('unitId')));
+      if(unit.role!=='ADMIN')throw httpError('Administração da unidade é necessária',403);
+      const records=unitRuntime(unit.id).db.prepare(`SELECT id,os_number,problem_reported,status
+        FROM work_orders WHERE status IN ('ENTRADA','DIAGNOSTICO')
+        ORDER BY id DESC LIMIT 100`).all();
+      return json(res,200,{orders:records,limit:100});
+    }
     if(path==='/api/tenancy/os-transfer'&&method==='POST'){
       const body=await readJson(req);
       return json(res,200,transferTenantWorkOrder({...body,registryDb,unitRuntime,actorUserId:user.id}));
