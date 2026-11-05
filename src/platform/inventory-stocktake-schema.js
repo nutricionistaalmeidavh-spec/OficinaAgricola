@@ -18,13 +18,22 @@ const ddl=[
   movement_id INTEGER UNIQUE REFERENCES inventory_movements(id),
   UNIQUE(stocktake_id,part_id)
  )~,
+ ~CREATE TABLE IF NOT EXISTS stocktake_count_events(
+  id INTEGER PRIMARY KEY,
+  stocktake_line_id INTEGER NOT NULL REFERENCES stocktake_lines(id),
+  previous_quantity REAL,
+  counted_quantity REAL NOT NULL CHECK(counted_quantity>=0),
+  created_by INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL
+ )~,
+ ~CREATE INDEX IF NOT EXISTS idx_stocktake_count_events ON stocktake_count_events(stocktake_line_id,created_at)~,
  ~CREATE INDEX IF NOT EXISTS idx_stocktake_lines_stocktake ON stocktake_lines(stocktake_id,part_id)~
 ].map(s=>s.replaceAll('~',''));
 const VERSION='2026-11-05-stocktake-barcode-v1';
 export function stocktakeSchema(engine){
  if(!['sqlite','postgres'].includes(engine))throw Error('Inventário físico exige PostgreSQL ou SQLite de teste');
  return ddl.map(sql=>engine==='postgres'?sql
-   .replace(/\b(id|stocktake_id|part_id|created_by|applied_by|movement_id) INTEGER\b/g,'$1 BIGINT')
+   .replace(/\b(id|stocktake_id|stocktake_line_id|part_id|created_by|applied_by|movement_id) INTEGER\b/g,'$1 BIGINT')
    .replace(/\bREAL\b/g,'DOUBLE PRECISION'):sql);
 }
 export async function migrateStocktakeBarcode(port){
