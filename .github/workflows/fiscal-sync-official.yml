@@ -10,7 +10,7 @@ permissions:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 9
     steps:
       - name: Checkout fiscal draft branch
         uses: actions/checkout@v4
