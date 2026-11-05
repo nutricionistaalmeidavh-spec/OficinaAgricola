@@ -1,5 +1,6 @@
 import {createHash,randomUUID,randomBytes} from 'node:crypto';
 import {assertFiscalIssuerUf} from './fiscal-uf.js';
+import {issuerEvidenceDigest,buildFiscalReleaseStatus,createFiscalEvidence} from './fiscal-release-gate.js';
 import {assertNfseRouteForTransmission,resolveNfseRoute} from './nfse-routing.js';
 
 const validStates=new Set(['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']);
@@ -59,16 +60,28 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
    ]);
    return getFiscalSettings();
  }
+ // O mesmo gate atende à tela e ao backend, sem flags fictícias.
+ async function fiscalReadiness(settings){
+   const certificate=typeof provider?.certificateStatus==='function'
+     ?provider.certificateStatus():{configured:false};
+   const certificateIdentity=provider?.certificateIdentity?.()||null;
+   const providerName=clean(provider?.name);
+   const providerReady=Boolean(provider&&typeof provider.transmit==='function');
+   const proofs=port.engine!=='sqlite'&&certificateIdentity&&providerName==='acbrlib-local'
+     ?await port.all(`SELECT e.document_id,e.kind,e.issuer_digest,e.certificate_digest,
+       e.xml_digest,e.provider_name,d.status,d.environment,d.authorized_xml,
+       d.access_key,d.protocol FROM fiscal_homologation_evidence e
+       JOIN fiscal_documents d ON d.id=e.document_id
+       WHERE d.status='AUTORIZADA_HOMOLOGACAO'
+         AND e.issuer_digest=? AND e.certificate_digest=?`,
+       [issuerEvidenceDigest(settings),certificateIdentity]):[];
+   const release=buildFiscalReleaseStatus({settings,certificate,certificateIdentity,
+     providerName,providerReady,proofs});
+   return {...release,environment:settings.environment,
+     issuerCnpj:settings.issuer_cnpj||'',certificate,providerReady};
+ }
  async function getFiscalOnboardingStatus(){
-   const settings=await getFiscalSettings();
-   return {environment:settings.environment,
-     companyConfigured:Boolean(settings.enabled),
-     issuerCnpj:settings.issuer_cnpj||'',
-     certificate:typeof provider?.certificateStatus==='function'
-       ?provider.certificateStatus():{configured:false},
-     providerReady:Boolean(provider&&typeof provider.transmit==='function'),
-     authorizationVerified:false,
-     taxProfileVerified:false};
+   return fiscalReadiness(await getFiscalSettings());
  }
  async function installFiscalCertificate(input={}){
    const settings=await getFiscalSettings();
@@ -280,18 +293,27 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
    const update={sql:`UPDATE fiscal_documents SET ${fields}
      WHERE id=? AND status='INDETERMINADO' AND attempt_id=?`,
      params:[...params,id(documentId),attemptId]};
+   const proof=eventType==='AUTORIZADA_HOMOLOGACAO'&&port.engine!=='sqlite'
+     ?createFiscalEvidence({document:doc,result,providerName,
+       certificateIdentity:provider?.certificateIdentity?.()}):null;
+   const evidence=proof?{sql:`INSERT INTO fiscal_homologation_evidence(
+     document_id,kind,issuer_digest,certificate_digest,xml_digest,provider_name,created_at
+     ) VALUES(?,?,?,?,?,?,?) ON CONFLICT(document_id) DO NOTHING`,
+     params:[proof.document_id,proof.kind,proof.issuer_digest,
+       proof.certificate_digest,proof.xml_digest,proof.provider_name,now()]}:null;
    const evt={sql:`INSERT INTO fiscal_events(id,document_id,event_type,details_json,created_at)
      VALUES(?,?,?,?,?)`,params:[nextId(),id(documentId),eventType,JSON.stringify(eventDetails),now()]};
    if(port.engine==='d1'){
      const res=await port.batch([update,{
        sql:evt.sql.replace('VALUES(?,?,?,?,?)',
          'SELECT ?,?,?,?,? WHERE changes()=1'),params:evt.params
-     }]);
+     },...(evidence?[evidence]:[])]);
      if(changed(res[0])!==1)fail('Tentativa fiscal já processada',409);
    }else await port.transaction(async tx=>{
      const res=await tx.run(update.sql,update.params);
      if(changed(res)!==1)fail('Tentativa fiscal já processada',409);
      await tx.run(evt.sql,evt.params);
+     if(evidence)await tx.run(evidence.sql,evidence.params);
    });
    return getFiscalDocument(documentId);
  }
@@ -312,7 +334,14 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
    if(doc.status!=='RASCUNHO')fail('Documento fiscal não permite nova transmissão',409);
    if(!provider||typeof provider.transmit!=='function')
      fail('Emissor fiscal não configurado; nenhuma nota enviada',503);
-   const issuer=assertReady(await getFiscalSettings(),doc);
+   const settings=await getFiscalSettings();
+   const issuer=assertReady(settings,doc);
+   if(settings.environment==='PRODUCAO'){
+     const gate=await fiscalReadiness(settings);
+     if(!gate.models[doc.kind]?.productionReady)
+       fail('Emissão em produção não liberada para '+doc.kind+': '+
+         (gate.models[doc.kind]?.reason||'homologação não verificada'),409);
+   }
    // O canal NFS-e deve ser declarado pelo emissor local antes da tentativa;
    // falha de pré-validação mantém o rascunho intacto, sem transmissão.
    assertNfseRouteForTransmission(doc,issuer,provider);
