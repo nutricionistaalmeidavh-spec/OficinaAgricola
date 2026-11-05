@@ -130,11 +130,10 @@ try{
   assert.equal(Number(afterPurchase.part.quantity),10);
   assert.equal(afterPurchase.orders[0].status,'PARCIAL');
   await screenshot('10-estoque-compra-confirmada');
-  await page.locator('#inventoryBarcodeSearch').fill('5901234123457');
-  await page.locator('#inventoryBarcodeSearch').press('Enter');
-  await page.locator('#stockMoveType').waitFor({state:'visible'});
+  await page.locator('#content [data-barcode-panel] [data-barcode-input]').fill('5901234123457');
+  await page.locator('#content [data-barcode-panel] [data-barcode-input]').press('Enter');
+  await page.locator('#content [data-barcode-panel] [data-barcode-status]').filter({hasText:'PG-UI-FILTRO'}).waitFor({state:'visible'});
   await screenshot('11-leitor-usb-ean-consulta');
-  await page.locator('#modalClose').click();
   await page.locator('#stocktakeOpen').click();
   await page.locator('#startStocktakePage').click();
   await page.locator('[data-stocktake-count]').first().waitFor({state:'visible'});
