@@ -164,6 +164,7 @@ async function actionReload(path,body,id){
   try{
     await api(path,{method:'POST',body:{...body,requestId}});
     actionCommandIds.delete(key);
+    if(state.modalToken===token&&modalSession)modalSession.busy=false;
     toast('Operação confirmada. OS atualizada.');await openWorkOrder(id);
   }catch(error){toast(error.message,true);}
   finally{

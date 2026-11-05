@@ -157,3 +157,12 @@ test('busca global distingue ausência de resultados de indisponibilidade',async
   await assert.rejects(ctx.runGlobalSearch('outro'),/Consulta indisponível/);
   assert.equal(views.length,1,'falha não pode virar uma nova tela de resultado vazio');
 });
+
+test('aprovação e estorno liberam a OS após reconciliar o mesmo modal',async()=>{
+  const ctx=vm.createContext({state:{modalToken:1},modalSession:{dirty:false,busy:false},
+    $:()=>({}),$$:()=>[],newCommandId:()=> 'qa-action',api:async()=>({}),toast(){}});
+  vm.runInContext(readFileSync('public/app-orders.js','utf8'),ctx);
+  ctx.openWorkOrder=async()=>{ctx.state.modalToken++;};
+  await ctx.actionReload('/api/work-orders/9/quote/approve',{},9);
+  assert.equal(ctx.modalSession.busy,false,'ação seguinte na mesma OS deve continuar disponível');
+});
