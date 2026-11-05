@@ -98,7 +98,9 @@
       report('Pesquisando '+code+'…','pending');
       try{
         const result=await onScan(code,{source});
-        report(typeof result==='string'&&result?result:'Código '+code+' capturado.','success');
+        const message=typeof result==='string'?result:result?.message;
+        const status=typeof result==='object'&&['success','warning','error'].includes(result?.state)?result.state:'success';
+        report(message||'Código '+code+' capturado.',status);
         input.value='';
       }catch(error){
         report('Não foi possível consultar '+code+': '+(error?.message||'tente novamente')+'.','error');
