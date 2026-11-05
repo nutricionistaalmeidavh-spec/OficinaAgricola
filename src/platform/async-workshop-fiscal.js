@@ -1,6 +1,6 @@
 import {createHash,randomUUID,randomBytes} from 'node:crypto';
 import {assertFiscalIssuerUf} from './fiscal-uf.js';
-import {buildFiscalReleaseStatus,createFiscalEvidence} from './fiscal-release-gate.js';
+import {issuerEvidenceDigest,buildFiscalReleaseStatus,createFiscalEvidence} from './fiscal-release-gate.js';
 import {assertNfseRouteForTransmission,resolveNfseRoute} from './nfse-routing.js';
 
 const validStates=new Set(['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']);
@@ -71,7 +71,9 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
        e.xml_digest,e.provider_name,d.status,d.environment,d.authorized_xml,
        d.access_key,d.protocol FROM fiscal_homologation_evidence e
        JOIN fiscal_documents d ON d.id=e.document_id
-       WHERE d.status='AUTORIZADA_HOMOLOGACAO'`):[];
+       WHERE d.status='AUTORIZADA_HOMOLOGACAO'
+         AND e.issuer_digest=? AND e.certificate_digest=?`,
+       [issuerEvidenceDigest(settings),certificateIdentity]):[];
    const release=buildFiscalReleaseStatus({settings,certificate,certificateIdentity,
      providerName,providerReady,proofs});
    return {...release,environment:settings.environment,
