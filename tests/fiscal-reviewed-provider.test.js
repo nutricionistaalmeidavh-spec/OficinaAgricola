@@ -22,10 +22,10 @@ test('fiscal tax review builds real ACBr INI from guided data and frozen commerc
   const document={id:12,kind:'NFE',status:'RASCUNHO',amount_cents:9000,
     snapshot_json,snapshot_hash:createHash('sha256').update(snapshot_json).digest('hex'),
     environment:'HOMOLOGACAO'};
-  const issuer={cnpj:'11222333000181',uf:'SP',environment:'HOMOLOGACAO'};
+  const issuer={cnpj:'11222333000181',uf:'SP',municipalityIbge:'3550308',environment:'HOMOLOGACAO'};
   const sections={
     infNFe:{versao:'4.00'},
-    Identificacao:{mod:'55',serie:'1',nNF:'12',tpAmb:'2',natOp:'Venda'},
+    Identificacao:{mod:'55',cUF:'35',cMunFG:'3550308',serie:'1',nNF:'12',tpAmb:'2',natOp:'Venda'},
     Emitente:{CNPJCPF:issuer.cnpj,IE:'123',xNome:'Oficina QA'},
     Destinatario:{CNPJCPF:'11222333000181',xNome:'Cliente'},
     Produto001:{NCM:'84212300',CFOP:'5102',uCom:'UN',vProd:'0.01'},
