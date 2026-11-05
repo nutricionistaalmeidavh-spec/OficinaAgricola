@@ -202,6 +202,8 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
    const approve=path.match(/^\/v1\/orders\/([1-9]\d*)\/quote\/approve$/);
    if(approve&&method==='POST')
      return json(await services.approveQuote({workOrderId:Number(approve[1])}));
+   if(path==='/v1/fiscal/nfse/route'&&method==='POST')
+     return json(await services.getNfseRoute(await dataFrom(request)));
    if(path==='/v1/fiscal/drafts'&&method==='POST')
      return json(await services.createFiscalDraft(await dataFrom(request)),201);
 
