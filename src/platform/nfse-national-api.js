@@ -152,7 +152,8 @@ export function createNationalNfseClient({certificateStore,transport=nativeTrans
   const r=await call(issuer,'POST','/nfse/'+key+'/eventos',{
    pedidoRegistroEventoXmlGZipB64:gzipSync(signedEventXml).toString('base64')});
   // A resposta HTTP isolada não comprova o cancelamento fiscal.
-  return {status:'EVENTO_RECEBIDO_PENDENTE_CONFIRMACAO',httpStatus:r.status};
+  return {status:r.status===201?'EVENTO_RECEBIDO_PENDENTE_CONFIRMACAO':'INDETERMINADO',
+    httpStatus:r.status};
  }
  return Object.freeze({issue,queryNfse,reconcile,registerEvent});
 }
