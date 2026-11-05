@@ -143,20 +143,20 @@ export function createAcbrLibFiscalProvider(opts={}){
   return {
     name:'acbrlib-local',
     saveTaxReview:({document,issuer,sections}={})=>{
-      if(!document||document.kind!=='NFE'||document.status!=='RASCUNHO')
-        throw new Error('Revisão tributária permitida apenas para rascunho NF-e');
+      if(!document||!['NFE','NFCE'].includes(document.kind)||document.status!=='RASCUNHO')
+        throw new Error('Revisão tributária permitida apenas para rascunho NF-e/NFC-e');
       if(!sections||typeof sections!=='object'||Array.isArray(sections)||
          !sections.Identificacao||typeof sections.Identificacao!=='object')
         throw new Error('Identificação tributária NF-e inválida');
       const scopedSections=structuredClone(sections);
       if(!scopedSections.Identificacao.cNF)
         scopedSections.Identificacao.cNF=String(randomInt(0,100000000)).padStart(8,'0');
-      const review={kind:'NFE',documentId:Number(document.id),
+      const review={kind:document.kind,documentId:Number(document.id),
         snapshotHash:document.snapshot_hash,amountCents:Number(document.amount_cents),
         issuerCnpj:issuer?.cnpj,environment:issuer?.environment,sections:scopedSections};
       // Validação detalhada antes de persistir. Nenhum XML é assinado ou enviado aqui.
       compileReviewedFiscalIni({document,issuer,review});
-      const filename='NFE-'+document.id+'-'+document.snapshot_hash;
+      const filename=document.kind+'-'+document.id+'-'+document.snapshot_hash;
       const target=join(inputDir,filename+'.review.json');
       if(existsSync(join(inputDir,filename+'.ini'))||
          existsSync(join(inputDir,filename+'.json')))
