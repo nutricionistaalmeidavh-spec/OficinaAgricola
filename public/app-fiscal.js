@@ -26,8 +26,12 @@ async function renderFiscal({cursor=null,loaded=[]}={}){
     const pdf=isAuthorized?'<button class="btn sm soft" data-fiscal-pdf="'+d.id+'">DANFE/PDF</button>':'';
     const cancel=isAuthorized&&state.user.role==='ADMIN'
       ?'<button class="btn sm soft" data-fiscal-cancel="'+d.id+'">Cancelar nota</button>':'';
+    const nfse=fiscalSnapshot(d).nfseRoute;
+    const routeText=d.kind==='NFSE'?(nfse?.channel&&nfse?.competenceDate?
+      '<br><small>Competência '+esc(nfse.competenceDate)+' · '+esc(nfse.channel==='NACIONAL'?'Emissor Nacional':'Emissor Municipal')+'</small>':
+      '<br><small>NFS-e antiga: rota e competência precisam de revisão antes de emitir</small>'):'';
     return '<div class="list-item"><div><strong>'+esc(fiscalDisplayTitle(d))+'</strong> · '+esc(fiscalOriginTitle(d))+
-      '<br><small>'+esc(d.status)+' · '+money(d.amount_cents)+'</small></div><div class="action-row">'+
+      '<br><small>'+esc(d.status)+' · '+money(d.amount_cents)+'</small>'+routeText+'</div><div class="action-row'+'+'>'+
       '<button class="btn sm soft" data-fiscal-details="'+d.id+'">Histórico</button>'+pdf+cancel+actions+'</div></div>';
   }).join('');
   setContent('<div class="section-head fiscal-head"><div><h2>Documentos fiscais</h2>'+
@@ -110,7 +114,9 @@ function fiscalDraftModal(){
     '<div id="fiscalOriginOptions" class="fiscal-origin-options" role="group" aria-label="Resultados da busca"></div>'+
     '<input type="hidden" name="originId" id="fiscalOriginId">'+
     '<div id="fiscalOriginSelection" class="fiscal-origin-selection" role="status" aria-live="polite">Nenhuma operação selecionada.</div>'+
-    '<label>Documento<select id="fiscalKind" name="kind"><option value="NFE">NF-e — peças</option><option value="NFCE">NFC-e — venda ao consumidor</option><option value="NFSE">NFS-e — mão de obra</option></select></label>'+
+    '<label>Documento<select id="fiscalKind" name="kind"><option value="NFE">NF-e — peças</option><option value="NFCE">NFC-e — venda ao consumidor</option><option value="NFSE">NFS-e — mão de obra</option></select></label>'+ 
+    '<div id="fiscalNfseCompetence" hidden><label>Data de competência do serviço<input type="date" id="fiscalCompetenceDate" name="competenceDate"></label>'+
+    '<p id="fiscalNfseRoute" class="muted" role="status" aria-live="polite">Informe a competência para verificar o emissor obrigatório.</p></div>'+
     '<div class="fiscal-draft-preview"><strong>Prévia do documento</strong><p id="fiscalDraftPreview" class="muted">Selecione uma operação para conferir a origem. Os itens e valores fiscais serão validados pelo servidor.</p></div>'+
     '<button id="fiscalDraftSubmit" class="btn primary" type="submit" disabled>Criar rascunho</button></form>',
     async form=>{
@@ -118,7 +124,8 @@ function fiscalDraftModal(){
       const originId=Number(values.originId);
       if(!Number.isSafeInteger(originId)||originId<1)throw new Error('Selecione uma OS ou venda na lista.');
       const doc=await api('/api/fiscal/drafts',{method:'POST',body:{
-        originType:values.originType,originId,kind:values.kind,requestId
+        originType:values.originType,originId,kind:values.kind,
+        ...(values.kind==='NFSE'?{competenceDate:values.competenceDate}:{}),requestId
       }});
       if(!doc||doc.id==null)throw new Error('Criação do rascunho ainda não confirmada.');
       toast('Rascunho fiscal salvo. A nota ainda não foi autorizada.');
@@ -127,7 +134,28 @@ function fiscalDraftModal(){
   const type=$('#fiscalOriginType'),search=$('#fiscalOriginSearch'),options=$('#fiscalOriginOptions');
   const selected=$('#fiscalOriginSelection'),hidden=$('#fiscalOriginId'),submit=$('#fiscalDraftSubmit');
   const preview=$('#fiscalDraftPreview'),kind=$('#fiscalKind');
-  let sequence=0,timer=null,origin=null;
+  const competence=$('#fiscalCompetenceDate'),routeText=$('#fiscalNfseRoute'),competenceGroup=$('#fiscalNfseCompetence');
+  let sequence=0,timer=null,origin=null,nfseSequence=0,nfseRoute=null;
+  const updateSubmit=()=>{submit.disabled=!origin||(kind.value==='NFSE'&&!nfseRoute)};
+  const updateNfseRoute=async()=>{
+    const ticket=++nfseSequence;
+    competenceGroup.hidden=kind.value!=='NFSE';
+    competenceGroup.style.display=kind.value==='NFSE'?'':'none';
+    nfseRoute=null;updateSubmit();
+    if(kind.value!=='NFSE')return;
+    if(!competence.value){routeText.textContent='Informe a competência do serviço para definir o canal fiscal.';return}
+    routeText.textContent='Verificando o emissor conforme competência, município e regime…';
+    try{
+      const route=await api('/api/fiscal/nfse/route',{method:'POST',body:{competenceDate:competence.value}});
+      if(ticket!==nfseSequence||!routeText.isConnected)return;
+      nfseRoute=route.channel==='PENDENTE'?null:route.channel;
+      routeText.textContent=(nfseRoute?'Canal definido: '+(nfseRoute==='NACIONAL'?'Emissor Nacional':'Emissor Municipal')+'. ':'Emissão ainda não preparada. ')+route.reason;
+    }catch(error){
+      if(ticket!==nfseSequence||!routeText.isConnected)return;
+      routeText.textContent='Não foi possível definir o emissor: '+friendlyUiMessage(error.message);
+    }
+    updateSubmit();
+  };
 
   const updatePreview=()=>{
     if(!origin){preview.textContent='Selecione uma operação para conferir a origem. Os itens e valores fiscais serão validados pelo servidor.';return}
@@ -162,8 +190,8 @@ function fiscalDraftModal(){
       if(!item)return;
       origin=item;hidden.value=String(item.id);
       selected.textContent='Selecionado: '+item.label+' · '+item.detail;
-      submit.disabled=false;
-      $$('[data-fiscal-origin]',options).forEach(b=>b.setAttribute('aria-pressed',String(b===button)));
+      updateSubmit();
+      $('[data-fiscal-origin]',options).forEach(b=>b.setAttribute('aria-pressed',String(b===button)));
       updatePreview();
     });
   };
@@ -172,7 +200,9 @@ function fiscalDraftModal(){
   }});
   type.onchange=()=>{search.value='';++sequence;clearTimeout(timer);clearSelection();findSafe()};
   search.oninput=()=>{++sequence;clearTimeout(timer);clearSelection();timer=setTimeout(findSafe,220)};
-  kind.onchange=updatePreview;
+  kind.onchange=()=>{updatePreview();void updateNfseRoute()};
+  competence.onchange=()=>{void updateNfseRoute()};
+  void updateNfseRoute();
   void findSafe();
 }
 
