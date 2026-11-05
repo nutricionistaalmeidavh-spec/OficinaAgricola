@@ -20,7 +20,7 @@ export function issuerEvidenceDigest(settings={}){
   return digest(JSON.stringify(identity));
 }
 
-function officialNfeXml({xml,accessKey,protocol,cnpj}){
+function officialNfeXml({xml,accessKey,protocol,cnpj,kind}){
   const text=clean(xml);
   // Os workers ACBr também conferem modelo, protocolo, emitente e ambiente.
   // Esta checagem é uma defesa adicional para não persistir prova de XML parcial.
@@ -29,6 +29,9 @@ function officialNfeXml({xml,accessKey,protocol,cnpj}){
      !/<(?:[A-Za-z_][\w.-]*:)?cStat>100<\//.test(text)||
      !/<(?:[A-Za-z_][\w.-]*:)?tpAmb>2<\//.test(text)||
      !/^[0-9]{44}$/.test(accessKey)||!/^\d{5,20}$/.test(protocol)||
+     accessKey.slice(6,20)!==cnpj||
+     !['55','65'].includes(accessKey.slice(20,22))||
+     (kind&&accessKey.slice(20,22)!==(kind==='NFCE'?'65':'55'))||
      !text.includes(accessKey)||!text.includes(protocol)||
      !new RegExp('<(?:[A-Za-z_][\\w.-]*:)?CNPJ>'+cnpj+'<\\/').test(text))return false;
   return true;
@@ -48,7 +51,7 @@ export function createFiscalEvidence({document,result,providerName,certificateId
   const issuerCnpj=digits(issuer?.cnpj);
   if(!/^\d{14}$/.test(issuerCnpj)||issuer?.environment!=='HOMOLOGACAO'||
      !officialNfeXml({xml:result.xml,accessKey:result.accessKey,
-       protocol:result.protocol,cnpj:issuerCnpj}))return null;
+       protocol:result.protocol,cnpj:issuerCnpj,kind:document.kind}))return null;
   return {
     document_id:Number(document.id),kind:document.kind,
     issuer_digest:issuerEvidenceDigest(issuer),
@@ -75,7 +78,7 @@ export function buildFiscalReleaseStatus({
       row.certificate_digest===certificateIdentity&&
       validDigest(row.xml_digest)&&digest(clean(row.authorized_xml))===row.xml_digest&&
       officialNfeXml({xml:row.authorized_xml,
-        accessKey:row.access_key,protocol:row.protocol,cnpj:digits(settings.issuer_cnpj)})
+        accessKey:row.access_key,protocol:row.protocol,cnpj:digits(settings.issuer_cnpj),kind})
     );
     const homologationVerified=Boolean(proof);
     const external=kind==='NFSE'
