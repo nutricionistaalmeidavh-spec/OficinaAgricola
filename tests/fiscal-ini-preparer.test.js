@@ -85,3 +85,21 @@ test('NFC-e pode omitir destinatário sem divergência de cliente da venda',()=>
  assert.match(result.ini,/\[pag001\]/);
  assert.doesNotMatch(result.ini,/\[Destinatario\]/);
 });
+
+test('totais IBS/CBS são derivados das linhas revisadas e não aceitam totais arbitrários',()=>{
+ const review=reviewed();
+ review.sections.IBSCBS001={CST:'000',cClassTrib:'000001'};
+ review.sections.gIBSCBS001={vBC:'80.00',vIBS:'0.08'};
+ review.sections.gIBSUF001={pIBSUF:'0.10',vIBSUF:'0.08'};
+ review.sections.gIBSMun001={pIBSMun:'0.00',vIBSMun:'0.00'};
+ review.sections.gCBS001={pCBS:'0.90',vCBS:'0.72'};
+ // Catálogo de teste: não é uma tabela oficial de produção.
+ const catalog={tables:{
+  ncm:['84212300'],cfop:['5102'],
+  ibscbs:[{cst:'000',cClassTrib:'000001',regime:'REGULAR',reduction:false,deferral:false}]
+ }};
+ const {ini}=compileReviewedFiscalIni({document,issuer,review,catalog});
+ assert.match(ini,/\[IBSCBSTot\]\nvBCIBSCBS=80\.00/);
+ assert.match(ini,/\[gIBSUFTot\]\nvIBSUF=0\.08/);
+ assert.match(ini,/\[gCBSTot\]\nvCBS=0\.72/);
+});
