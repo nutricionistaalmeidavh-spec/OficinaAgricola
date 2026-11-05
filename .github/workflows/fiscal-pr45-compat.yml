@@ -37,7 +37,8 @@ jobs:
           # A main já tem uma linha antiga com espaço final no modal fiscal.
           # Normalização sem mudança semântica antes do gate de whitespace.
           sed -i 's/[[:blank:]]*$//' public/app-fiscal.js
-          git add public/app-fiscal.js
+          python3 scripts/compat-fiscal-main.py
+          git add public/app-fiscal.js src/platform/fiscal-tax-review.js
           git diff --cached --check
           for file in src/platform/fiscal-data/catalog.json src/platform/fiscal-official-catalog.js src/platform/fiscal-tax-assist.js src/platform/fiscal-nfse-preparer.js scripts/assert-fiscal-data-bundle.mjs scripts/sync-official-fiscal-catalog.py; do
             test -s "$file" || { echo "Missing fiscal integration file $file"; exit 1; }
@@ -65,6 +66,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Não deixar o workflow one-shot e o script de reconciliação no produto final.
+          git rm .github/workflows/fiscal-pr45-compat.yml scripts/compat-fiscal-main.py
           git commit -m "merge: compatibilizar fiscal PR45 com main após regressão"
           git push origin HEAD:feat/fiscal-onboarding-integrado-20261105
           echo "COMPAT_MERGED_BRANCH_SHA=$(git rev-parse HEAD)"
