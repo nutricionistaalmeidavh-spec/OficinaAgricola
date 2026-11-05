@@ -8,3 +8,11 @@ test('fiscal form no longer requires manual feature activation',()=>{
  assert.doesNotMatch(ui,/enabled:o\.enabled==='on'/);
  assert.match(ui,/Cadastro fiscal/);
 });
+
+test('formulário tributário expõe redução e diferimento explícitos sem alíquotas padrão',()=>{
+ const ui=readFileSync(new URL('../public/app-fiscal.js',import.meta.url),'utf8');
+ assert.match(ui,/ibsReduction/);
+ assert.match(ui,/ibsDeferral/);
+ assert.match(ui,/pRedAliq/);
+ assert.match(ui,/pDif/);
+});
