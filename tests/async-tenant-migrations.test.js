@@ -24,7 +24,7 @@ test('native D1 tenant schema migrates canonical operational, financial, stock a
   for(const name of [
    'customers','machines','work_orders','work_order_status_history','quotes','quote_items',
    'parts','inventory_movements','work_order_parts','receipts','payment_events',
-   'expenses','attachments','fiscal_documents','fiscal_events'
+   'expenses','attachments','fiscal_documents','fiscal_events','fiscal_homologation_evidence'
   ])assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name),name);
   const all=await port.all('SELECT version FROM async_schema_migrations');
   assert.equal(all.length,1);
