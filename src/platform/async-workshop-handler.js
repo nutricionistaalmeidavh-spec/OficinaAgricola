@@ -575,6 +575,10 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
      }));
    return json({error:'Rota interna não encontrada'},404);
   }catch(error){
+   // Diagnóstico explícito somente em QA: não expor parâmetros, headers ou corpo.
+   if(typeof process!=='undefined'&&process.env.OFICINA_QA_NATIVE_DEBUG==='1')
+     console.error('[qa-native-error]',request.method,new URL(request.url).pathname,
+       error?.code||'NO_CODE',String(error?.message||'error').slice(0,240));
    const status=[400,401,403,404,409,413,415,422].includes(error?.status)?error.status:500;
    return json({error:status===500?'Falha na operação SQL interna':error.message},status);
   }
