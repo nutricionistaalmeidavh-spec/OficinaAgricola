@@ -1,12 +1,14 @@
 // Evidência fiscal canônica por unidade. Não há autorização gerada por checkbox,
 // ping da SEFAZ ou teste simulado. A prova só nasce do retorno do ACBr local.
 import {createHash} from 'node:crypto';
+import {validNationalNfseReceipt} from './nfse-national-evidence.js';
 
 const digest=value=>createHash('sha256').update(value).digest('hex');
 const clean=value=>String(value??'').trim();
 const digits=value=>clean(value).replace(/\D/g,'');
 const validDigest=value=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);
 const supportedModels=['NFE','NFCE'];
+const allModels=['NFE','NFCE','NFSE'];
 
 export function issuerEvidenceDigest(settings={}){
   const identity={
@@ -40,8 +42,8 @@ function officialNfeXml({xml,accessKey,protocol,cnpj,kind}){
 // Esta função é usada SOMENTE depois de retorno AUTORIZADA do emissor ACBr,
 // validado no worker. Não aceita prova fornecida por uma rota HTTP do cliente.
 export function createFiscalEvidence({document,result,providerName,certificateIdentity}={}){
-  if(providerName!=='acbrlib-local'||!validDigest(certificateIdentity)||
-     !supportedModels.includes(document?.kind)||
+  if(!validDigest(certificateIdentity)||
+     !allModels.includes(document?.kind)||
      document?.environment!=='HOMOLOGACAO'||
      result?.status!=='AUTORIZADA'||result.environment!=='HOMOLOGACAO')
     return null;
@@ -49,9 +51,15 @@ export function createFiscalEvidence({document,result,providerName,certificateId
   try{issuer=JSON.parse(document.issuer_snapshot_json||'null');}
   catch{return null;}
   const issuerCnpj=digits(issuer?.cnpj);
-  if(!/^\d{14}$/.test(issuerCnpj)||issuer?.environment!=='HOMOLOGACAO'||
-     !officialNfeXml({xml:result.xml,accessKey:result.accessKey,
-       protocol:result.protocol,cnpj:issuerCnpj,kind:document.kind}))return null;
+  if(!/^\d{14}$/.test(issuerCnpj)||issuer?.environment!=='HOMOLOGACAO')return null;
+  const official=document.kind==='NFSE'
+    ?providerName==='sefin-nacional-direta'&&validNationalNfseReceipt({
+      xml:result.xml,key:result.accessKey,protocol:result.protocol,
+      cnpj:issuerCnpj,environment:'HOMOLOGACAO'})
+    :providerName==='acbrlib-local'&&officialNfeXml({xml:result.xml,
+      accessKey:result.accessKey,protocol:result.protocol,
+      cnpj:issuerCnpj,kind:document.kind});
+  if(!official)return null;
   return {
     document_id:Number(document.id),kind:document.kind,
     issuer_digest:issuerEvidenceDigest(issuer),
@@ -63,39 +71,46 @@ export function createFiscalEvidence({document,result,providerName,certificateId
 
 export function buildFiscalReleaseStatus({
   settings={},certificate={configured:false},certificateIdentity=null,
-  providerName='',providerReady=false,proofs=[]
+  providerName='',providerNames={},providerReady=false,proofs=[]
 }={}){
   const companyConfigured=Boolean(settings.enabled);
   const certificateReady=certificate?.configured===true&&validDigest(certificateIdentity);
-  const localProvider=providerName==='acbrlib-local'&&providerReady;
+
   const issuerDigest=issuerEvidenceDigest(settings);
   const models={};
-  for(const kind of [...supportedModels,'NFSE']){
-    const proof=kind==='NFSE'?null:(Array.isArray(proofs)?proofs:[]).find(row=>
-      row.kind===kind&&row.provider_name==='acbrlib-local'&&
+  for(const kind of allModels){
+    const expectedProvider=kind==='NFSE'?'sefin-nacional-direta':'acbrlib-local';
+    const selectedProvider=providerNames?.[kind]||providerName;
+    const localProvider=providerReady&&['acbrlib-local','sefin-nacional-direta'].includes(selectedProvider);
+    const proof=(Array.isArray(proofs)?proofs:[]).find(row=>
+      row.kind===kind&&row.provider_name===expectedProvider&&
       row.status==='AUTORIZADA_HOMOLOGACAO'&&row.environment==='HOMOLOGACAO'&&
       row.issuer_digest===issuerDigest&&
       row.certificate_digest===certificateIdentity&&
       validDigest(row.xml_digest)&&typeof row.authorized_xml==='string'&&
       digest(row.authorized_xml)===row.xml_digest&&
-      officialNfeXml({xml:row.authorized_xml,
-        accessKey:row.access_key,protocol:row.protocol,cnpj:digits(settings.issuer_cnpj),kind})
+      (kind==='NFSE'?validNationalNfseReceipt({xml:row.authorized_xml,
+        key:row.access_key,protocol:row.protocol,cnpj:digits(settings.issuer_cnpj),environment:'HOMOLOGACAO'}):
+       officialNfeXml({xml:row.authorized_xml,
+        accessKey:row.access_key,protocol:row.protocol,cnpj:digits(settings.issuer_cnpj),kind}))
     );
     const homologationVerified=Boolean(proof);
-    const external=kind==='NFSE'
-      ?'NFS-e exige prova específica do emissor nacional/municipal'
+    const external=kind==='NFSE'&&selectedProvider!=='sefin-nacional-direta'
+      ?'NFS-e Nacional exige emissor SEFIN direto desta empresa'
       :kind==='NFCE'&&settings.issuer_uf==='SC'
         ?'PAF-NFC-e de SC exige credenciamento e validação específica'
       :kind==='NFCE'&&settings.issuer_uf==='RS'
         ?'NFC-e no RS exige integração comprovada de pagamento eletrônico'
       :null;
-    const productionReady=companyConfigured&&certificateReady&&localProvider&&
+    const authorizedProvider=localProvider&&selectedProvider===expectedProvider&&
+      (kind!=='NFSE'||certificate?.certificateType==='A1');
+    const productionReady=companyConfigured&&certificateReady&&authorizedProvider&&
       homologationVerified&&!external&&settings.environment==='PRODUCAO'&&
       Boolean(settings.production_confirmed);
     const reason=external||
       (!companyConfigured?'Cadastro fiscal incompleto':
       !certificateReady?'Certificado local ainda não validado':
-      !localProvider?'ACBr local indisponível':
+      !authorizedProvider?'Emissor fiscal local ou certificado A1 indisponível':
       !homologationVerified?'Falta autorização real em homologação para '+kind:
       settings.environment!=='PRODUCAO'?'Ambiente de homologação':
       !settings.production_confirmed?'Confirmação administrativa pendente':'Liberado para este modelo');
@@ -107,9 +122,9 @@ export function buildFiscalReleaseStatus({
   }
   return {
     companyConfigured,
-    authorizationVerified:supportedModels.some(k=>models[k].homologationVerified),
-    taxProfileVerified:supportedModels.some(k=>models[k].taxProfileVerified),
-    productionReady:supportedModels.some(k=>models[k].productionReady),
+    authorizationVerified:allModels.some(k=>models[k].homologationVerified),
+    taxProfileVerified:allModels.some(k=>models[k].taxProfileVerified),
+    productionReady:allModels.some(k=>models[k].productionReady),
     models
   };
 }

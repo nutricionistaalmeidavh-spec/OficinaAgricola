@@ -2,6 +2,7 @@
 // O SDK MIT gera o XML/XSD e assina com o A1 local; não decide tributos.
 import {createHash} from 'node:crypto';
 import {buildNationalDpsId} from './nfse-national-api.js';
+import {validateNationalRtc} from './nfse-national-rtc.js';
 
 const fail=m=>{throw Error(m)};
 const str=(v,regex,label,max=255)=>{
@@ -23,7 +24,11 @@ const percentage=(v,label)=>{
 };
 export function prepareNationalDpsInput({document,issuer,profile,customer,issuance}={}){
  if(document?.kind!=='NFSE'||document.status!=='RASCUNHO')fail('Apenas rascunho NFS-e permite gerar DPS');
- if(document.environment!=='HOMOLOGACAO')fail('DPS automática somente em homologação até validação do leiaute 2026 IBS/CBS');
+ if(!['HOMOLOGACAO','PRODUCAO'].includes(document.environment))
+   fail('Ambiente fiscal de DPS inválido');
+ const rtc=issuance?.rtc?validateNationalRtc(issuance.rtc):null;
+ if(document.environment==='PRODUCAO'&&!rtc)
+   fail('Produção nacional exige IBS/CBS conforme NT004 e classificação fiscal informada');
  if(createHash('sha256').update(String(document.snapshot_json)).digest('hex')!==document.snapshot_hash)
    fail('Hash do snapshot fiscal divergente');
  let snapshot;
@@ -38,6 +43,7 @@ export function prepareNationalDpsInput({document,issuer,profile,customer,issuan
    fail('Perfil de serviço não pertence ao município da empresa');
  const nationalCode=digits(profile.nationalServiceCode,6,'Código nacional do serviço');
  const nbsCode=profile.nbsCode?digits(profile.nbsCode,9,'Código NBS'):undefined;
+ if(rtc&&!nbsCode)fail('Código NBS obrigatório ao informar IBS/CBS na NFS-e');
  if(!Array.isArray(snapshot.lines)||!snapshot.lines.length||snapshot.lines.length>100)
    fail('Serviços da OS não encontrados');
  let total=0,description=[];
@@ -84,7 +90,7 @@ export function prepareNationalDpsInput({document,issuer,profile,customer,issuan
    :{pTotTribFed:percentage(issuance?.percentFederal,'Carga tributária federal'),
      pTotTribEst:percentage(issuance?.percentState,'Carga tributária estadual'),
      pTotTribMun:percentage(issuance?.percentMunicipal,'Carga tributária municipal')};
- const payload={ambiente:'restrita',prestador:{
+ const payload={ambiente:document.environment==='PRODUCAO'?'producao':'restrita',prestador:{
    cnpj,cLocEmi:city,serie:series,opSimpNac,regEspTrib,
    ...(issuance?.regApTribSN?{regApTribSN:str(issuance.regApTribSN,/^[123]$/,'Apuração Simples Nacional',1)}:{})
  },servico:{
@@ -99,5 +105,5 @@ export function prepareNationalDpsInput({document,issuer,profile,customer,issuan
  }};
  // O SDK valida estruturalmente os campos do leiaute nacional, sem substituir XSD/homologação.
  const idDps=buildNationalDpsId({municipalityIbge:city,cnpj,series,number});
- return {payload,idDps};
+ return {payload,idDps,rtc};
 }

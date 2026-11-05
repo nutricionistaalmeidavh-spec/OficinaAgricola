@@ -2,6 +2,7 @@
 // Nunca enviar DPS sem assinatura, nunca repetir POST automaticamente.
 import {request as httpsRequest} from 'node:https';
 import {gzipSync,gunzipSync} from 'node:zlib';
+import {nationalCancellationReceipt} from './nfse-national-event-receipt.js';
 
 const URLS=Object.freeze({
  HOMOLOGACAO:'https://sefin.producaorestrita.nfse.gov.br/API/SefinNacional',
@@ -183,6 +184,23 @@ export function createNationalNfseClient({certificateStore,transport=nativeTrans
   return {status:r.status===201?'EVENTO_RECEBIDO_PENDENTE_CONFIRMACAO':'INDETERMINADO',
     httpStatus:r.status};
  }
+ async function queryCancellation({issuer,accessKey:targetKey}={}){
+  const key=accessKey(targetKey);
+  const reply=await call(issuer,'GET','/nfse/'+key+'/eventos/101101/1');
+  if(reply.status!==200||reply.body?.tipoAmbiente!==(issuer.environment==='PRODUCAO'?1:2))
+   return {status:'INDETERMINADO',message:'Cancelamento ainda sem confirmação da SEFIN'};
+  let xml;
+  try{
+   const b64=reply.body.eventoXmlGZipB64;
+   if(typeof b64!=='string'||b64.length>MAX_JSON||!/^[A-Za-z0-9+/]+={0,2}$/.test(b64))
+    throw Error('base64');
+   xml=gunzipSync(Buffer.from(b64,'base64'),{maxOutputLength:MAX_XML}).toString('utf8');
+  }catch{return {status:'INDETERMINADO',message:'Evento oficial não pôde ser validado'}}
+  const event=nationalCancellationReceipt(xml,key,issuer);
+  if(!event)return {status:'INDETERMINADO',message:'Evento não corresponde à nota e ao emissor'};
+  return {status:'CANCELADA',environment:issuer.environment,accessKey:key,
+   protocol:event.eventId,xml:event.xml};
+ }
  async function downloadDanfse({issuer,accessKey:targetKey}={}){
   const key=accessKey(targetKey);
   const base=ADN_URLS[issuer?.environment];
@@ -197,5 +215,5 @@ export function createNationalNfseClient({certificateStore,transport=nativeTrans
     fail('ADN não retornou DANFSe em PDF válido');
   return pdf;
  }
- return Object.freeze({issue,queryNfse,reconcile,registerEvent,downloadDanfse});
+ return Object.freeze({issue,queryNfse,reconcile,registerEvent,queryCancellation,downloadDanfse});
 }
