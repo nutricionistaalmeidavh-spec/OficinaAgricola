@@ -158,7 +158,7 @@ const definitions=ROUTES.map(line=>{
  const names=[];
  const expression=new RegExp('^'+legacy.replace(/:([A-Za-z]+)/g,(_,name)=>{
   names.push(name);
-  return name==='plate'?'([A-Z0-9-]{1,16})':['intentId','planId','installmentId','entryId'].includes(name)?'([a-f0-9]{32})':'([1-9][0-9]*)';
+  return name==='plate'?'([A-Z0-9-]{1,16})':['intentId','planId','installmentId','entryId','refundId'].includes(name)?'([a-f0-9]{32})':'([1-9][0-9]*)';
  })+'$');
  return Object.freeze({method,legacy,native,roles:ROLES[role],transform,names,expression});
 });
