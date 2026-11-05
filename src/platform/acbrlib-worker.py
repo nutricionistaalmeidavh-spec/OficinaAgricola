@@ -439,13 +439,14 @@ def probe_library(path):
 
 
 def execute(req):
-    if req.get("operation") not in ("transmit", "consult", "cancel", "consultCancellation", "pdf") or req.get("kind") not in ("NFE", "NFSE"):
+    if req.get("operation") not in ("transmit", "consult", "cancel", "consultCancellation", "pdf", "status") or req.get("kind") not in ("NFE", "NFSE"):
         raise ACBrError("Operação fiscal inválida")
     if req.get("environment") not in ("HOMOLOGACAO", "PRODUCAO"):
         raise ACBrError("Ambiente fiscal não identificado")
     if not re.fullmatch(r"\d{14}", str(req.get("issuerCnpj", ""))):
         raise ACBrError("CNPJ de emitente ausente")
-    for field in ("libraryPath", "configPath", "iniPath"):
+    required = ("libraryPath", "configPath") if req["operation"] == "status" else ("libraryPath", "configPath", "iniPath")
+    for field in required:
         if not Path(req.get(field, "")).is_file():
             raise ACBrError("Arquivo local obrigatório não encontrado: " + field)
     lib = native_library(req["libraryPath"])
@@ -455,6 +456,16 @@ def execute(req):
         do(lib, prefix + "_Inicializar", encoded(req["configPath"]), encoded(""),
            types=[ct.c_char_p, ct.c_char_p])
         initialized = True
+        if req["operation"] == "status":
+            if req["kind"] != "NFE":
+                raise ACBrError("Diagnóstico de NFS-e requer provedor municipal")
+            status_data = parse_sections(response(lib, "NFE_StatusServico", limit=128 * 1024))
+            status = status_data.get("STATUS", {})
+            expected = "2" if req["environment"] == "HOMOLOGACAO" else "1"
+            if status.get("TPAMB") != expected:
+                return {"status": "INDETERMINADO", "message": "Ambiente da SEFAZ divergente"}
+            code = str(status.get("CSTAT", ""))
+            return {"status": "ONLINE" if code == "107" else "INDISPONIVEL", "code": code}
         if req["operation"] == "pdf":
             return document_pdf(lib, req)
         if req["kind"] == "NFE":
