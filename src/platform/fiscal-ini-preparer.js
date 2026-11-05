@@ -99,7 +99,7 @@ export function compileReviewedFiscalIni({document,issuer,review}={}){
      fail('Seção fiscal INI inválida');
  }
  const ordered=[
-   ...necessary.slice(0,4),
+   ...necessary.filter(k=>k!=='Total'),
    ...Object.keys(sections).filter(k=>!necessary.includes(k)&&k!=='Total'),
    'Total'
  ];
