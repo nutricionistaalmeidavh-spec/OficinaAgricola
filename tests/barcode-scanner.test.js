@@ -6,7 +6,7 @@ import vm from 'node:vm';
 function loadBarcode(){
   const window={};
   vm.runInNewContext(readFileSync('public/barcode-scanner.js','utf8'),{
-    window,document:{},console,Date,setTimeout,clearTimeout,
+    window,document:{},console,Date,setTimeout,clearTimeout,URLSearchParams,
   },{filename:'barcode-scanner.js'});
   return window.OficinaBarcode;
 }
