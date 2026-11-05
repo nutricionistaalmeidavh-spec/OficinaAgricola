@@ -38,14 +38,15 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
      state=input.stateRegistration===undefined?old.state_registration:clean(input.stateRegistration).slice(0,40),
      municipality=input.municipalRegistration===undefined?old.municipal_registration:clean(input.municipalRegistration).slice(0,40),
      environment=input.environment===undefined?old.environment:clean(input.environment).toUpperCase(),
-     enabled=input.enabled===undefined?Boolean(old.enabled):input.enabled===true,
+     // A transmissão em homologação é habilitada pelo cadastro válido, sem toggle manual.
+     enabled=validCnpj(cnpj)&&validStates.has(uf)&&/^\d{7}$/.test(ibge)&&validRegimes.has(regime),
      production=input.productionConfirmed===undefined?Boolean(old.production_confirmed):input.productionConfirmed===true;
    if(cnpj&&!validCnpj(cnpj))fail('CNPJ do emissor inválido');
    if(uf&&!validStates.has(uf))fail('UF do emissor inválida');
    if(ibge&&!/^\d{7}$/.test(ibge))fail('Município IBGE inválido');
    if(regime&&!validRegimes.has(regime))fail('Regime tributário inválido');
    if(!['HOMOLOGACAO','PRODUCAO'].includes(environment))fail('Ambiente fiscal inválido');
-   if(enabled&&(!validCnpj(cnpj)||!validStates.has(uf)||!/^\d{7}$/.test(ibge)||!validRegimes.has(regime)))
+   if(input.enabled===true&&!enabled)
      fail('Complete CNPJ, UF, município IBGE e regime tributário');
    if(enabled)assertFiscalIssuerUf({uf,municipalityIbge:ibge});
    if(enabled&&environment==='PRODUCAO'&&!production)
@@ -56,6 +57,54 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
      enabled?1:0,environment,cnpj,uf,ibge,regime,state,municipality,production?1:0,now()
    ]);
    return getFiscalSettings();
+ }
+ async function getFiscalOnboardingStatus(){
+   const settings=await getFiscalSettings();
+   return {environment:settings.environment,
+     companyConfigured:Boolean(settings.enabled),
+     issuerCnpj:settings.issuer_cnpj||'',
+     certificate:typeof provider?.certificateStatus==='function'
+       ?provider.certificateStatus():{configured:false},
+     providerReady:Boolean(provider&&typeof provider.transmit==='function'),
+     // Não atribuir validade fiscal ao simples status do servidor SEFAZ.
+     authorizationVerified:false,
+     taxProfileVerified:false};
+ }
+ async function installFiscalCertificate(input={}){
+   const settings=await getFiscalSettings();
+   if(!settings.enabled)fail('Cadastre CNPJ, UF, município IBGE e regime tributário antes do certificado',409);
+   if(!provider||typeof provider.installCertificate!=='function')
+     fail('Instalação de certificado requer ACBr local embarcado',503);
+   return provider.installCertificate({
+     pfxBase64:input.pfxBase64,password:input.password
+   });
+ }
+ async function diagnoseFiscal(){
+   const settings=await getFiscalSettings();
+   if(!settings.enabled)fail('Cadastro fiscal incompleto',409);
+   if(!provider||typeof provider.diagnose!=='function')
+     fail('Diagnóstico fiscal requer ACBr local configurado',503);
+   return provider.diagnose({settings});
+ }
+ async function saveFiscalTaxReview(documentId,input={}){
+   const document=await getFiscalDocument(documentId);
+   if(document.kind!=='NFE'||document.status!=='RASCUNHO')
+     fail('Somente rascunho NF-e permite revisar tributação',409);
+   const settings=await getFiscalSettings();
+   if(!settings.enabled||document.environment!==settings.environment)
+     fail('Cadastro fiscal/ambiente divergente do documento',409);
+   if(!provider||typeof provider.saveTaxReview!=='function')
+     fail('Revisão tributária exige ACBr local configurado',503);
+   const result=await provider.saveTaxReview({
+     document,issuer:issuerFrom(settings),sections:input.sections
+   });
+   await port.run(`INSERT INTO fiscal_events(
+     id,document_id,event_type,details_json,created_at
+   ) VALUES(?,?,?, ?,?)`,[
+     nextId(),document.id,'REVISAO_TRIBUTARIA',
+     JSON.stringify({reviewHash:result.reviewHash,environment:document.environment}),now()
+   ]);
+   return {reviewed:true,reviewHash:result.reviewHash};
  }
  async function getFiscalDocument(documentId){
    const row=await port.first('SELECT * FROM fiscal_documents WHERE id=?',[id(documentId)]);
@@ -304,7 +353,8 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
      ?finishFiscalCancellation(doc.id,doc.attempt_id,result,clean(provider.name)||'local')
      :applyResult(doc.id,doc.attempt_id,result,clean(provider.name)||'local');
  }
- return Object.freeze({getFiscalSettings,setFiscalSettings,getFiscalDocument,
+ return Object.freeze({getFiscalSettings,setFiscalSettings,getFiscalOnboardingStatus,
+   installFiscalCertificate,diagnoseFiscal,saveFiscalTaxReview,getFiscalDocument,
    getFiscalEvents,listFiscalDocuments,submitFiscalDocument,reconcileFiscalDocument,
    cancelFiscalDocument,getFiscalPdf});
 }
