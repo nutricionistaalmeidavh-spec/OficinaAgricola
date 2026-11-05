@@ -4,7 +4,7 @@ import {mapLegacyNativeRoute,nativeRouteCoverage} from '../src/platform/native-a
 import {requiredNativeRoles} from '../src/platform/async-workshop-policy.js';
 
 const sample=template=>template.replace(/:([A-Za-z]+)/g,(_,name)=>
-  name==='plate'?'ABC1D23':['intentId','planId','installmentId','entryId','refundId'].includes(name)?
+  name==='barcode'?'5901234123457':name==='plate'?'ABC1D23':['intentId','planId','installmentId','entryId','refundId'].includes(name)?
     'a'.repeat(32):'7');
 
 test('gateway and native operational RBAC agree for every advertised route and method',()=>{
