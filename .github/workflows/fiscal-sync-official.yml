@@ -5,6 +5,7 @@ on:
       - feat/fiscal-onboarding-integrado-20261105
     paths:
       - .github/workflows/fiscal-sync-official.yml
+      - scripts/sync-official-fiscal-catalog.py
 permissions:
   contents: write
 jobs:
