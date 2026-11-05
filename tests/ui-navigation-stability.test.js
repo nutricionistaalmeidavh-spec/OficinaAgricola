@@ -29,6 +29,8 @@ function harness(fetchImpl=async()=>({status:200,ok:true,text:async()=>JSON.stri
   ].join('\n');
   vm.runInContext(stubs,ctx);
   vm.runInContext(readFileSync('public/app-core.js','utf8'),ctx);
+  vm.runInContext(readFileSync('public/role-permissions.js','utf8'),ctx);
+  vm.runInContext('state.user={id:1,name:"Teste",role:"ADMIN"}',ctx);
   return{ctx,writes,navigate:vm.runInContext('navigate',ctx)};
 }
 
