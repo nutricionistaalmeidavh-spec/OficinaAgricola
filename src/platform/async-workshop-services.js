@@ -9,6 +9,7 @@ import {resolveNfseRoute} from './nfse-routing.js';
 import {createAsyncWorkshopFinance} from './async-workshop-finance.js';
 import {createAsyncWorkshopOrders} from './async-workshop-orders.js';
 import {createAsyncWorkshopInventory} from './async-workshop-inventory.js';
+import {createAsyncWorkshopProcurement} from './async-workshop-procurement.js';
 import {createAsyncWorkshopAutomotive} from './async-workshop-automotive.js';
 import {createAsyncWorkshopAuth} from './async-workshop-auth.js';
 import {createAsyncWorkshopCrm} from './async-workshop-crm.js';
@@ -127,21 +128,29 @@ export function createAsyncWorkshopServices(port,{fiscalProvider=null,objectStor
    ]);
    return port.first('SELECT * FROM parts WHERE id=?',[partId]);
  }
- async function postStockMovement({partId,type,quantity,note='',workOrderId=null}={}){
-   const p=numericId(partId),q=Number(quantity);
-   if(!Number.isFinite(q)||q<=0||q>1000000)fail('Quantidade inválida');
-   const allowed={ENTRADA:1,ESTORNO:1,SAIDA_MANUAL:-1,CONSUMO_OS:-1};
+ async function postStockMovement({partId,type,quantity,note='',workOrderId=null,actorId=null,actorRole=''}={}){
+   const p=numericId(partId),q=Number(quantity),reason=text(note);
+   const allowed={ENTRADA:1,ESTORNO:1,SAIDA_MANUAL:-1,CONSUMO_OS:-1,AJUSTE:1};
    if(!Object.hasOwn(allowed,type))fail('Tipo de movimentação inválido');
+   if(!Number.isFinite(q)||q===0||Math.abs(q)>1000000||
+      (type!=='AJUSTE'&&q<0))fail('Quantidade inválida');
+   if(type==='AJUSTE'){
+     if(actorRole!=='ADMIN')fail('Ajuste de estoque exige administrador',403);
+     if(reason.length<5||reason.length>500)fail('Motivo do ajuste obrigatório (5 a 500 caracteres)');
+     if(!Number.isSafeInteger(Number(actorId))||Number(actorId)<1)fail('Autor do ajuste obrigatório',403);
+   }
+   if(reason.length>1000)fail('Observação muito longa');
    const delta=q*allowed[type],at=iso(),movementId=id();
+   const createdBy=actorId==null?null:numericId(actorId);
    const update=select(`UPDATE parts SET quantity=quantity+?,updated_at=?
      WHERE id=? AND active=1 AND quantity+?>=-0.00000001`,[delta,at,p,delta]);
-   if(port.engine!=='postgres'){
-     const result=await atomic(port,[
+   if(port.engine==='d1'){
+     const result=await port.batch([
        update,
        select(`INSERT INTO inventory_movements(
-         id,part_id,type,quantity_delta,work_order_id,note,created_at
-       ) SELECT ?,?,?,?,?,?,? WHERE changes()=1`,[
-         movementId,p,type,delta,workOrderId,text(note),at
+         id,part_id,type,quantity_delta,work_order_id,note,created_by,created_at
+       ) SELECT ?,?,?,?,?,?,?,? WHERE changes()=1`,[
+         movementId,p,type,delta,workOrderId,reason,createdBy,at
        ])
      ]);
      if(changes(result[0])!==1)fail('Estoque insuficiente',409);
@@ -149,8 +158,8 @@ export function createAsyncWorkshopServices(port,{fiscalProvider=null,objectStor
      const updated=await tx.run(update.sql,update.params);
      if(changes(updated)!==1)fail('Estoque insuficiente',409);
      await tx.run(`INSERT INTO inventory_movements(
-       id,part_id,type,quantity_delta,work_order_id,note,created_at
-     ) VALUES(?,?,?,?,?,?,?)`,[movementId,p,type,delta,workOrderId,text(note),at]);
+       id,part_id,type,quantity_delta,work_order_id,note,created_by,created_at
+     ) VALUES(?,?,?,?,?,?,?,?)`,[movementId,p,type,delta,workOrderId,reason,createdBy,at]);
    });
    return {id:movementId,partId:p,type,quantityDelta:delta};
  }
@@ -514,6 +523,7 @@ export function createAsyncWorkshopServices(port,{fiscalProvider=null,objectStor
    ...createAsyncWorkshopFinance(port),
    ...createAsyncWorkshopOrders(port,{createWorkOrder,transitionWorkOrder,getWorkOrder}),
    ...createAsyncWorkshopInventory(port),
+   ...createAsyncWorkshopProcurement(port),
    ...createAsyncWorkshopAutomotive(port),
    ...createAsyncWorkshopAuth(port),
    ...createAsyncWorkshopCrm(port),
