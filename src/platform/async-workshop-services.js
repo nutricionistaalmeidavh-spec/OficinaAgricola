@@ -419,8 +419,8 @@ export function createAsyncWorkshopServices(port,{fiscalProvider=null,objectStor
  }
  async function createFiscalDraft({originType='OS',originId,kind,requestId}={}){
    const origin=text(originType).toUpperCase(),type=text(kind).toUpperCase();
-   if(origin!=='OS'||!['NFE','NFSE'].includes(type))
-     fail('O backend async inicial permite somente rascunho fiscal da OS',409);
+   if(origin!=='OS'||!['NFE','NFCE','NFSE'].includes(type))
+     fail('Tipo ou origem fiscal não suportados',409);
    const orderId=numericId(originId),request=text(requestId);
    if(!request||request.length>128)fail('Identificador fiscal obrigatório');
    const byRequest=await port.first('SELECT * FROM fiscal_documents WHERE request_id=?',[request]);
@@ -432,6 +432,12 @@ export function createAsyncWorkshopServices(port,{fiscalProvider=null,objectStor
    const existing=await port.first(`SELECT * FROM fiscal_documents
      WHERE origin_type=? AND origin_id=? AND kind=?`,[origin,orderId,type]);
    if(existing)return existing;
+   if(['NFE','NFCE'].includes(type)){
+     const conflict=await port.first(`SELECT id FROM fiscal_documents
+       WHERE origin_type=? AND origin_id=? AND kind=?`,
+       [origin,orderId,type==='NFE'?'NFCE':'NFE']);
+     if(conflict)fail('Operação já possui documento no outro modelo de mercadorias',409);
+   }
    const os=await getWorkOrder(orderId);
    const quote=await port.first(`SELECT * FROM quotes
      WHERE work_order_id=? AND approval_status='APROVADO'`,[orderId]);
@@ -440,7 +446,7 @@ export function createAsyncWorkshopServices(port,{fiscalProvider=null,objectStor
    const items=await port.all('SELECT * FROM quote_items WHERE quote_id=? ORDER BY id',[quote.id]);
    if(items.some(i=>i.kind==='TERCEIRO'))fail('Serviço de terceiro requer classificação tributária',409);
    const lines=fiscalNetLines(items,Number(quote.discount_cents))
-     .filter(i=>type==='NFE'?i.kind==='PECA':i.kind==='MAO_DE_OBRA');
+     .filter(i=>type==='NFSE'?i.kind==='MAO_DE_OBRA':i.kind==='PECA');
    if(!lines.length)fail('Nenhum item correspondente ao tipo fiscal');
    const amount=lines.reduce((sum,l)=>sum+Number(l.totalCents),0);
    if(!Number.isSafeInteger(amount)||amount<=0)fail('Valor fiscal inválido');
