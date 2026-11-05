@@ -1,7 +1,7 @@
 // Emissão determinística a partir de revisão tributária explícita.
 // Nunca presume NCM, CFOP, CSOSN/CST, base de cálculo, alíquotas ou série.
 // Certificados e senhas pertencem exclusivamente à configuração ACBr local.
-import {createHash} from 'node:crypto';
+import {createHash,randomInt} from 'node:crypto';
 import {readFileSync,statSync,writeFileSync,existsSync} from 'node:fs';
 import {join} from 'node:path';
 
@@ -48,6 +48,21 @@ export function compileReviewedFiscalIni({document,issuer,review}={}){
  const necessary=['infNFe','Identificacao','Emitente','Destinatario','Total'];
  if(necessary.some(k=>!sections[k]||typeof sections[k]!=='object'||Array.isArray(sections[k])))
    fail('INI revisado sem seções estruturais obrigatórias');
+ const ide=sections.Identificacao;
+ if(!/^[1-9][0-9]{0,8}$/.test(String(ide.nNF||''))||
+    !/^(?:0|[1-9][0-9]{0,2})$/.test(String(ide.serie||'')))
+   fail('Número ou série da NF-e inválidos');
+ // cNF identifica a nota; não deve ser calculado a partir do número fiscal.
+ if(!ide.cNF)ide.cNF=String(randomInt(0,100000000)).padStart(8,'0');
+ if(!/^\d{8}$/.test(String(ide.cNF)))fail('Código aleatório cNF inválido');
+ if(!ide.dhEmi){
+   const values=Object.fromEntries(new Intl.DateTimeFormat('en-GB',{
+     timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit',
+     hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'
+   }).formatToParts(new Date()).map(x=>[x.type,x.value]));
+   ide.dhEmi=values.day+'/'+values.month+'/'+values.year+' '+
+     values.hour+':'+values.minute+':'+values.second;
+ }
  if(sections.Identificacao.mod!=='55'||String(sections.Identificacao.tpAmb)!==
      (issuer.environment==='HOMOLOGACAO'?'2':'1'))
    fail('Modelo ou ambiente fiscal divergente');
