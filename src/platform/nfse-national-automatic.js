@@ -80,6 +80,9 @@ export function prepareNationalDpsInput({document,issuer,profile,customer,issuan
    pTotTribEst:percentage(issuance?.percentState,'Carga tributária estadual'),
    pTotTribMun:percentage(issuance?.percentMunicipal,'Carga tributária municipal')
  };
+ const totTrib=opSimpNac==='3'
+   ?{pTotTribSN:percentage(issuance?.percentSimples,'Carga tributária do Simples Nacional')}
+   :taxRate;
  const payload={ambiente:'restrita',prestador:{
    cnpj,cLocEmi:city,serie:series,opSimpNac,regEspTrib,
    ...(issuance?.regApTribSN?{regApTribSN:str(issuance.regApTribSN,/^[123]$/,'Apuração Simples Nacional',1)}:{})
@@ -93,7 +96,7 @@ export function prepareNationalDpsInput({document,issuer,profile,customer,issuan
      ...(tribISSQN==='3'?{cPaisResult:'BR'}:{}),
      ...(tribISSQN==='2'?{tpImunidade:str(issuance?.tpImunidade,/^[1-9]$/,'Imunidade ISS',1)}:{})},
    tributacaoFederal:{piscofins:{CST:federal}},
-   totTrib:taxRate
+   totTrib
  }};
  // O SDK valida estruturalmente os campos do leiaute nacional, sem substituir XSD/homologação.
  const built=buildDpsFromJson(payload);
