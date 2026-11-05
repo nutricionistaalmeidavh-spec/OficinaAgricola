@@ -42,8 +42,8 @@ async function renderInventory({cursor=null,loaded=[]}={}){
  if($('#suppliersManage'))$('#suppliersManage').onclick=()=>showSuppliersModal().catch(e=>toast(e.message,true));
  if($('#purchaseNew'))$('#purchaseNew').onclick=()=>newPurchaseOrderModal().catch(e=>toast(e.message,true));
  if($('#allPurchaseOrders'))$('#allPurchaseOrders').onclick=()=>showPurchaseOrdersList().catch(e=>toast(e.message,true));
- $('[data-entry]').forEach(b=>b.onclick=()=>stockMoveModal(Number(b.dataset.entry),parts.find(p=>p.id===Number(b.dataset.entry))));
- $('[data-part-edit]').forEach(b=>b.onclick=()=>editPartModal(parts.find(p=>p.id===Number(b.dataset.partEdit))));
+ $$('[data-entry]').forEach(b=>b.onclick=()=>stockMoveModal(Number(b.dataset.entry),parts.find(p=>p.id===Number(b.dataset.entry))));
+ $$('[data-part-edit]').forEach(b=>b.onclick=()=>editPartModal(parts.find(p=>p.id===Number(b.dataset.partEdit))));
  $$('[data-fitments]').forEach(b=>b.onclick=()=>partFitmentsModal(parts.find(p=>p.id===Number(b.dataset.fitments))));
  $$('[data-purchase-open]').forEach(b=>b.onclick=()=>openPurchaseOrder(Number(b.dataset.purchaseOpen)).catch(e=>toast(e.message,true)));
  showPagedLoadMore({cursor:page.nextCursor,loaded:parts.length,total:page.total,onMore:()=>renderInventory({cursor:page.nextCursor,loaded:parts})});
