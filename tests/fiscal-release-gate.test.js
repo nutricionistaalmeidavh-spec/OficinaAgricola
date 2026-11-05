@@ -7,7 +7,7 @@ const settings={enabled:1,environment:'HOMOLOGACAO',issuer_cnpj:'11222333000181'
   issuer_uf:'SP',municipality_ibge:'3550308',tax_regime:'SIMPLES',
   state_registration:'123',municipal_registration:'123',production_confirmed:0};
 const cert='a'.repeat(64);
-const key='35111122233300018155001000000011000000001000';
+const key='35'+'2611'+'11222333000181'+'55'+'001'+'000000110'+'1'+'00000001'+'2';
 const xml='<nfeProc><NFe><infNFe Id="NFe'+key+'"><ide><tpAmb>2</tpAmb></ide>'+
   '<emit><CNPJ>11222333000181</CNPJ></emit></infNFe></NFe>'+
   '<protNFe><infProt><cStat>100</cStat><chNFe>'+key+'</chNFe>'+
@@ -42,7 +42,7 @@ test('somente XML homologado do ACBr com protocolo gera prova vinculada à unida
 });
 test('sem prova, produção não pode ser liberada por checkbox ou conexão',()=>{
  const status=buildFiscalReleaseStatus({settings:{...settings,environment:'PRODUCAO',
-  production_confirmed:1},certificate,certificateIdentity:cert,providerName:'acbrlib-local',proofs:[]});
+  production_confirmed:1},certificate,certificateIdentity:cert,providerName:'acbrlib-local',providerReady:true,proofs:[]});
  assert.equal(status.productionReady,false);
  assert.equal(status.models.NFE.productionReady,false);
  assert.equal(status.authorizationVerified,false);
@@ -51,7 +51,7 @@ test('sem prova, produção não pode ser liberada por checkbox ou conexão',()=
 test('evidência sobrevivente por unidade habilita somente seu próprio modelo',()=>{
  const verified=buildFiscalReleaseStatus({settings:{...settings,environment:'PRODUCAO',
   production_confirmed:1},certificate,certificateIdentity:cert,
-  providerName:'acbrlib-local',proofs:[proof()]});
+  providerName:'acbrlib-local',providerReady:true,proofs:[proof()]});
  assert.equal(verified.models.NFE.productionReady,true);
  assert.equal(verified.models.NFCE.productionReady,false);
  assert.equal(verified.models.NFSE.productionReady,false);
@@ -70,7 +70,7 @@ test('alterações no certificado ou emitente invalidam liberação sem apagar h
   {proofs:[{...e,status:'CANCELADA'}]}
  ]){
   const status=buildFiscalReleaseStatus({settings:{...settings,environment:'PRODUCAO',
-   production_confirmed:1},certificate,certificateIdentity:cert,providerName:'acbrlib-local',
+   production_confirmed:1},certificate,certificateIdentity:cert,providerName:'acbrlib-local',providerReady:true,
    proofs:[e],...changed});
   assert.equal(status.models.NFE.productionReady,false);
  }
@@ -81,7 +81,7 @@ test('SC PAF e RS pagamentos eletrônicos não são inferidos de homologação N
    environment:'PRODUCAO',production_confirmed:1};
   const evidence={...proof(),kind:'NFCE',issuer_digest:issuerEvidenceDigest(st)};
   const state=buildFiscalReleaseStatus({settings:st,certificate,certificateIdentity:cert,
-    providerName:'acbrlib-local',proofs:[evidence]});
+    providerName:'acbrlib-local',providerReady:true,proofs:[evidence]});
   assert.equal(state.models.NFCE.productionReady,false);
   assert.match(state.models.NFCE.reason,/PAF|pagamento/i);
  }
