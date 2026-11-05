@@ -3,10 +3,12 @@
 // manifesto vinculado ao snapshot canônico e ACBrLib compilada/instalada pelo operador.
 // Segredos do certificado permanecem na configuração externa da própria ACBrLib.
 import {spawn} from 'node:child_process';
-import {readFileSync,realpathSync,statSync} from 'node:fs';
+import {createHash,randomBytes,randomInt} from 'node:crypto';
+import {readFileSync,realpathSync,statSync,writeFileSync,existsSync,renameSync,rmSync} from 'node:fs';
 import {isAbsolute,join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {prepareReviewedFiscalIni} from './fiscal-ini-preparer.js';
+import {createLocalFiscalTaxStore} from './local-fiscal-tax-store.js';
 
 function localFile(path,label){
   if(typeof path!=='string'||!isAbsolute(path))
@@ -102,6 +104,7 @@ export function createAcbrLibFiscalProvider(opts={}){
   const nfseLib=opts.nfseLib??process.env.FISCAL_ACBR_NFSE_LIB;
   if(!nfeLib&&!nfseLib)return null;
   const inputDir=localDirectory(opts.inputDir??process.env.FISCAL_ACBR_INPUT_DIR,'diretório INI fiscal');
+  const taxStore=()=>createLocalFiscalTaxStore({directory:join(inputDir,'..','tributario'),inputDir});
   const libraries={};
   if(nfeLib)libraries.NFE={
     libraryPath:localFile(nfeLib,'ACBrLibNFe'),
@@ -170,11 +173,16 @@ export function createAcbrLibFiscalProvider(opts={}){
     const iniPath=resolveInputs(inputDir,document,safeIssuer);
     return {kind,documentId:Number(document.id),iniPath,
       snapshotHash:document.snapshot_hash,amountCents:Number(document.amount_cents),environment:safeIssuer.environment,
-      issuerCnpj:safeIssuer.cnpj,
-      ...libraries[libraryKind],issuerUf:safeIssuer.uf};
+      issuerCnpj:safeIssuer.cnpj,issuerUf:safeIssuer.uf,
+      ...libraries[libraryKind]};
   };
   return {
     name:'acbrlib-local',
+    listTaxProfiles:({issuer})=>taxStore().listProfiles({issuer}),
+    saveTaxProfile:({issuer,profile})=>taxStore().saveProfile({issuer,profile}),
+    getTaxReview:({document,issuer})=>taxStore().getDocumentReview({document,issuer}),
+    saveTaxReview:({document,issuer,company,customer,issuance,items})=>
+      taxStore().saveDocumentReview({document,issuer,company,customer,issuance,items}),
     nfseChannel:opts.nfseChannel||null,
     nfseMunicipalityIbge:opts.nfseMunicipalityIbge||null,
     certificateStatus:()=>certificateStore?certificateStore.status():{configured:false},

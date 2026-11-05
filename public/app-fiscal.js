@@ -50,7 +50,7 @@ async function renderFiscal({cursor=null,loaded=[]}={}){
       '<br><small>NFS-e antiga: rota e competência precisam de revisão antes de emitir</small>'):'';
     return '<div class="list-item"><div><strong>'+esc(fiscalDisplayTitle(d))+'</strong> · '+esc(fiscalOriginTitle(d))+
       '<br><small>'+esc(d.status)+' · '+money(d.amount_cents)+'</small>'+routeText+'</div><div class="action-row">'+
-      '<button class="btn sm soft" data-fiscal-details="'+d.id+'">Histórico</button>'+revise+pdf+cancel+actions+'</div></div>';
+      '<button class="btn sm soft" data-fiscal-details="'+d.id+'">Histórico</button>'+revise+(d.status==='RASCUNHO'&&d.kind!=='NFSE'?'<button class="btn sm soft" data-fiscal-tax-review="'+d.id+'">Revisar tributos</button>':'')+pdf+cancel+actions+'</div></div>';
   }).join('');
   const modelLabels={NFE:'NF-e',NFCE:'NFC-e',NFSE:'NFS-e'};
   // Etapas editoriais; a autorização continua exclusiva do backend por modelo.
@@ -71,7 +71,7 @@ async function renderFiscal({cursor=null,loaded=[]}={}){
   }).join('');
   setContent('<div class="section-head fiscal-head"><div><h2>Documentos fiscais</h2>'+
     '<span class="muted">Rascunhos, notas e protocolos das ordens de serviço e vendas</span></div>'+
-    '<div class="action-row">'+(state.user.role==='ADMIN'?'<button id="fiscalSettings" class="btn">Configuração fiscal</button><button id="fiscalCertA1" class="btn">Certificado A1</button><button id="fiscalCertA3" class="btn">Token A3</button><button id="fiscalDiagnose" class="btn">Testar SEFAZ</button>':'')+
+    '<div class="action-row">'+(state.user.role==='ADMIN'?'<button id="fiscalSettings" class="btn">Configuração fiscal</button><button id="fiscalTaxProfiles" class="btn">Perfis tributários</button><button id="fiscalCertA1" class="btn">Certificado A1</button><button id="fiscalCertA3" class="btn">Token A3</button><button id="fiscalDiagnose" class="btn">Testar SEFAZ</button>':'')+
     '<button id="fiscalNew" class="btn primary">+ Preparar documento</button></div></div>'+
     '<div class="card"><p><strong>Cadastro fiscal:</strong> '+(settings.enabled?'Cadastro concluído':'Aguardando cadastro fiscal')+' · '+esc(settings.environment)+
     ' · CNPJ '+esc(settings.issuer_cnpj||'não informado')+'</p>'+
@@ -82,6 +82,8 @@ async function renderFiscal({cursor=null,loaded=[]}={}){
     '<div class="list">'+(cards||'<div class="empty">Nenhum documento fiscal preparado.</div>')+'</div></div>');
   $('#fiscalNew').onclick=()=>fiscalDraftModal();
   if($('#fiscalSettings'))$('#fiscalSettings').onclick=()=>fiscalSettingsModal(settings);
+  if($('#fiscalTaxProfiles'))$('#fiscalTaxProfiles').onclick=()=>fiscalTaxProfilesModal();
+  $$('[data-fiscal-tax-review]').forEach(button=>button.onclick=()=>fiscalTaxReviewModal(Number(button.dataset.fiscalTaxReview)).catch(e=>toast(e.message,true)));
   if($('#fiscalCertA1'))$('#fiscalCertA1').onclick=()=>fiscalCertificateA1Modal();
   if($('#fiscalCertA3'))$('#fiscalCertA3').onclick=()=>fiscalCertificateA3Modal();
   if($('#fiscalDiagnose'))$('#fiscalDiagnose').onclick=()=>fiscalRunDiagnosis();
@@ -94,6 +96,176 @@ async function renderFiscal({cursor=null,loaded=[]}={}){
    showPagedLoadMore({cursor:page.nextCursor,loaded:docs.length,total:page.total,onMore:()=>renderFiscal({cursor:page.nextCursor,loaded:docs})});
 }
 
+async function fiscalTaxProfilesModal(){
+  const [profiles,settings]=await Promise.all([
+    api('/api/fiscal/tax/profiles'),api('/api/fiscal/settings')]);
+  const isNormal=settings.tax_regime==='NORMAL';
+  const rows=profiles.map(p=>'<div class="list-item"><div><strong>'+
+    esc(p.name)+'</strong><br><small>'+esc(p.kind==='GOODS'
+      ?'NCM '+p.ncm+' · CFOP '+p.cfop+' · '+p.icmsScheme+' '+p.icmsCode
+      :'Serviço '+p.serviceListCode+' · município '+p.municipalityIbge)+
+    '</small></div><button type="button" class="btn sm soft" data-tax-edit="'+esc(p.id)+'">Editar</button></div>').join('');
+  showModal('Perfis tributários da empresa',
+    '<div class="card"><strong>Perfis cadastrados</strong><div class="list">'+
+    (rows||'<p class="muted">Nenhum perfil cadastrado nesta unidade.</p>')+'</div></div>'+
+    '<form class="form-stack">'+
+    '<input name="id" type="hidden">'+
+    '<p class="muted">O responsável fiscal ou contador deve confirmar classificação e alíquotas. Não há determinação automática de impostos.</p>'+
+    '<label>Tipo de regra<select id="taxKind" name="kind">'+
+    '<option value="GOODS">Mercadorias — NF-e / NFC-e</option>'+
+    '<option value="SERVICE">Serviços — NFS-e municipal</option></select></label>'+
+    '<label>Nome do perfil<input name="name" maxlength="80" required placeholder="Ex.: Peças de manutenção"></label>'+
+    '<div id="taxGoods" class="form-stack">'+
+    '<div class="field-row"><label>NCM (8 dígitos)<input name="ncm" inputmode="numeric" maxlength="8"></label>'+
+    '<label>CFOP (4 dígitos)<input name="cfop" inputmode="numeric" maxlength="4"></label></div>'+
+    '<div class="field-row"><label>Origem ICMS (0–8)<input name="origin" maxlength="1" value="0"></label>'+
+    '<label>Regime do ICMS<select name="icmsScheme"><option value="'+(isNormal?'CST':'CSOSN')+'">'+(isNormal?'CST':'CSOSN')+'</option></select></label></div>'+
+    '<div class="field-row"><label>Código '+(isNormal?'CST':'CSOSN')+'<input name="icmsCode" maxlength="3" placeholder="'+(isNormal?'00, 40, 41 ou 50':'102, 103, 300 ou 400')+'"></label>'+
+    '<label>Unidade<input name="unit" maxlength="6" value="UN"></label></div>'+
+    '<div class="field-row"><label>CST PIS<input name="pisCst" maxlength="2" placeholder="49"></label>'+
+    '<label>CST COFINS<input name="cofinsCst" maxlength="2" placeholder="49"></label></div>'+
+    '<div class="field-row"><label>CEST (se aplicável)<input name="cest" maxlength="7"></label>'+
+    '<label>Benefício fiscal (se aplicável)<input name="benefitCode" maxlength="20"></label></div></div>'+
+    '<div id="taxService" class="form-stack" hidden>'+
+    '<p class="muted">O código e a alíquota do ISS dependem do município. Salvar este perfil não significa que a prefeitura já esteja integrada.</p>'+
+    '<label>Município IBGE<input name="municipalityIbge" inputmode="numeric" maxlength="7" value="'+esc(settings.municipality_ibge||'')+'"></label>'+
+    '<div class="field-row"><label>Item da lista LC 116 (ex.: 14.01)<input name="serviceListCode" maxlength="5"></label>'+
+    '<label>Código de serviço municipal<input name="municipalServiceCode" maxlength="25"></label></div>'+
+    '<div class="field-row"><label>CNAE (7 dígitos)<input name="cnae" maxlength="7"></label>'+
+    '<label>Alíquota ISS (%)<input name="issRate" placeholder="3.00" maxlength="7"></label></div>'+
+    '<label><input type="checkbox" name="withheld"> ISS retido pelo tomador</label></div>'+
+    '<button type="submit" class="btn primary">Salvar perfil tributário</button></form>',
+    async form=>{
+      const x=formObj(form);
+      const profile={...(x.id?{id:x.id}:{}),kind:x.kind,name:x.name,...(x.kind==='GOODS'?{
+        ncm:x.ncm,cfop:x.cfop,origin:x.origin,icmsScheme:x.icmsScheme,
+        icmsCode:x.icmsCode,pisCst:x.pisCst,cofinsCst:x.cofinsCst,unit:x.unit,
+        cest:x.cest,benefitCode:x.benefitCode
+      }:{
+        municipalityIbge:x.municipalityIbge,serviceListCode:x.serviceListCode,
+        municipalServiceCode:x.municipalServiceCode,cnae:x.cnae,
+        issRate:x.issRate,withheld:x.withheld==='on'
+      })};
+      await api('/api/fiscal/tax/profiles',{method:'POST',body:{profile}});
+      toast('Perfil tributário salvo nesta unidade. Confirme os dados com seu contador.');
+      await refreshCurrentPage();
+    });
+  const kind=$('#taxKind'),goods=$('#taxGoods'),service=$('#taxService');
+  const update=()=>{goods.hidden=kind.value!=='GOODS';service.hidden=kind.value!=='SERVICE';goods.style.display=goods.hidden?'none':'flex';service.style.display=service.hidden?'none':'flex'};
+  kind.onchange=update;
+  update();
+  const form=$('#modalBody form');
+  $('[data-tax-edit]').forEach(button=>button.onclick=()=>{
+    const selected=profiles.find(p=>p.id===button.dataset.taxEdit);
+    if(!selected||!form)return;
+    for(const [key,value] of Object.entries(selected)){
+      const field=form.elements.namedItem(key);
+      if(!field)continue;
+      if(field.type==='checkbox')field.checked=value===true;
+      else field.value=String(value??'');
+    }
+    kind.value=selected.kind;update();
+    form.querySelector('[name="name"]')?.focus();
+  });
+}
+async function fiscalTaxReviewModal(id){
+  const [doc,profiles,settings]=await Promise.all([
+    api('/api/fiscal/'+id),api('/api/fiscal/tax/profiles'),api('/api/fiscal/settings')]);
+  if(doc.status!=='RASCUNHO')throw Error('Somente rascunhos fiscais permitem revisão');
+  if(!['NFE','NFCE'].includes(doc.kind))
+    throw Error('NFS-e depende de revisão municipal específica');
+  const choices=profiles.filter(p=>p.kind==='GOODS');
+  if(!choices.length){
+    showModal('Revisão tributária','<p>Cadastre primeiro um perfil de mercadoria em <strong>Perfis tributários</strong> e confirme a classificação com o contador.</p>');
+    return;
+  }
+  const snap=fiscalSnapshot(doc),lines=snap.lines||[];
+  const profileOptions=choices.map(p=>'<option value="'+esc(p.id)+'">'+
+    esc(p.name)+' · NCM '+esc(p.ncm)+' · CFOP '+esc(p.cfop)+'</option>').join('');
+  const addressForm=(prefix,title,values={})=>'<fieldset class="form-stack">'+
+    '<legend>'+title+'</legend>'+
+    '<label>'+(prefix==='issuer'?'Razão social':'Nome do destinatário')+
+    '<input name="'+prefix+'Name" value="'+esc(values.name||'')+'" maxlength="60" required></label>'+
+    '<div class="field-row"><label>Rua<input name="'+prefix+'Street" maxlength="60" required></label>'+
+    '<label>Número<input name="'+prefix+'Number" maxlength="20" required></label></div>'+
+    '<div class="field-row"><label>Bairro<input name="'+prefix+'District" maxlength="60" required></label>'+
+    '<label>Cidade<input name="'+prefix+'City" maxlength="60" required></label></div>'+
+    '<div class="field-row"><label>CEP (8 dígitos)<input name="'+prefix+'Zip" maxlength="8" inputmode="numeric" required></label>'+
+    (prefix==='customer'?'<label>UF<input name="customerUf" maxlength="2" required></label>':'')+'</div>'+
+    (prefix==='customer'?'<label>Município IBGE<input name="customerIbge" maxlength="7" required></label>':'')+
+    '</fieldset>';
+  const taxValues=(i,prefix)=>'<div class="field-row">'+
+    '<label>Base '+prefix+' (R$)<input name="item'+i+prefix+'Base" placeholder="0.00" inputmode="decimal"></label>'+
+    '<label>Alíquota '+prefix+' (%)<input name="item'+i+prefix+'Rate" placeholder="0.00"></label>'+
+    '<label>Valor '+prefix+' (R$)<input name="item'+i+prefix+'Amount" placeholder="0.00"></label></div>';
+  const ibsField=(i,key,label)=>'<label>'+label+'<input name="item'+i+key+'" inputmode="decimal"></label>';
+  const ibsValues=i=>'<details><summary>IBS/CBS da reforma tributária, quando aplicável</summary>'+
+    '<p class="muted">Preencha somente com classificação fiscal conferida. Benefícios e diferimento exigem cClassTrib oficial.</p>'+
+    ibsField(i,'IbsCst','CST IBS/CBS (3 dígitos)')+
+    ibsField(i,'IbsClass','cClassTrib (6 dígitos)')+
+    ibsField(i,'IbsBase','Base IBS/CBS (R$)')+
+    ibsField(i,'IbsUfRate','Alíquota IBS UF (%)')+
+    ibsField(i,'IbsMunRate','Alíquota IBS Município (%)')+
+    ibsField(i,'IbsCbsRate','Alíquota CBS (%)')+
+    '<details><summary>Redução de alíquota, se autorizada</summary>'+
+    ibsField(i,'IbsReductionUf','Redução IBS UF (%)')+
+    ibsField(i,'IbsReductionMun','Redução IBS Município (%)')+
+    ibsField(i,'IbsReductionCbs','Redução CBS (%)')+'</details>'+
+    '<details><summary>Diferimento, se autorizado</summary>'+
+    ibsField(i,'IbsDeferralUf','Diferimento IBS UF (%)')+
+    ibsField(i,'IbsDeferralMun','Diferimento IBS Município (%)')+
+    ibsField(i,'IbsDeferralCbs','Diferimento CBS (%)')+'</details></details>';
+  const itemRows=lines.map((line,i)=>'<fieldset class="form-stack"><legend>Item '+(i+1)+
+    ' · '+esc(line.description||'')+' · '+money(line.totalCents)+'</legend>'+
+    '<label>Classificação aprovada<select name="item'+i+'Profile">'+profileOptions+'</select></label>'+
+    '<details><summary>Valores tributários se o CST exigir base e alíquota</summary>'+
+    '<p class="muted">Para ICMS CST 00 e PIS/COFINS CST 01/02, informe base, alíquota e valor calculados pelo responsável fiscal. Não inferimos impostos.</p>'+
+    taxValues(i,'Icms')+taxValues(i,'Pis')+taxValues(i,'Cofins')+'</details>'+ibsValues(i)+'</fieldset>').join('');
+  showModal('Revisar '+(doc.kind==='NFCE'?'NFC-e':'NF-e')+' #'+id,
+    '<form class="form-stack">'+
+    '<p class="muted">Revisão vinculada ao rascunho original. Não autoriza transmissão nem substitui a conferência do contador.</p>'+
+    '<div class="field-row"><label>Série<input name="series" maxlength="3" required></label>'+
+    '<label>Número fiscal<input name="number" maxlength="9" required></label></div>'+
+    '<label>Natureza da operação<input name="nature" maxlength="60" required></label>'+
+    (doc.kind==='NFCE'?'<label>Meio de pagamento (tPag, 2 dígitos)<input name="paymentCode" maxlength="2" required></label>':'')+
+    addressForm('issuer','Endereço completo do emitente')+
+    (doc.kind==='NFE'||snap.customer?.document?addressForm('customer','Endereço do destinatário',{name:snap.customer?.name||''}):'')+
+    '<h3>Tributação dos itens</h3>'+itemRows+
+    '<button class="btn primary" type="submit">Validar e salvar revisão</button></form>',
+    async form=>{
+      const o=formObj(form);
+      const addr=prefix=>({
+        name:o[prefix+'Name'],legalName:o[prefix+'Name'],
+        street:o[prefix+'Street'],number:o[prefix+'Number'],
+        district:o[prefix+'District'],city:o[prefix+'City'],zip:o[prefix+'Zip'],
+        ...(prefix==='customer'?{uf:o.customerUf,municipalityIbge:o.customerIbge}:{})
+      });
+      const taxes=(i,name)=>({
+        base:o['item'+i+name+'Base'],rate:o['item'+i+name+'Rate'],
+        amount:o['item'+i+name+'Amount']});
+      const typedIbs=i=>{
+        const names=['Cst','Class','Base','UfRate','MunRate','CbsRate',
+          'ReductionUf','ReductionMun','ReductionCbs',
+          'DeferralUf','DeferralMun','DeferralCbs'];
+        const selected=Object.fromEntries(names.map(key=>[key,String(o['item'+i+'Ibs'+key]||'').trim().replace(',','.')]));
+        if(!Object.values(selected).some(Boolean))return null;
+        return {cst:selected.Cst,cClassTrib:selected.Class,base:selected.Base,
+          ufRate:selected.UfRate,munRate:selected.MunRate,cbsRate:selected.CbsRate,
+          reductionUf:selected.ReductionUf,reductionMun:selected.ReductionMun,reductionCbs:selected.ReductionCbs,
+          deferralUf:selected.DeferralUf,deferralMun:selected.DeferralMun,deferralCbs:selected.DeferralCbs};
+      };
+      const body={company:addr('issuer'),
+        customer:(doc.kind==='NFE'||snap.customer?.document)?addr('customer'):null,
+        issuance:{number:o.number,series:o.series,nature:o.nature,
+          ...(doc.kind==='NFCE'?{paymentCode:o.paymentCode}:{})},
+        items:lines.map((_,i)=>({profileId:o['item'+i+'Profile'],
+          icms:taxes(i,'Icms'),pis:taxes(i,'Pis'),cofins:taxes(i,'Cofins'),
+          ibscbs:typedIbs(i)}))};
+      await api('/api/fiscal/'+id+'/tax-review',{method:'POST',body});
+      toast('Revisão salva e validada contra o documento fiscal. A nota ainda não foi transmitida.');
+      await refreshCurrentPage();
+    });
+}
 async function fiscalRunDiagnosis(){
   try{
     const result=await api('/api/fiscal/diagnose',{method:'POST',body:{}});
@@ -227,7 +399,7 @@ function fiscalDraftModal(){
     '<div id="fiscalOriginOptions" class="fiscal-origin-options" role="group" aria-label="Resultados da busca"></div>'+
     '<input type="hidden" name="originId" id="fiscalOriginId">'+
     '<div id="fiscalOriginSelection" class="fiscal-origin-selection" role="status" aria-live="polite">Nenhuma operação selecionada.</div>'+
-    '<label>Documento<select id="fiscalKind" name="kind"><option value="NFE">NF-e — peças</option><option value="NFCE">NFC-e — venda ao consumidor</option><option value="NFSE">NFS-e — mão de obra</option></select></label>'+ 
+    '<label>Documento<select id="fiscalKind" name="kind"><option value="NFE">NF-e — peças</option><option value="NFCE">NFC-e — venda ao consumidor</option><option value="NFSE">NFS-e — mão de obra</option></select></label>'+
     '<div id="fiscalNfseCompetence" hidden><label>Data de competência do serviço<input type="date" id="fiscalCompetenceDate" name="competenceDate"></label>'+
     '<p id="fiscalNfseRoute" class="muted" role="status" aria-live="polite">Informe a competência para verificar o emissor obrigatório.</p></div>'+
     '<div class="fiscal-draft-preview"><strong>Prévia do documento</strong><p id="fiscalDraftPreview" class="muted">Selecione uma operação para conferir a origem. Os itens e valores fiscais serão validados pelo servidor.</p></div>'+

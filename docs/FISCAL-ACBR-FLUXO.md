@@ -4,13 +4,24 @@
 
 A infraestrutura ACBrLib NF-e/NFS-e e o PostgreSQL 16 são empacotados no instalador Windows x64. O core do ArtiSys Oficina continua R$ 0, open source e self-hosted. **O empacotamento do ACBr não constitui homologação fiscal.**
 
-A emissão permanece desativada até configurar explicitamente a oficina, ambiente, credenciamento, certificado A1/A3 e INI do ACBr em diretório privado. Emissão real requer homologação junto à SEFAZ e, para NFS-e, ao município ou emissor nacional conforme a localidade. Nenhum certificado, senha, chave ou segredo deve entrar no GitHub, no frontend ou na revisão tributária.
+O módulo fiscal inicia em homologação e é habilitado automaticamente após o cadastro válido da empresa. O certificado A1 é importado pelo cliente na interface, fica cifrado no cofre local da unidade e só é descriptografado em arquivos temporários durante a execução do ACBr. O fluxo assistido A3 ainda não foi homologado. Emissão real requer homologação junto à SEFAZ e, para NFS-e, ao município ou emissor nacional conforme a localidade. Nenhum certificado, senha, chave ou segredo deve entrar no GitHub, no frontend ou na revisão tributária.
+
+
+## Diagnóstico do cliente no próprio aplicativo
+
+1. Configuração Fiscal: CNPJ, UF, IBGE, IE/IM, regime e ambiente.
+2. Certificado A1: importar PFX/P12 e senha; cofre local por unidade, sem banco ou Git.
+3. Testar SEFAZ: obter certificados pelo ACBr, comparar o CNPJ e consultar o status real de serviço no ambiente selecionado.
+4. Criar rascunho NF-e, revisar os tributos e transmitir em homologação. Registrar XML/protocolo real e verificar consulta, cancelamento e PDF.
+5. Produção continua separada: serviço SEFAZ online não comprova emissão, credenciamento ou habilitação de NFS-e.
+
+**Pendências para release fiscal pleno:** homologação real com credenciais de contribuinte, sequência fiscal e validações tributárias completas, prestadores municipais de NFS-e e suporte A3. Não declarar conformidade com base apenas no CI. O core permanece R$ 0, self-hosted e open source.
 
 ## Fluxo NF-e
 
 1. Criar rascunho a partir de uma OS aprovada; o servidor congela o snapshot e hash, sem gravar outra receita/estoque.
-2. **Revisão tributária humana obrigatória:** fornecer o INI fiscal completo e manifesto vinculados ao rascunho OU fornecer `<kind>-<id>-<snapshotHash>.review.json` com todas as seções revistas pelo contador no diretório fiscal privado.
-3. No segundo caso, `fiscal-ini-preparer.js` gera automaticamente `.ini` e `.json` a partir do snapshot canônico sem inferir NCM, CFOP, CSOSN, PIS, COFINS, regime ou numeração; exige revisão de todos os itens e igualdade exata do total.
+2. **Revisão tributária obrigatória:** usar a ação **Revisar tributação** do rascunho NF-e para informar NCM, CFOP, CST/CSOSN, PIS/COFINS, endereço do emitente/destinatário e número/série. O backend monta a revisão por unidade, sem exigir arquivos JSON/INI manuais.
+3. O gerador converte a revisão em INI de NF-e e manifesto a partir do snapshot canônico, usando os campos ACBr cProd, xProd, qCom, vUnCom, vProd, vDesc e vNF. Não inventa tributos ou CFOP; exige igualdade exata dos valores.
 4. Transmitir pela UI, apenas com emissor ACBr explicitamente configurado. A lib carrega o INI, assina, valida esquema, persiste XML assinado de recuperação e envia à SEFAZ.
 5. O serviço só muda para `AUTORIZADA` depois de conferir ambiente, chave, número, série, protocolo e XML de autorização assinado/processado.
 6. Timeout ou resposta incompleta: `INDETERMINADO`, sem retransmissão cega; selecionar **Consultar situação**.
@@ -49,6 +60,17 @@ O exemplo omite campos obrigatórios de endereço, classificação, impostos, IB
 A assinatura e transmissão via `NFSE_Emitir` e a consulta de RPS já existiam; DANFSe via `NFSE_SalvarPDF` foi adicionado. O INI de NFS-e permanece dependente da regra de serviço e do município; sua geração automática **não está liberada como padrão nacional**.
 
 Há um contrato de pedido de cancelamento `NFSE_Cancelar` que depende de um INI municipal `.cancel.ini` revisado. O aplicativo **não marca NFS-e cancelada apenas porque um provedor retornou sucesso no recebimento do evento**. A confirmação de status final requer integração específica para o prestador/município.
+
+
+## Revisão tributária assistida pela interface (branch)
+
+- O administrador abre **Fiscal → Revisar tributação** em rascunhos NF-e (55) e NFC-e (65); não precisa escrever INI ou JSON.
+- Identificação e endereços, numeração/série e NCM/CFOP, CST/CSOSN, origem, CST PIS/COFINS são campos da interface. Valores comerciais vêm do snapshot canônico da OS/venda e são imutáveis.
+- Quando a tributação exige cálculo, a interface recebe base e alíquota **revisadas**, calcula o imposto em centavos e o backend confere diferenças acima de 1 centavo. Não preenche alíquotas nem escolhe códigos automaticamente.
+- O guard valida destino × CFOP, regime × CST/CSOSN, códigos reconhecidos, PIS/COFINS, ausência de grupos IBS/CBS parciais e coerência CST × cClassTrib. Para o grupo IBS/CBS, o cálculo automatizado cobre apenas CST `000` sem redução, diferimento ou monofasia; outros casos são **bloqueados para revisão especializada**, não declarados isentos.
+- NFC-e exige grupo de pagamento explicitamente revisado. RS exige informações de integração/credenciadora e autorização em operações aplicáveis, conforme contrato regional.
+- As seções ACBr são compiladas para arquivo local privado com manifesto vinculado ao hash de snapshot, valor e emitente. Não se exporta certificado, PIN, CSC ou segredo.
+- Esta revisão **não** certifica a tabela completa de NCM/CFOP por mercadoria, o enquadramento material, créditos e benefícios fiscais, validação dinâmica da tabela oficial `cClassTrib`, os regimes especiais de ICMS/IBS/CBS ou layouts NFS-e municipais. Esses casos precisam de parametrização contábil e testes adicionais. Sem prova real de transmissão/retorno, não divulgar como emissor homologado.
 
 ## Gates de distribuição
 

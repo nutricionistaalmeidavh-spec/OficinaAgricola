@@ -16,6 +16,10 @@ Write-Host '[4/10] Build web/backend...'
 npm run build
 if ($LASTEXITCODE -ne 0) { throw 'Build falhou.' }
 
+Write-Host 'Verificando tabelas oficiais NCM, CFOP e IBS/CBS embarcadas...'
+node scripts/assert-fiscal-data-bundle.mjs --dist
+if ($LASTEXITCODE -ne 0) { throw 'Instalador bloqueado: catálogo fiscal oficial ausente, inválido ou desatualizado.' }
+
 Write-Host '[5/10] E2E...'
 npm run test:e2e
 if ($LASTEXITCODE -ne 0) { throw 'E2E falhou.' }

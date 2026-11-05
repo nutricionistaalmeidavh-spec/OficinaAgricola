@@ -240,6 +240,16 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
    const checklist=path.match(/^\/v1\/checklists\/([1-9]\d*)$/);
    if(checklist&&method==='GET')
      return json(await services.getWorkOrderChecklist(Number(checklist[1])));
+   if(path==='/v1/fiscal/tax/profiles'&&method==='GET')
+     return json(await services.getFiscalTaxProfiles());
+   if(path==='/v1/fiscal/tax/profiles'&&method==='POST')
+     return json(await services.saveFiscalTaxProfile(await dataFrom(request,16384)));
+   const taxReview=path.match(/^\/v1\/fiscal\/([1-9]\d*)\/tax-review$/);
+   if(taxReview&&method==='GET')
+     return json(await services.getFiscalTaxReview(Number(taxReview[1])));
+   if(taxReview&&method==='POST')
+     return json(await services.saveFiscalTaxReview(
+       Number(taxReview[1]),await dataFrom(request,65536)));
    if(path==='/v1/fiscal/onboarding'&&method==='GET')
      return json(await services.getFiscalOnboardingStatus());
    if(path==='/v1/fiscal/certificate'&&method==='POST')
@@ -263,6 +273,10 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
      return json(await services.listFiscalDocuments({
        status:u.searchParams.get('status')||'',limit:u.searchParams.get('limit')||100
      }));
+   const fiscalReview=path.match(/^\/v1\/fiscal\/([1-9]\d*)\/review$/);
+   if(fiscalReview&&method==='POST')
+     return json(await services.saveFiscalTaxReview(
+       Number(fiscalReview[1]),await dataFrom(request)));
    const fiscal=path.match(/^\/v1\/fiscal\/([1-9]\d*)$/);
    if(fiscal&&method==='GET')
      return json(await services.getFiscalDocument(Number(fiscal[1])));
