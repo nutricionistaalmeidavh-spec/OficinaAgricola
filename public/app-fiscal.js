@@ -32,7 +32,7 @@ async function renderFiscal({cursor=null,loaded=[]}={}){
   }).join('');
   setContent('<div class="section-head fiscal-head"><div><h2>Documentos fiscais</h2>'+
     '<span class="muted">Rascunhos, notas e protocolos das ordens de serviço e vendas</span></div>'+
-    '<div class="action-row">'+(state.user.role==='ADMIN'?'<button id="fiscalSettings" class="btn">Configuração fiscal</button>':'')+
+    '<div class="action-row">'+(state.user.role==='ADMIN'?'<button id="fiscalSettings" class="btn">Configuração fiscal</button><button id="fiscalCertA1" class="btn">Certificado A1</button><button id="fiscalCertA3" class="btn">Token A3</button><button id="fiscalDiagnose" class="btn">Testar SEFAZ</button>':'')+
     '<button id="fiscalNew" class="btn primary">+ Preparar documento</button></div></div>'+
     '<div class="card"><p><strong>Cadastro fiscal:</strong> '+(settings.enabled?'Cadastro concluído':'Aguardando cadastro fiscal')+' · '+esc(settings.environment)+
     ' · CNPJ '+esc(settings.issuer_cnpj||'não informado')+'</p><p><strong>Emissão efetiva:</strong> exige certificado/credenciamento, classificação tributária e um emissor local validado. '+
@@ -41,6 +41,9 @@ async function renderFiscal({cursor=null,loaded=[]}={}){
     '<div class="list">'+(cards||'<div class="empty">Nenhum documento fiscal preparado.</div>')+'</div></div>');
   $('#fiscalNew').onclick=()=>fiscalDraftModal();
   if($('#fiscalSettings'))$('#fiscalSettings').onclick=()=>fiscalSettingsModal(settings);
+  if($('#fiscalCertA1'))$('#fiscalCertA1').onclick=()=>fiscalCertificateA1Modal();
+  if($('#fiscalCertA3'))$('#fiscalCertA3').onclick=()=>fiscalCertificateA3Modal();
+  if($('#fiscalDiagnose'))$('#fiscalDiagnose').onclick=()=>fiscalRunDiagnosis();
   $$('[data-fiscal-details]').forEach(b=>b.onclick=()=>showFiscalHistory(Number(b.dataset.fiscalDetails)).catch(e=>toast(e.message,true)));
   $$('[data-fiscal-submit]').forEach(b=>b.onclick=()=>fiscalAction(Number(b.dataset.fiscalSubmit),'submit'));
   $$('[data-fiscal-check]').forEach(b=>b.onclick=()=>fiscalAction(Number(b.dataset.fiscalCheck),'reconcile'));
@@ -49,6 +52,79 @@ async function renderFiscal({cursor=null,loaded=[]}={}){
    showPagedLoadMore({cursor:page.nextCursor,loaded:docs.length,total:page.total,onMore:()=>renderFiscal({cursor:page.nextCursor,loaded:docs})});
 }
 
+
+async function fiscalRunDiagnosis(){
+  try{
+    const result=await api('/api/fiscal/diagnose',{method:'POST',body:{}});
+    const status=result?.nfe?.status||'INDETERMINADO';
+    toast('SEFAZ NF-e: '+status+'. NFS-e exige homologação municipal. Diagnóstico não libera produção.',status!=='ONLINE');
+  }catch(error){toast(error.message||'Falha no diagnóstico SEFAZ',true)}
+}
+async function fiscalCertificateA1Modal(){
+  let current;
+  try{current=await api('/api/fiscal/onboarding')}
+  catch(error){toast(error.message,true);return}
+  const active=current.certificate?.configured
+    ?'Atual: '+esc(current.certificate.certificateType||'Certificado instalado')
+    :'Nenhum certificado selecionado para esta empresa.';
+  showModal('Certificado A1 — arquivo PFX/P12',
+    '<form class="form-stack">'+
+    '<p class="muted">'+active+'</p>'+
+    '<p class="muted">O certificado e sua senha ficam somente no armazenamento local privado da unidade; nenhum dado é salvo no navegador ou PostgreSQL.</p>'+
+    '<label>Arquivo PFX/P12<input name="certificateFile" type="file" accept=".pfx,.p12" required></label>'+
+    '<label>Senha do certificado<input name="certificatePassword" type="password" autocomplete="off" maxlength="256"></label>'+
+    '<button type="submit" class="btn primary">Instalar A1</button></form>',
+    async form=>{
+      const file=form.querySelector('[name="certificateFile"]')?.files?.[0];
+      const password=form.querySelector('[name="certificatePassword"]')?.value||'';
+      if(!file||file.size<1||file.size>3*1024*1024)
+        throw Error('Selecione um PFX/P12 de até 3 MB');
+      const encoded=await new Promise((resolve,reject)=>{
+        const reader=new FileReader();
+        reader.onload=()=>resolve(String(reader.result||'').split(',')[1]||'');
+        reader.onerror=()=>reject(Error('Não foi possível ler o certificado'));
+        reader.readAsDataURL(file);
+      });
+      await api('/api/fiscal/certificate',{method:'POST',body:{pfxBase64:encoded,password}});
+      form.querySelector('[name="certificatePassword"]').value='';
+      toast('Certificado A1 instalado no armazenamento local da unidade.');
+      await refreshCurrentPage();
+    });
+}
+async function fiscalCertificateA3Modal(){
+  try{
+    const status=await api('/api/fiscal/onboarding');
+    const certificates=await api('/api/fiscal/certificates');
+    const options=Array.isArray(certificates)?certificates:[];
+    const current=status.certificate?.certificateType==='A3'
+      ?'Certificado A3 selecionado: final '+esc(status.certificate.serialSuffix||'')
+      :'Nenhum token A3 selecionado.';
+    if(!options.length){
+      showModal('Cartão ou token A3',
+        '<p class="muted">'+current+'</p>'+
+        '<p>Nenhum certificado válido do CNPJ desta empresa foi localizado no Windows. Conecte o token/cartão, instale o driver da certificadora no Windows e abra novamente esta tela.</p>'+
+        '<p>O PIN é solicitado pelo driver do dispositivo, não pelo Oficina.</p>');
+      return;
+    }
+    showModal('Selecionar certificado A3',
+      '<form class="form-stack">'+
+      '<p class="muted">'+current+'</p>'+
+      '<p class="muted">Selecione o certificado da sua empresa instalado no Windows. O cartão/token continua conectado ao computador; o PIN é solicitado pelo driver no momento da operação.</p>'+
+      '<label>Certificado do Windows<select name="serial" required>'+
+      options.map(cert=>'<option value="'+esc(cert.serial)+'">'+
+        esc(cert.name||'Certificado')+' · '+esc(cert.serial.slice(-8))+
+        ' · validade '+esc(cert.validUntil||'')+'</option>').join('')+
+      '</select></label>'+
+      '<button type="submit" class="btn primary">Usar este certificado A3</button></form>',
+      async form=>{
+        const serial=form.querySelector('[name="serial"]')?.value||'';
+        const selected=await api('/api/fiscal/certificate/a3',{method:'POST',body:{serial}});
+        if(selected.certificateType!=='A3')throw Error('Seleção A3 não confirmada');
+        toast('Certificado A3 associado à empresa. Execute o diagnóstico SEFAZ antes da primeira nota.');
+        await refreshCurrentPage();
+      });
+  }catch(error){toast(error.message||'Não foi possível identificar certificado A3',true)}
+}
 function fiscalSettingsModal(current){
   const selected=(value,expected)=>value===expected?' selected':'';
   const safe=value=>esc(value||'');
