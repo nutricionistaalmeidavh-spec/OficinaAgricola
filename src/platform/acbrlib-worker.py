@@ -185,7 +185,7 @@ def assert_nfe_model(xml, req):
     uf = req.get("issuerUf")
     if uf and (uf not in UF_CODES or key[:2] != UF_CODES[uf]):
         raise ACBrError("UF da chave fiscal diverge do emitente")
-    if req["kind"] == "NFCE" and not uf:
+    if req.get("kind") == "NFCE" and not uf:
         raise ACBrError("NFC-e exige UF da empresa configurada")
     return key
 
