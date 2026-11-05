@@ -8,7 +8,7 @@
 - Geração assistida da DPS a partir do snapshot fiscal da OS, perfis de serviço e parâmetros declarados pelo responsável fiscal. O SDK monta XML, assina XMLDSig com o certificado A1 local e verifica a assinatura.
 - Restrita à homologação no gerador automático. Não infere regime, códigos municipais, ISS, IBS ou CBS.
 - Envio mTLS para SEFIN (`POST /nfse`) e consulta pela DPS e chave. Não existe repetição automática de POST após timeout.
-- Existe uma implementação de consulta de DANFSe pelo ADN, com mTLS A1 e validação de PDF, mas a API pública foi suspensa em 03/08/2026 (NT 008/2026 v1.02). A impressão fiscal compatível exige gerador próprio conforme leiaute vigente; esta implementação não conclui essa entrega.
+- DANFSe agora é produzido localmente com o XML oficial autorizado da NFS-e e QR Code com URL de consulta pública; o endpoint interno de PDF **não faz chamada** à API DANFSe suspensa em 03/08/2026 (NT 008/2026 v1.02). O módulo `src/platform/nfse-national-danfse.js` usa `qrcode-generator@2.0.4` MIT e `@xmldom/xmldom` MIT, sem SaaS. A revisão visual/regulatória contra o Anexo I (logomarca oficial e fontes especificadas) ainda precisa ser comprovada antes da distribuição fiscal.
 - Certificado A3 e emissão NF-e/NFC-e seguem os adaptadores ACBr existentes.
 
 ## Segurança e ativação
