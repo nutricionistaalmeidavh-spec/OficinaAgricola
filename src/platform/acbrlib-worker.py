@@ -216,7 +216,9 @@ def nfe_consult(lib, req):
     expect_amb = "2" if req["environment"] == "HOMOLOGACAO" else "1"
     if environment != expect_amb or re.sub(r"\D", "", cnpj) != req["issuerCnpj"]:
         raise ACBrError("XML de consulta com CNPJ ou ambiente divergente")
-    result = response(lib, "NFE_Consultar", (encoded(key), False),
+    # ACBrLib recebe caminho do XML ou conteúdo XML, nunca somente a chave.
+    # Extração de eventos habilitada para conciliação após timeout.
+    result = response(lib, "NFE_Consultar", (encoded(str(path)), True),
                       [ct.c_char_p, ct.c_bool])
     fields = parse_sections(result).get("CONSULTA", {})
     if fields.get("CSTAT") != "100" or fields.get("TPAMB") != expect_amb or not fields.get("NPROT"):
