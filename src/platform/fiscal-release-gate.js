@@ -75,35 +75,40 @@ export function buildFiscalReleaseStatus({
 }={}){
   const companyConfigured=Boolean(settings.enabled);
   const certificateReady=certificate?.configured===true&&validDigest(certificateIdentity);
-  const localProvider=providerName==='acbrlib-local'&&providerReady;
+  const localProvider=providerReady&&['acbrlib-local','sefin-nacional-direta'].includes(providerName);
   const issuerDigest=issuerEvidenceDigest(settings);
   const models={};
-  for(const kind of [...supportedModels,'NFSE']){
-    const proof=kind==='NFSE'?null:(Array.isArray(proofs)?proofs:[]).find(row=>
-      row.kind===kind&&row.provider_name==='acbrlib-local'&&
+  for(const kind of allModels){
+    const expectedProvider=kind==='NFSE'?'sefin-nacional-direta':'acbrlib-local';
+    const proof=(Array.isArray(proofs)?proofs:[]).find(row=>
+      row.kind===kind&&row.provider_name===expectedProvider&&
       row.status==='AUTORIZADA_HOMOLOGACAO'&&row.environment==='HOMOLOGACAO'&&
       row.issuer_digest===issuerDigest&&
       row.certificate_digest===certificateIdentity&&
       validDigest(row.xml_digest)&&typeof row.authorized_xml==='string'&&
       digest(row.authorized_xml)===row.xml_digest&&
-      officialNfeXml({xml:row.authorized_xml,
-        accessKey:row.access_key,protocol:row.protocol,cnpj:digits(settings.issuer_cnpj),kind})
+      (kind==='NFSE'?validNationalNfseReceipt({xml:row.authorized_xml,
+        key:row.access_key,protocol:row.protocol,cnpj:digits(settings.issuer_cnpj),environment:'HOMOLOGACAO'}):
+       officialNfeXml({xml:row.authorized_xml,
+        accessKey:row.access_key,protocol:row.protocol,cnpj:digits(settings.issuer_cnpj),kind}))
     );
     const homologationVerified=Boolean(proof);
-    const external=kind==='NFSE'
-      ?'NFS-e exige prova específica do emissor nacional/municipal'
+    const external=kind==='NFSE'&&providerName!=='sefin-nacional-direta'
+      ?'NFS-e Nacional exige emissor SEFIN direto desta empresa'
       :kind==='NFCE'&&settings.issuer_uf==='SC'
         ?'PAF-NFC-e de SC exige credenciamento e validação específica'
       :kind==='NFCE'&&settings.issuer_uf==='RS'
         ?'NFC-e no RS exige integração comprovada de pagamento eletrônico'
       :null;
-    const productionReady=companyConfigured&&certificateReady&&localProvider&&
+    const authorizedProvider=localProvider&&providerName===expectedProvider&&
+      (kind!=='NFSE'||certificate?.certificateType==='A1');
+    const productionReady=companyConfigured&&certificateReady&&authorizedProvider&&
       homologationVerified&&!external&&settings.environment==='PRODUCAO'&&
       Boolean(settings.production_confirmed);
     const reason=external||
       (!companyConfigured?'Cadastro fiscal incompleto':
       !certificateReady?'Certificado local ainda não validado':
-      !localProvider?'ACBr local indisponível':
+      !authorizedProvider?'Emissor fiscal local ou certificado A1 indisponível':
       !homologationVerified?'Falta autorização real em homologação para '+kind:
       settings.environment!=='PRODUCAO'?'Ambiente de homologação':
       !settings.production_confirmed?'Confirmação administrativa pendente':'Liberado para este modelo');
@@ -115,9 +120,9 @@ export function buildFiscalReleaseStatus({
   }
   return {
     companyConfigured,
-    authorizationVerified:supportedModels.some(k=>models[k].homologationVerified),
-    taxProfileVerified:supportedModels.some(k=>models[k].taxProfileVerified),
-    productionReady:supportedModels.some(k=>models[k].productionReady),
+    authorizationVerified:allModels.some(k=>models[k].homologationVerified),
+    taxProfileVerified:allModels.some(k=>models[k].taxProfileVerified),
+    productionReady:allModels.some(k=>models[k].productionReady),
     models
   };
 }
