@@ -109,7 +109,7 @@ test('rascunho NFS-e permite corrigir competência sem transmissões e preserva 
    assert.notEqual(corrected.snapshot_hash,draft.snapshot_hash);
    assert.equal(JSON.parse(corrected.snapshot_json).nfseRoute.channel,'MUNICIPAL');
    assert.equal(JSON.parse(corrected.snapshot_json).nfseRoute.competenceDate,'2026-10-31');
-   assert.equal((await ws.getFiscalEvents(draft.id)).at(-1).event_type,'COMPETENCIA_REVISADA');
+   assert.ok((await ws.getFiscalEvents(draft.id)).some(e=>e.event_type==='COMPETENCIA_REVISADA'),'revisão deve constar no histórico sem depender da ordem dos IDs');
    await assert.rejects(ws.submitFiscalDocument(draft.id),/canal|emissor/i);
    assert.equal(calls.length,0);
    await ws.reviseNfseDraftRoute(draft.id,{competenceDate:'2026-11-05'});
