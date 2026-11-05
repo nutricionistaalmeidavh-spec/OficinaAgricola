@@ -189,16 +189,109 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
      throw error;
    }
  }
+ async function getFiscalPdf(documentId){
+   const doc=await getFiscalDocument(documentId);
+   if(!['AUTORIZADA','AUTORIZADA_HOMOLOGACAO'].includes(doc.status))
+     fail('Somente documento autorizado e não cancelado permite DANFE/DANFSe',409);
+   if(!provider||typeof provider.printPdf!=='function')
+     fail('Emissor fiscal sem geração de PDF configurada',503);
+   const content=await provider.printPdf({document:doc});
+   if(!(Buffer.isBuffer(content)||content instanceof Uint8Array))
+     fail('Emissor fiscal não retornou PDF válido',502);
+   const pdf=Buffer.from(content);
+   if(pdf.length<8||pdf.length>6*1024*1024||pdf.subarray(0,5).toString('ascii')!=='%PDF-')
+     fail('Arquivo PDF fiscal inválido',502);
+   return pdf;
+ }
+ async function finishFiscalCancellation(documentId,attemptId,result,providerName){
+   const doc=await getFiscalDocument(documentId);
+   if(doc.status!=='INDETERMINADO'||doc.attempt_id!==attemptId)
+     fail('Tentativa de cancelamento fiscal conflitante',409);
+   const marker=JSON.parse(doc.response_json||'{}');
+   if(marker.operation!=='CANCEL')fail('Operação fiscal não é cancelamento',409);
+   if(clean(result?.status).toUpperCase()!=='CANCELADA'){
+     await uncertain(doc.id,'Cancelamento não confirmado pelo fisco; somente consulta é permitida');
+     return getFiscalDocument(doc.id);
+   }
+   const environment=clean(result.environment),accessKey=clean(result.accessKey),
+     protocol=clean(result.protocol),receiptXml=clean(result.xml);
+   if(environment!==doc.environment||accessKey!==doc.access_key||
+       !protocol||!receiptXml.startsWith('<')||receiptXml.length>4*1024*1024)
+     fail('Comprovante de cancelamento divergente ou incompleto',409);
+   const at=now();
+   const receipt={operation:'CANCEL',status:'CANCELADA',provider:providerName,
+     environment,accessKey,cancellationProtocol:protocol,cancellationXml:receiptXml};
+   const update={sql:`UPDATE fiscal_documents
+     SET status='CANCELADA',response_json=?,last_error='',updated_at=?
+     WHERE id=? AND status='INDETERMINADO' AND attempt_id=?`,
+     params:[JSON.stringify(receipt),at,doc.id,attemptId]};
+   const event={sql:`INSERT INTO fiscal_events(id,document_id,event_type,details_json,created_at)
+     VALUES(?,?,?,?,?)`,params:[nextId(),doc.id,'CANCELADA',
+       JSON.stringify({protocol,accessKey,provider:providerName}),at]};
+   if(port.engine==='d1'){
+     const rows=await port.batch([update,{sql:event.sql.replace('VALUES(?,?,?,?,?)',
+       'SELECT ?,?,?,?,? WHERE changes()=1'),params:event.params}]);
+     if(changed(rows[0])!==1)fail('Cancelamento já conciliado',409);
+   }else await port.transaction(async tx=>{
+     if(changed(await tx.run(update.sql,update.params))!==1)fail('Cancelamento já conciliado',409);
+     await tx.run(event.sql,event.params);
+   });
+   return getFiscalDocument(doc.id);
+ }
+ async function cancelFiscalDocument(documentId,{reason}={}){
+   const doc=await getFiscalDocument(documentId);
+   if(!['AUTORIZADA','AUTORIZADA_HOMOLOGACAO'].includes(doc.status))
+     fail('Somente nota autorizada pode ser cancelada; operação indeterminada exige consulta',409);
+   if(!provider||typeof provider.cancel!=='function'||typeof provider.consultCancellation!=='function')
+     fail('Cancelamento fiscal indisponível no emissor configurado',503);
+   const justification=clean(reason);
+   if(justification.length<15||justification.length>255||/[\\r\\n]/.test(justification))
+     fail('Justificativa de cancelamento deve ter 15 a 255 caracteres, em uma linha');
+   const issuer=JSON.parse(doc.issuer_snapshot_json||'{}');
+   if(!issuer?.cnpj||!doc.access_key||!doc.protocol||!doc.authorized_xml)
+     fail('Documento sem identificação fiscal autorizada',409);
+   if(typeof provider.prepareCancellation==='function')
+     await provider.prepareCancellation({document:doc,issuer,reason:justification});
+   const attemptId=randomUUID(),at=now(),providerName=clean(provider.name)||'local';
+   const update={sql:`UPDATE fiscal_documents SET
+     status='INDETERMINADO',attempt_id=?,response_json=?,last_error='',updated_at=?
+     WHERE id=? AND status=?`,params:[attemptId,JSON.stringify({
+       operation:'CANCEL',startedAt:at,reasonHash:sha(justification)
+     }),at,doc.id,doc.status]};
+   const event={sql:`INSERT INTO fiscal_events(id,document_id,event_type,details_json,created_at)
+     VALUES(?,?,?,?,?)`,params:[nextId(),doc.id,'CANCELAMENTO_INICIADO',
+       JSON.stringify({attemptId,reason:justification,provider:providerName}),at]};
+   if(port.engine==='d1'){
+     const rows=await port.batch([update,{sql:event.sql.replace('VALUES(?,?,?,?,?)',
+       'SELECT ?,?,?,?,? WHERE changes()=1'),params:event.params}]);
+     if(changed(rows[0])!==1)fail('Cancelamento já em processamento',409);
+   }else await port.transaction(async tx=>{
+     if(changed(await tx.run(update.sql,update.params))!==1)
+       fail('Cancelamento já em processamento',409);
+     await tx.run(event.sql,event.params);
+   });
+   try{
+     const result=await provider.cancel({document:await getFiscalDocument(doc.id),
+       attemptId,reason:justification});
+     return await finishFiscalCancellation(doc.id,attemptId,result,providerName);
+   }catch(error){await uncertain(doc.id,error?.message||error);throw error;}
+ }
  async function reconcileFiscalDocument(documentId){
    const doc=await getFiscalDocument(documentId);
    if(doc.status!=='INDETERMINADO')fail('Somente documentos indeterminados podem ser consultados',409);
-   if(!provider||typeof provider.consult!=='function')
+   const marker=JSON.parse(doc.response_json||'{}');
+   const cancel=marker.operation==='CANCEL';
+   const method=cancel?'consultCancellation':'consult';
+   if(!provider||typeof provider[method]!=='function')
      fail('Consulta fiscal do emissor não configurada',503);
    let result;
-   try{result=await provider.consult({document:doc,attemptId:doc.attempt_id});}
+   try{result=await provider[method]({document:doc,attemptId:doc.attempt_id});}
    catch(error){await uncertain(doc.id,error?.message||error);throw error;}
-   return applyResult(doc.id,doc.attempt_id,result,clean(provider.name)||'local');
+   return cancel
+     ?finishFiscalCancellation(doc.id,doc.attempt_id,result,clean(provider.name)||'local')
+     :applyResult(doc.id,doc.attempt_id,result,clean(provider.name)||'local');
  }
  return Object.freeze({getFiscalSettings,setFiscalSettings,getFiscalDocument,
-   getFiscalEvents,listFiscalDocuments,submitFiscalDocument,reconcileFiscalDocument});
+   getFiscalEvents,listFiscalDocuments,submitFiscalDocument,reconcileFiscalDocument,
+   cancelFiscalDocument,getFiscalPdf});
 }
