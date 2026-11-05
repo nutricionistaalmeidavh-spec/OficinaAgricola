@@ -54,7 +54,9 @@ export function loadFiscalCatalog({path,now=new Date().toISOString().slice(0,10)
  if(new Set(tables.ncm).size!==tables.ncm.length||new Set(tables.cfop).size!==tables.cfop.length)
    fail('Catálogo fiscal contém códigos duplicados');
  for(const ncm of tables.ncm)code(ncm,/^\d{8}$/,'NCM');
- for(const cfop of tables.cfop)code(cfop,/^[567]\d{3}$/,'CFOP');
+ // A fonte oficial traz todos os CFOP de entrada (1/2/3) e saída (5/6/7).
+ // A emissão continua validando somente CFOP de saída no documento.
+ for(const cfop of tables.cfop)code(cfop,/^[123567]\d{3}$/,'CFOP');
  const rows=new Set();
  for(const item of tables.ibscbs){
   if(!item||typeof item!=='object')fail('Registro IBS/CBS inválido');
