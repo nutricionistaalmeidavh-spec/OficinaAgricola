@@ -106,6 +106,8 @@ export function resolveTenantFiscalProvider({
       listTaxProfiles:args=>{ensureIssuer(args);return underlying.listTaxProfiles(args)}}:{}),
     ...(typeof underlying.saveTaxProfile==='function'?{
       saveTaxProfile:args=>{ensureIssuer(args);return underlying.saveTaxProfile(args)}}:{}),
+    ...(typeof underlying.prepareAutomaticNationalDps==='function'?{
+      prepareAutomaticNationalDps:args=>{ensureIssuer(args);return underlying.prepareAutomaticNationalDps(args)}}:{}),
     ...(typeof underlying.saveNationalDps==='function'?{
       saveNationalDps:args=>{ensureIssuer(args);return underlying.saveNationalDps(args)}}:{}),
     ...(typeof underlying.nationalDpsStatus==='function'?{
