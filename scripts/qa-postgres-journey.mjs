@@ -16,7 +16,8 @@ const server=spawn(process.execPath,['src/start-postgres-unified.js'],{env:{...p
   OFICINA_POSTGRES_OPERATIONS_URL:process.env.POSTGRES_TEST_URL,
   OFICINA_POSTGRES_PORT:'3350',OFICINA_REGISTRY_NEW_INSTALL:'true',
   OFICINA_POSTGRES_PROVISION_NEW_UNITS:'true',OFICINA_POSTGRES_SCHEMA_PREFIX:'qaui',
-  OFICINA_POSTGRES_STORAGE_ROOT:path.join(output,'storage')},stdio:['ignore','pipe','pipe']});
+  OFICINA_POSTGRES_STORAGE_ROOT:path.join(output,'storage'),
+  OFICINA_QA_NATIVE_DEBUG:'1'},stdio:['ignore','pipe','pipe']});
 server.stdout.on('data',chunk=>logs.push(String(chunk)));server.stderr.on('data',chunk=>logs.push(String(chunk)));
 let browser,context,page;
 const screenshot=name=>page.screenshot({path:path.join(output,name+'.png'),fullPage:true});
@@ -88,6 +89,8 @@ try{
   await screenshot('06-venda-confirmada');assert.deepEqual(errors,[]);
   await writeFile(path.join(output,'summary.json'),JSON.stringify({status:'passed',engine:'postgres',viewport:viewportName,checks:['first-admin-ui','contextual-customer-machine-order','diagnosis-save-twice','sale-preview','price-conflict-no-write','sale-confirmed-stock-once']},null,2));
 }catch(error){
+  const diagnostic=logs.join('').split(/\r?\n/).filter(line=>line.includes('[qa-native-error]')).slice(-8);
+  if(diagnostic.length)console.error('SQL QA trace:\n'+diagnostic.join('\n'));
   if(page)await screenshot('failure').catch(()=>{});
   await writeFile(path.join(output,'summary.json'),JSON.stringify({status:'failed',error:error.message,errors},null,2));throw error;
 }finally{

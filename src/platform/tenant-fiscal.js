@@ -70,6 +70,18 @@ export function resolveTenantFiscalProvider({
   };
   return Object.freeze({
     name:underlying.name||('tenant-'+cfg.type),
+    ...(typeof underlying.certificateStatus==='function'?{
+      certificateStatus:()=>underlying.certificateStatus()}:{}),
+    ...(typeof underlying.certificateIdentity==='function'?{
+      certificateIdentity:()=>underlying.certificateIdentity()}:{}),
+    ...(typeof underlying.installCertificate==='function'?{
+      installCertificate:input=>underlying.installCertificate(input)}:{}),
+    ...(typeof underlying.listCertificates==='function'?{
+      listCertificates:input=>underlying.listCertificates(input)}:{}),
+    ...(typeof underlying.selectA3Certificate==='function'?{
+      selectA3Certificate:input=>underlying.selectA3Certificate(input)}:{}),
+    ...(typeof underlying.diagnose==='function'?{
+      diagnose:input=>underlying.diagnose(input)}:{}),
     nfseChannel:cfg.nfseChannel||null,
     nfseMunicipalityIbge:cfg.nfseMunicipalityIbge||null,
     ...(typeof underlying.prepare==='function'?{prepare:args=>{ensureIssuer(args);return underlying.prepare(args);}}:{}),

@@ -14,12 +14,27 @@ function fiscalDisplayTitle(doc){
 
 async function renderFiscal({cursor=null,loaded=[]}={}){
   pageTitle('Fiscal','DOCUMENTOS E CONCILIAÇÃO');
-  const [page,settings]=await Promise.all([api('/api/fiscal/page?limit=50'+(cursor?'&cursor='+encodeURIComponent(cursor):'')),api('/api/fiscal/settings')]);const docs=loaded.concat(page.items);
+  const [page,settings,readinessReply]=await Promise.all([
+    api('/api/fiscal/page?limit=50'+(cursor?'&cursor='+encodeURIComponent(cursor):'')),
+    api('/api/fiscal/settings'),
+    api('/api/fiscal/onboarding').catch(error=>({
+      unavailable:true,models:{},reason:error?.message||'Consulta de prontidão indisponível'
+    }))
+  ]);
+  // Compatibilidade: a ausência de leitura do gate nunca habilita produção.
+  const readiness=readinessReply&&typeof readinessReply==='object'
+    ?readinessReply:{unavailable:true,models:{}};
+  const docs=loaded.concat(page.items);
   const cards=docs.map(d=>{
     const origin=d.origin_type==='OS'?'OS':'Venda';
     const needsCompetence=d.kind==='NFSE'&&!fiscalSnapshot(d).nfseRoute;
+    const productionPending=settings.environment==='PRODUCAO'&&
+      readiness.models?.[d.kind]?.productionReady!==true;
     const actions=d.status==='RASCUNHO'&&settings.enabled&&!needsCompetence
-      ? '<button class="btn sm" data-fiscal-submit="'+d.id+'">Transmitir</button>'
+      ?productionPending
+        ? '<small class="muted" role="status">'+esc(readiness.models?.[d.kind]?.reason||
+            'Emissão em produção ainda não habilitada')+'</small>'
+        :'<button class="btn sm" data-fiscal-submit="'+d.id+'">Transmitir</button>'
       : d.status==='INDETERMINADO'
         ? '<button class="btn sm" data-fiscal-check="'+d.id+'">Consultar situação</button>'
         : '';
@@ -37,12 +52,31 @@ async function renderFiscal({cursor=null,loaded=[]}={}){
       '<br><small>'+esc(d.status)+' · '+money(d.amount_cents)+'</small>'+routeText+'</div><div class="action-row">'+
       '<button class="btn sm soft" data-fiscal-details="'+d.id+'">Histórico</button>'+revise+(d.status==='RASCUNHO'&&d.kind!=='NFSE'?'<button class="btn sm soft" data-fiscal-tax-review="'+d.id+'">Revisar tributos</button>':'')+pdf+cancel+actions+'</div></div>';
   }).join('');
+  const modelLabels={NFE:'NF-e',NFCE:'NFC-e',NFSE:'NFS-e'};
+  // Etapas editoriais; a autorização continua exclusiva do backend por modelo.
+  const modelsSummary=Object.entries(modelLabels).map(([kind,title])=>{
+    const model=readiness.models?.[kind];
+    const configured=settings.enabled===true;
+    const verified=model?.homologationVerified===true;
+    const released=model?.productionReady===true;
+    const stage=(number,label,done,detail)=>'<li><strong>'+number+'. '+label+'</strong> — '+
+      (done?'Concluído':esc(detail))+'</li>';
+    return '<section class="card" aria-label="Etapas de emissão '+title+'">'+
+      '<h3>'+title+'</h3><ol>'+
+      stage(1,'Configurar dados fiscais',configured,'Preencha os dados da empresa e o certificado')+
+      stage(2,'Testar em homologação',verified,model?.reason||'É necessária uma nota de teste autorizada')+
+      stage(3,'Habilitar produção',released,verified?'Confirme os requisitos de produção':'Conclua a homologação primeiro')+
+      '</ol><small class="muted">'+(released?'Pronta para tentar emitir; cada nota ainda será validada.':
+        'A emissão em produção continua protegida até a validação do sistema.')+'</small></section>';
+  }).join('');
   setContent('<div class="section-head fiscal-head"><div><h2>Documentos fiscais</h2>'+
     '<span class="muted">Rascunhos, notas e protocolos das ordens de serviço e vendas</span></div>'+
     '<div class="action-row">'+(state.user.role==='ADMIN'?'<button id="fiscalSettings" class="btn">Configuração fiscal</button><button id="fiscalTaxProfiles" class="btn">Perfis tributários</button><button id="fiscalCertA1" class="btn">Certificado A1</button><button id="fiscalCertA3" class="btn">Token A3</button><button id="fiscalDiagnose" class="btn">Testar SEFAZ</button>':'')+
     '<button id="fiscalNew" class="btn primary">+ Preparar documento</button></div></div>'+
     '<div class="card"><p><strong>Cadastro fiscal:</strong> '+(settings.enabled?'Cadastro concluído':'Aguardando cadastro fiscal')+' · '+esc(settings.environment)+
-    ' · CNPJ '+esc(settings.issuer_cnpj||'não informado')+'</p><p><strong>Emissão efetiva:</strong> exige certificado/credenciamento, classificação tributária e um emissor local validado. '+
+    ' · CNPJ '+esc(settings.issuer_cnpj||'não informado')+'</p>'+
+    '<div class="fiscal-model-steps">'+modelsSummary+'</div>'+
+    '<p><strong>Emissão efetiva:</strong> exige certificado/credenciamento, classificação tributária e um emissor local validado. '+
     'Um rascunho ou um envio sem confirmação não substitui NF-e, NFC-e ou NFS-e autorizada.</p></div>'+
     '<div class="card"><div class="card-head"><h2>Registro fiscal</h2><small>'+docs.length+' documento(s) recente(s)</small></div>'+
     '<div class="list">'+(cards||'<div class="empty">Nenhum documento fiscal preparado.</div>')+'</div></div>');

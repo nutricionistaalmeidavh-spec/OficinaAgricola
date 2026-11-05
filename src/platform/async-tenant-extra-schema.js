@@ -31,6 +31,7 @@ export const ADDITIONAL_TENANT_TABLES = Object.freeze([
   "CREATE TABLE IF NOT EXISTS fleet_vehicles (fleet_id INTEGER NOT NULL REFERENCES fleets(id),machine_id INTEGER NOT NULL REFERENCES machines(id),created_at TEXT NOT NULL,PRIMARY KEY(fleet_id,machine_id))",
   "CREATE TABLE IF NOT EXISTS technical_references (id INTEGER PRIMARY KEY AUTOINCREMENT,part_id INTEGER NOT NULL REFERENCES parts(id),manufacturer TEXT NOT NULL DEFAULT '',oem_code TEXT NOT NULL DEFAULT '',reference_code TEXT NOT NULL DEFAULT '',notes TEXT NOT NULL DEFAULT '',verified INTEGER NOT NULL DEFAULT 0 CHECK(verified=0),created_at TEXT NOT NULL)",
   "CREATE TABLE IF NOT EXISTS quote_approval_links (id INTEGER PRIMARY KEY AUTOINCREMENT,work_order_id INTEGER NOT NULL REFERENCES work_orders(id),token_hash TEXT NOT NULL UNIQUE,quote_digest TEXT NOT NULL,expires_at TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'ATIVO' CHECK(status IN ('ATIVO','APROVADO','REJEITADO','REVOGADO')),created_at TEXT NOT NULL,responded_at TEXT)",
+  "CREATE TABLE IF NOT EXISTS fiscal_homologation_evidence(\n document_id INTEGER PRIMARY KEY REFERENCES fiscal_documents(id),\n kind TEXT NOT NULL CHECK(kind IN ('NFE','NFCE')),\n issuer_digest TEXT NOT NULL,certificate_digest TEXT NOT NULL,\n xml_digest TEXT NOT NULL,provider_name TEXT NOT NULL,\n created_at TEXT NOT NULL\n)",
   "CREATE TABLE IF NOT EXISTS fiscal_settings(\n id INTEGER PRIMARY KEY CHECK(id=1),\n enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0,1)),\n environment TEXT NOT NULL DEFAULT 'HOMOLOGACAO' CHECK(environment IN ('HOMOLOGACAO','PRODUCAO')),\n issuer_cnpj TEXT NOT NULL DEFAULT '',issuer_uf TEXT NOT NULL DEFAULT '',\n municipality_ibge TEXT NOT NULL DEFAULT '',tax_regime TEXT NOT NULL DEFAULT '',\n state_registration TEXT NOT NULL DEFAULT '',municipal_registration TEXT NOT NULL DEFAULT '',\n production_confirmed INTEGER NOT NULL DEFAULT 0 CHECK(production_confirmed IN (0,1)),\n updated_at TEXT NOT NULL\n)"
 ]);
 
@@ -87,6 +88,7 @@ export const ADDITIONAL_TENANT_INDEXES = Object.freeze([
   "CREATE INDEX IF NOT EXISTS idx_sale_items_sale ON sale_items(sale_id,id)",
   "CREATE INDEX IF NOT EXISTS idx_cash_sessions_status_id ON cash_sessions(status,id DESC)",
   "CREATE INDEX IF NOT EXISTS idx_cash_movements_created ON cash_movements(created_at)",
+  "CREATE INDEX IF NOT EXISTS idx_fiscal_homologation_issuer_cert ON fiscal_homologation_evidence(issuer_digest,certificate_digest,kind)",
   "CREATE INDEX IF NOT EXISTS idx_fiscal_documents_status ON fiscal_documents(status,created_at)",
   "CREATE INDEX IF NOT EXISTS idx_fiscal_events_document ON fiscal_events(document_id,id)",
   "CREATE INDEX IF NOT EXISTS idx_crm_due ON crm_tasks(status,due_at)",
