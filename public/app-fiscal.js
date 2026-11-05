@@ -14,10 +14,16 @@ function fiscalDisplayTitle(doc){
 
 async function renderFiscal({cursor=null,loaded=[]}={}){
   pageTitle('Fiscal','DOCUMENTOS E CONCILIAÇÃO');
-  const [page,settings,readiness]=await Promise.all([
+  const [page,settings,readinessReply]=await Promise.all([
     api('/api/fiscal/page?limit=50'+(cursor?'&cursor='+encodeURIComponent(cursor):'')),
-    api('/api/fiscal/settings'),api('/api/fiscal/onboarding')
+    api('/api/fiscal/settings'),
+    api('/api/fiscal/onboarding').catch(error=>({
+      unavailable:true,models:{},reason:error?.message||'Consulta de prontidão indisponível'
+    }))
   ]);
+  // Compatibilidade: a ausência de leitura do gate nunca habilita produção.
+  const readiness=readinessReply&&typeof readinessReply==='object'
+    ?readinessReply:{unavailable:true,models:{}};
   const docs=loaded.concat(page.items);
   const cards=docs.map(d=>{
     const origin=d.origin_type==='OS'?'OS':'Venda';
