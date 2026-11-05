@@ -49,7 +49,7 @@ async function renderFiscal({cursor=null,loaded=[]}={}){
   $('#fiscalNew').onclick=()=>fiscalDraftModal();
   if($('#fiscalSettings'))$('#fiscalSettings').onclick=()=>fiscalSettingsModal(settings);
   if($('#fiscalTaxProfiles'))$('#fiscalTaxProfiles').onclick=()=>fiscalTaxProfilesModal();
-  $('[data-fiscal-tax-review]').forEach(button=>button.onclick=()=>fiscalTaxReviewModal(Number(button.dataset.fiscalTaxReview)).catch(e=>toast(e.message,true)));
+  $$('[data-fiscal-tax-review]').forEach(button=>button.onclick=()=>fiscalTaxReviewModal(Number(button.dataset.fiscalTaxReview)).catch(e=>toast(e.message,true)));
   if($('#fiscalCertA1'))$('#fiscalCertA1').onclick=()=>fiscalCertificateA1Modal();
   if($('#fiscalCertA3'))$('#fiscalCertA3').onclick=()=>fiscalCertificateA3Modal();
   if($('#fiscalDiagnose'))$('#fiscalDiagnose').onclick=()=>fiscalRunDiagnosis();
