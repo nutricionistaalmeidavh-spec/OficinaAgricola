@@ -95,8 +95,8 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
  }
  async function saveFiscalTaxReview(documentId,input={}){
    const document=await getFiscalDocument(documentId);
-   if(document.kind!=='NFE'||document.status!=='RASCUNHO')
-     fail('Somente rascunho NF-e permite revisar tributação',409);
+   if(!['NFE','NFCE'].includes(document.kind)||document.status!=='RASCUNHO')
+     fail('Somente rascunho NF-e/NFC-e permite revisar tributação',409);
    const settings=await getFiscalSettings();
    if(!settings.enabled||document.environment!==settings.environment)
      fail('Cadastro fiscal/ambiente divergente do documento',409);
