@@ -21,7 +21,7 @@ export function tenantSchemaName(unit,{prefix='oficina'}={}){
 }
 export function createPostgresTenantRuntimeFactory({
  Pool,connectionString,registry,serviceToken,allowProvision=false,
- schemaPrefix='oficina',objectStoreForUnit=null,localStorageRoot=null,paymentOptionsForUnit=null
+ schemaPrefix='oficina',objectStoreForUnit=null,localStorageRoot=null,paymentOptionsForUnit=null,fiscalProviderForUnit=null
 }={}){
  if(typeof Pool!=='function'||typeof connectionString!=='string'||!connectionString.trim())
    throw Error('PostgreSQL exige pool e URL operacional explícitos');
@@ -77,7 +77,9 @@ export function createPostgresTenantRuntimeFactory({
         }):null;
      const paymentOptions=typeof paymentOptionsForUnit==='function'
        ?paymentOptionsForUnit(unit,port):{};
-     const services=createAsyncWorkshopServices(port,{objectStore,paymentOptions});
+     const fiscalProvider=typeof fiscalProviderForUnit==='function'
+       ?await fiscalProviderForUnit(unit,port):null;
+     const services=createAsyncWorkshopServices(port,{objectStore,paymentOptions,fiscalProvider});
       const stopReminders=startBillingReminderScheduler(services,{onError:error=>
        console.error('[postgres-reminders]',error.message)});
      const nativeHandler=createAsyncWorkshopHandler({

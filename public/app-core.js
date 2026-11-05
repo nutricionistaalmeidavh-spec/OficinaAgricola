@@ -194,7 +194,7 @@ function trackDirtyInputs(host){
 const money=c=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(c||0)/100);
 const dt=v=>v?new Date(v).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'}):'—';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
-async function api(path,{method='GET',body,raw=false}={}){
+async function api(path,{method='GET',body,raw=false,binary=false}={}){
   const headers=window.OficinaTenant?.headers()||{};
   if(path==='/api/auth/login')headers['X-Session-Transport']='cookie';
   if(body!==undefined)headers['Content-Type']='application/json';
@@ -206,6 +206,11 @@ async function api(path,{method='GET',body,raw=false}={}){
     :await requester(path,{method,headers,signal,body:body===undefined?undefined:JSON.stringify(body)});
   if(isRead&&(signal?.aborted||epoch!==state.pageEpoch))throw new DOMException('Consulta obsoleta','AbortError');
   if(res.status===401){logout();throw new Error('Sessão expirada')}
+  if(binary&&res.ok){
+    const bytes=new Uint8Array(await res.arrayBuffer());
+    if(isRead&&(signal?.aborted||epoch!==state.pageEpoch))throw new DOMException('Consulta obsoleta','AbortError');
+    return bytes;
+  }
   const text=await res.text();
   if(isRead&&(signal?.aborted||epoch!==state.pageEpoch))throw new DOMException('Consulta obsoleta','AbortError');
   if(!res.ok){let msg=text;try{msg=JSON.parse(text).error}catch{}throw new Error(msg||'Erro na operação')}

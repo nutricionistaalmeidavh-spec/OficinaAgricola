@@ -65,6 +65,14 @@ export function resolveTenantFiscalProvider({
     name:underlying.name||('tenant-'+cfg.type),
     ...(typeof underlying.prepare==='function'?{prepare:args=>{ensureIssuer(args);return underlying.prepare(args);}}:{}),
     transmit:async args=>{ensureIssuer(args);return underlying.transmit(args);},
-    consult:async args=>{ensureIssuer(args);return underlying.consult(args);}
+    consult:async args=>{ensureIssuer(args);return underlying.consult(args);},
+    ...(typeof underlying.cancel==='function'?{
+      cancel:async args=>{ensureIssuer(args);return underlying.cancel(args);}}:{}),
+    ...(typeof underlying.consultCancellation==='function'?{
+      consultCancellation:async args=>{ensureIssuer(args);return underlying.consultCancellation(args);}}:{}),
+    ...(typeof underlying.prepareCancellation==='function'?{
+      prepareCancellation:args=>{ensureIssuer(args);return underlying.prepareCancellation(args);}}:{}),
+    ...(typeof underlying.printPdf==='function'?{
+      printPdf:async args=>{ensureIssuer(args);return underlying.printPdf(args);}}:{})
   });
 }

@@ -51,6 +51,7 @@ async function startPostgresDesktop(){
       OFICINA_POSTGRES_STORAGE_ROOT:join(root,'storage','postgres'),
       OFICINA_POSTGRES_PROVISION_NEW_UNITS:'true',
       OFICINA_POSTGRES_MANAGED_LOCAL:'true',
+      OFICINA_BUNDLED_FISCAL_VERIFIED:fiscal.active?'true':'false',
       OFICINA_REGISTRY_NEW_INSTALL:config.newInstall?'true':'false'
     };
     postgresBackend=spawn(process.execPath,[entry],{

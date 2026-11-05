@@ -9,8 +9,10 @@ test('native bridge uses only explicitly supported paths, never a generic /api t
  assert.equal(mapLegacyNativeRoute('GET','/api/inventory/low-stock')?.path,'/v1/parts/low-stock');
  for(const route of ['/api/diagnostics/hardware','/api/public/approval/abcdef','/api/unsupported-page',
   '/api/commands/status','/api/work-orders/3/documents/orcamento/pdf',
-  '/api/customers/3/../expenses','/api/fiscal/1/pdf'])
+  '/api/customers/3/../expenses'])
   assert.equal(mapLegacyNativeRoute('GET',route),null,route);
+ assert.equal(mapLegacyNativeRoute('GET','/api/fiscal/1/pdf')?.path,'/v1/fiscal/1/pdf');
+ assert.deepEqual(mapLegacyNativeRoute('POST','/api/fiscal/1/cancel')?.roles,['ADMIN']);
  assert.equal(mapLegacyNativeRoute('DELETE','/api/customers'),null);
 });
 test('native bridge preserves status and converts legacy receipt and inventory commands',()=>{

@@ -4,7 +4,8 @@ import {fileURLToPath} from 'node:url';
 // Self-hosted R$0; PostgreSQL embarcado no instalador Windows.
 import {createServer} from 'node:http';
 import {readFile,stat} from 'node:fs/promises';
-import {resolve,extname,sep} from 'node:path';
+import {mkdirSync,writeFileSync,existsSync} from 'node:fs';
+import {resolve,extname,sep,join} from 'node:path';
 import {randomBytes} from 'node:crypto';
 import {createCommonDataAdapter} from './platform/common-data-adapter.js';
 import {createPostgresTenantRegistry} from './platform/async-postgres-registry.js';
@@ -12,6 +13,8 @@ import {createPostgresTenantRuntimeFactory} from './platform/postgres-tenant-run
 import {createPostgresUnifiedGateway} from './platform/postgres-unified-gateway.js';
 import {loadTenantPaymentConfigs,resolveTenantPaymentOptions} from './platform/tenant-payment.js';
 import {loadTenantReminderSenders} from './platform/tenant-reminder-smtp.js';
+import {loadTenantFiscalConfigs,resolveTenantFiscalProvider} from './platform/tenant-fiscal.js';
+import {createAcbrLibFiscalProvider} from './platform/acbrlib-fiscal-provider.js';
 
 const registryUrl=process.env.OFICINA_POSTGRES_REGISTRY_URL;
 const operationsUrl=process.env.OFICINA_POSTGRES_OPERATIONS_URL;
@@ -62,6 +65,48 @@ async function staticAsset(url,res){
 }
 const tenantPaymentConfigs=loadTenantPaymentConfigs(process.env.TENANCY_PAYMENT_CONFIG_FILE);
 const reminderSenderForUnit=loadTenantReminderSenders(process.env.TENANCY_REMINDER_SMTP_CONFIG_FILE);
+
+const tenantFiscalConfigs=loadTenantFiscalConfigs(process.env.TENANCY_FISCAL_CONFIG_FILE);
+function fiscalProviderForUnit(unit){
+  // Explicit company-level fiscal configuration is opt-in. Never inherit an
+  // issuer's credentials, fiscal provider or CNPJ from another company.
+  if(Object.hasOwn(tenantFiscalConfigs,String(unit.companyId)))
+    return resolveTenantFiscalProvider({companyId:unit.companyId,configs:tenantFiscalConfigs});
+  // The bundled ACBr is already verified by the Electron bootstrap. For other
+  // PostgreSQL deployments no fiscal adapter is enabled implicitly.
+  if(process.env.OFICINA_POSTGRES_MANAGED_LOCAL!=='true'||
+      process.env.OFICINA_BUNDLED_FISCAL_VERIFIED!=='true'||
+      !process.env.FISCAL_ACBR_WORKER_EXE||
+      !process.env.FISCAL_ACBR_INPUT_DIR)return null;
+  const companyId=Number(unit.companyId),unitId=Number(unit.id);
+  if(!Number.isSafeInteger(companyId)||companyId<=0||
+      !Number.isSafeInteger(unitId)||unitId<=0)
+    throw Error('Identidade fiscal da unidade inválida');
+  const privateRoot=join(resolve(process.env.FISCAL_ACBR_INPUT_DIR),
+    'empresa-'+companyId+'-unidade-'+unitId);
+  const configDir=join(privateRoot,'config'),inputDir=join(privateRoot,'entrada');
+  mkdirSync(configDir,{recursive:true,mode:0o700});
+  mkdirSync(inputDir,{recursive:true,mode:0o700});
+  const privateIni=name=>{
+    const target=join(configDir,name);
+    if(!existsSync(target)){
+      // Criar apenas o modelo vazio da unidade. Nunca copiar um INI com
+      // certificado/senha de outra unidade ou da configuração global.
+      try{writeFileSync(target,'[Principal]\nLogNivel=0\n',{flag:'wx',mode:0o600})}
+      catch(error){if(error.code!=='EEXIST')throw error}
+    }
+    return target;
+  };
+  const nfeLib=process.env.FISCAL_ACBR_NFE_LIB||null;
+  const nfseLib=process.env.FISCAL_ACBR_NFSE_LIB||null;
+  if(!nfeLib&&!nfseLib)return null;
+  return createAcbrLibFiscalProvider({
+    nfeLib,nfseLib,workerExe:process.env.FISCAL_ACBR_WORKER_EXE,inputDir,
+    ...(nfeLib?{nfeConfig:privateIni('ACBrLibNFe.ini')}:{}),
+    ...(nfseLib?{nfseConfig:privateIni('ACBrLibNFSe.ini')}:{})
+  });
+}
+
 let tenantFactory;
 try{
  await registryPool.query('SELECT 1');
@@ -91,7 +136,8 @@ try{
    schemaPrefix:process.env.OFICINA_POSTGRES_SCHEMA_PREFIX||'oficina',
    localStorageRoot:process.env.OFICINA_POSTGRES_STORAGE_ROOT||'./storage/postgres',
    paymentOptionsForUnit:unit=>({...resolveTenantPaymentOptions(unit,tenantPaymentConfigs),
-      reminderSender:reminderSenderForUnit(unit)})
+      reminderSender:reminderSenderForUnit(unit)}),
+   fiscalProviderForUnit
  });
  const gateway=createPostgresUnifiedGateway({
    registry,tenantHandlerForUnit:tenantFactory.handlerForUnit,
