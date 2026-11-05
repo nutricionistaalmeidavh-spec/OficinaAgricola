@@ -9,6 +9,8 @@ import {resolveNfseRoute} from './nfse-routing.js';
 import {createAsyncWorkshopFinance} from './async-workshop-finance.js';
 import {createAsyncWorkshopOrders} from './async-workshop-orders.js';
 import {createAsyncWorkshopInventory} from './async-workshop-inventory.js';
+import {createAsyncWorkshopStocktakes} from './async-workshop-stocktake.js';
+import {normalizeGtin} from './inventory-gtin.js';
 import {createAsyncWorkshopProcurement} from './async-workshop-procurement.js';
 import {createAsyncWorkshopAutomotive} from './async-workshop-automotive.js';
 import {createAsyncWorkshopAuth} from './async-workshop-auth.js';
@@ -117,14 +119,14 @@ export function createAsyncWorkshopServices(port,{fiscalProvider=null,objectStor
  async function createPart(input={}){
    const sku=text(input.sku),description=text(input.description);
    if(!sku||!description)fail('SKU e descrição são obrigatórios');
-   const partId=id(),at=iso();
+   const partId=id(),at=iso(),barcode=normalizeGtin(input.barcode);
    await port.run(`INSERT INTO parts(
      id,sku,description,category,unit,cost_cents,sale_price_cents,
-     quantity,min_stock,location,active,created_at,updated_at
-   ) VALUES(?,?,?,?,?,?,?,0,?,?,1,?,?)`,[
+     quantity,min_stock,location,barcode,active,created_at,updated_at
+   ) VALUES(?,?,?,?,?,?,?,0,?,?,?,1,?,?)`,[
      partId,sku,description,text(input.category),text(input.unit)||'UN',
      cents(input.costCents??0),cents(input.salePriceCents??0),
-     Number(input.minStock??0),text(input.location),at,at
+     Number(input.minStock??0),text(input.location),barcode,at,at
    ]);
    return port.first('SELECT * FROM parts WHERE id=?',[partId]);
  }
@@ -523,6 +525,7 @@ export function createAsyncWorkshopServices(port,{fiscalProvider=null,objectStor
    ...createAsyncWorkshopFinance(port),
    ...createAsyncWorkshopOrders(port,{createWorkOrder,transitionWorkOrder,getWorkOrder}),
    ...createAsyncWorkshopInventory(port),
+   ...createAsyncWorkshopStocktakes(port),
    ...createAsyncWorkshopProcurement(port),
    ...createAsyncWorkshopAutomotive(port),
    ...createAsyncWorkshopAuth(port),
