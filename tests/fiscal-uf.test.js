@@ -27,5 +27,5 @@ test('RS exige referência de pagamento eletrônico integrado na NFC-e',()=>{
  const issuer={uf:'RS',municipalityIbge:'4314902',environment:'HOMOLOGACAO'};
  const ide={mod:'65',cUF:'43',cMunFG:'4314902',tpAmb:'2',idDest:'1',indFinal:'1',indPres:'1',tpEmis:'1'};
  assert.throws(()=>assertReviewedFiscalUf({kind:'NFCE',issuer,sections:{Identificacao:ide,pag001:{tPag:'17',vPag:'10.00'}}}),/RS/);
- assertReviewedFiscalUf({kind:'NFCE',issuer,sections:{Identificacao:ide,pag001:{tPag:'17',vPag:'10.00',tpIntegra:'1',cAut:'id-transacao'}}});
+ assertReviewedFiscalUf({kind:'NFCE',issuer,sections:{Identificacao:ide,pag001:{tPag:'17',vPag:'10.00'},card001:{tpIntegra:'1',cAut:'id-transacao'}}});
 });
