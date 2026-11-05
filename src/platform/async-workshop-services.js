@@ -4,6 +4,7 @@ import {assertTransition,calculateQuote,nextWorkOrderStatuses} from '../domain.j
 import {createAsyncWorkshopCatalog} from './async-workshop-catalog.js';
 import {createAsyncWorkshopSales} from './async-workshop-sales.js';
 import {createAsyncWorkshopOperations} from './async-workshop-operations.js';
+import {createAsyncWorkshopOnboarding} from './async-workshop-onboarding.js';
 import {createAsyncWorkshopFiscal} from './async-workshop-fiscal.js';
 import {resolveNfseRoute} from './nfse-routing.js';
 import {createAsyncWorkshopFinance} from './async-workshop-finance.js';
@@ -510,6 +511,9 @@ export function createAsyncWorkshopServices(port,{fiscalProvider=null,objectStor
    ...createAsyncWorkshopCatalog(port),
    ...createAsyncWorkshopSales(port),
    ...createAsyncWorkshopOperations(port),
+   ...createAsyncWorkshopOnboarding(port,{
+     certificateStatus:()=>fiscalProvider?.certificateStatus?.()??{configured:false}
+   }),
    ...createAsyncWorkshopFiscal(port,{provider:fiscalProvider}),
    ...createAsyncWorkshopFinance(port),
    ...createAsyncWorkshopOrders(port,{createWorkOrder,transitionWorkOrder,getWorkOrder}),
