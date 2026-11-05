@@ -115,6 +115,12 @@ export function createAcbrLibFiscalProvider(opts={}){
   const workerExe=opts.workerExe??process.env.FISCAL_ACBR_WORKER_EXE;
   const validatedWorker=workerExe?localFile(workerExe,'executor ACBrLib integrado'):null;
   const runner=opts.runner??(args=>executeWorker(args,{python,workerExe:validatedWorker}));
+  const certificateStore=opts.certificateStore||null;
+  const invoke=async args=>certificateStore
+    ?certificateStore.withConfig({
+       kind:args.kind,environment:args.environment,uf:args.issuerUf
+     },configPath=>runner({...args,configPath}))
+    :runner(args);
   const preflight=({document,issuer})=>{
     const kind=document?.kind;
     if(!libraries[kind])throw new Error('Biblioteca ACBrLib para '+kind+' não configurada');
@@ -123,34 +129,56 @@ export function createAcbrLibFiscalProvider(opts={}){
       throw new Error('Emitente fiscal ausente; configure antes do envio ACBr');
     // Se houver revisão tributária do documento, gerar INI e manifesto vinculados
     // ao snapshot. Nunca inferir impostos, NCM, CFOP ou condições de produção.
+    if(certificateStore&&!certificateStore.status().configured)
+      throw new Error('Cadastre o certificado A1 desta unidade antes da emissão');
     prepareReviewedFiscalIni({inputDir,document,issuer:safeIssuer});
     const iniPath=resolveInputs(inputDir,document,safeIssuer);
     return {kind,documentId:Number(document.id),iniPath,
       snapshotHash:document.snapshot_hash,amountCents:Number(document.amount_cents),environment:safeIssuer.environment,
-      issuerCnpj:safeIssuer.cnpj,
+      issuerCnpj:safeIssuer.cnpj,issuerUf:safeIssuer.uf,
       ...libraries[kind]};
   };
   return {
     name:'acbrlib-local',
+    certificateStatus:()=>certificateStore?certificateStore.status():{configured:false},
+    installCertificate:input=>{
+      if(!certificateStore)throw new Error('Instalação de certificado disponível apenas no Oficina local');
+      return certificateStore.install(input);
+    },
+    diagnose:async({settings}={})=>{
+      if(!settings||!settings.enabled||!settings.issuer_cnpj||!settings.issuer_uf)
+        throw new Error('Complete o cadastro fiscal desta empresa antes do diagnóstico');
+      if(!certificateStore?.status().configured)
+        throw new Error('Cadastre o certificado A1 da empresa antes do diagnóstico');
+      if(!libraries.NFE)return {ready:false,nfe:{status:'BIBLIOTECA_AUSENTE'},
+        nfse:{status:'VERIFICACAO_MUNICIPAL_NECESSARIA'}};
+      const response=await invoke({...libraries.NFE,kind:'NFE',operation:'status',
+        environment:settings.environment,issuerCnpj:settings.issuer_cnpj,
+        issuerUf:settings.issuer_uf});
+      return {ready:response?.status==='ONLINE',environment:settings.environment,
+        nfe:{status:response?.status||'INDETERMINADO',
+          code:response?.code||null,uf:settings.issuer_uf},
+        nfse:{status:'VERIFICACAO_MUNICIPAL_NECESSARIA'}};
+    },
     prepare:preflight,
-    transmit:({document,attemptId})=>runner({...preflight({document}),operation:'transmit',
+    transmit:({document,attemptId})=>invoke({...preflight({document}),operation:'transmit',
       attemptId,lot:Number(document.id)}),
-    consult:({document,attemptId})=>runner({...preflight({document}),operation:'consult',
+    consult:({document,attemptId})=>invoke({...preflight({document}),operation:'consult',
       attemptId,lot:Number(document.id),accessKey:document.access_key||null}),
     prepareCancellation:({document,issuer})=>{
       if(!document?.access_key||!document?.protocol||!document?.authorized_xml)
         throw new Error('Cancelamento exige documento autorizado e XML original');
       return preflight({document,issuer});
     },
-    cancel:({document,attemptId,reason})=>runner({...preflight({document}),operation:'cancel',
+    cancel:({document,attemptId,reason})=>invoke({...preflight({document}),operation:'cancel',
       attemptId,lot:Number(document.id),accessKey:document.access_key||null,
       authorizedXml:document.authorized_xml,originalProtocol:document.protocol,reason}),
-    consultCancellation:({document,attemptId})=>runner({
+    consultCancellation:({document,attemptId})=>invoke({
       ...preflight({document}),operation:'consultCancellation',
       attemptId,lot:Number(document.id),accessKey:document.access_key||null
     }),
     printPdf:async({document})=>{
-      const result=await runner({...preflight({document}),operation:'pdf',
+      const result=await invoke({...preflight({document}),operation:'pdf',
         accessKey:document.access_key||null,authorizedXml:document.authorized_xml,
         originalProtocol:document.protocol});
       if(result?.status!=='PDF'||typeof result.pdfBase64!=='string'||
