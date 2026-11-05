@@ -51,7 +51,7 @@ test('recuperação consulta primeiro DPS e depois NFSe sem reenviar o XML',asyn
  }});
  const result=await api.reconcile({issuer,idDps});
  assert.equal(result.status,'AUTORIZADA');
- assert.deepEqual(calls,['GET /SefinNacional/dps/'+idDps,'GET /SefinNacional/nfse/'+key]);
+ assert.deepEqual(calls,['GET /API/SefinNacional/dps/'+idDps,'GET /API/SefinNacional/nfse/'+key]);
 });
 test('rejeição explícita não vira autorização, erro de rede exige conciliação',async()=>{
  const api=createNationalNfseClient({certificateStore:store,transport:async()=>({status:400,body:{erros:[{Codigo:'E0001',Descricao:'DPS inválida'}]}})});
