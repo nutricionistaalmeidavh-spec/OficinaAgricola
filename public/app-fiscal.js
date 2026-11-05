@@ -52,12 +52,17 @@ async function renderFiscal({cursor=null,loaded=[]}={}){
 function fiscalSettingsModal(current){
   const selected=(value,expected)=>value===expected?' selected':'';
   const safe=value=>esc(value||'');
+  const prDDD44=Array.isArray(globalThis.PR_DDD44_MUNICIPIOS)?globalThis.PR_DDD44_MUNICIPIOS:[];
   showModal('Configuração fiscal da empresa',
     '<form class="form-stack">'+
     '<p class="muted">Somente dados cadastrais. Nunca informe certificado digital, senha ou chave privada nesta tela.</p>'+
     '<label>CNPJ emissor<input name="issuerCnpj" value="'+safe(current.issuer_cnpj)+'" inputmode="numeric" maxlength="18"></label>'+
-    '<div class="field-row"><label>UF<select name="issuerUf"><option value="">Selecione</option>'+['SP','PR','MG','RJ','SC','RS'].map(uf=>'<option value="'+uf+'"'+selected(current.issuer_uf,uf)+'>'+uf+'</option>').join('')+'</select></label>'+
-    '<label>Município IBGE<input name="municipalityIbge" inputmode="numeric" maxlength="7" value="'+safe(current.municipality_ibge)+'"></label></div>'+
+    '<div class="field-row"><label>UF<select id="fiscalIssuerUf" name="issuerUf"><option value="">Selecione</option>'+['SP','PR','MG','RJ','SC','RS'].map(uf=>'<option value="'+uf+'"'+selected(current.issuer_uf,uf)+'>'+uf+'</option>').join('')+'</select></label>'+
+    '<label>Município IBGE<input id="fiscalMunicipalityIbge" name="municipalityIbge" inputmode="numeric" maxlength="7" value="'+safe(current.municipality_ibge)+'"></label></div>'+
+    '<label id="fiscalDDD44Lookup" hidden>Municípios do DDD 44 (PR) — seleção opcional'+
+    '<select id="fiscalDDD44City"><option value="">Escolha a cidade para preencher o IBGE</option>'+
+    prDDD44.map(city=>'<option value="'+city.ibge+'"'+selected(String(current.municipality_ibge),city.ibge)+'>'+esc(city.name)+'</option>').join('')+
+    '</select><small>Para cidades fora do DDD 44, digite o código IBGE acima.</small></label>'+
     '<div class="field-row"><label>Inscrição estadual<input name="stateRegistration" value="'+safe(current.state_registration)+'"></label>'+
     '<label>Inscrição municipal<input name="municipalRegistration" value="'+safe(current.municipal_registration)+'"></label></div>'+
     '<label>Regime tributário<select name="taxRegime">'+
@@ -82,6 +87,16 @@ function fiscalSettingsModal(current){
       toast('Configuração fiscal salva. Documentos de homologação não têm validade fiscal.');
       await refreshCurrentPage();
     });
+  const issuerUf=$('#fiscalIssuerUf'),ibge=$('#fiscalMunicipalityIbge');
+  const lookup=$('#fiscalDDD44Lookup'),city=$('#fiscalDDD44City');
+  const syncCity=()=>{
+    lookup.style.display=issuerUf.value==='PR'?'':'none';
+    city.value=issuerUf.value==='PR'&&prDDD44.some(item=>item.ibge===ibge.value)?ibge.value:'';
+  };
+  issuerUf.onchange=syncCity;
+  ibge.oninput=syncCity;
+  city.onchange=()=>{if(city.value)ibge.value=city.value};
+  syncCity();
 }
 
 function fiscalDraftModal(){
