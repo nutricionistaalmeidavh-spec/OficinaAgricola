@@ -17,18 +17,25 @@ async function renderFiscal({cursor=null,loaded=[]}={}){
   const [page,settings]=await Promise.all([api('/api/fiscal/page?limit=50'+(cursor?'&cursor='+encodeURIComponent(cursor):'')),api('/api/fiscal/settings')]);const docs=loaded.concat(page.items);
   const cards=docs.map(d=>{
     const origin=d.origin_type==='OS'?'OS':'Venda';
-    const actions=d.status==='RASCUNHO'&&settings.enabled
+    const needsCompetence=d.kind==='NFSE'&&!fiscalSnapshot(d).nfseRoute;
+    const actions=d.status==='RASCUNHO'&&settings.enabled&&!needsCompetence
       ? '<button class="btn sm" data-fiscal-submit="'+d.id+'">Transmitir</button>'
       : d.status==='INDETERMINADO'
         ? '<button class="btn sm" data-fiscal-check="'+d.id+'">Consultar situação</button>'
         : '';
+    const revise=d.kind==='NFSE'&&d.status==='RASCUNHO'
+      ?'<button class="btn sm soft" data-nfse-competence="'+d.id+'">Ajustar competência</button>':'';
     const isAuthorized=['AUTORIZADA','AUTORIZADA_HOMOLOGACAO'].includes(d.status);
     const pdf=isAuthorized?'<button class="btn sm soft" data-fiscal-pdf="'+d.id+'">DANFE/PDF</button>':'';
     const cancel=isAuthorized&&state.user.role==='ADMIN'
       ?'<button class="btn sm soft" data-fiscal-cancel="'+d.id+'">Cancelar nota</button>':'';
+    const nfse=fiscalSnapshot(d).nfseRoute;
+    const routeText=d.kind==='NFSE'?(nfse?.channel&&nfse?.competenceDate?
+      '<br><small>Competência '+esc(nfse.competenceDate)+' · '+esc(nfse.channel==='NACIONAL'?'Emissor Nacional':'Emissor Municipal')+'</small>':
+      '<br><small>NFS-e antiga: rota e competência precisam de revisão antes de emitir</small>'):'';
     return '<div class="list-item"><div><strong>'+esc(fiscalDisplayTitle(d))+'</strong> · '+esc(fiscalOriginTitle(d))+
-      '<br><small>'+esc(d.status)+' · '+money(d.amount_cents)+'</small></div><div class="action-row">'+
-      '<button class="btn sm soft" data-fiscal-details="'+d.id+'">Histórico</button>'+pdf+cancel+actions+'</div></div>';
+      '<br><small>'+esc(d.status)+' · '+money(d.amount_cents)+'</small>'+routeText+'</div><div class="action-row">'+
+      '<button class="btn sm soft" data-fiscal-details="'+d.id+'">Histórico</button>'+revise+pdf+cancel+actions+'</div></div>';
   }).join('');
   setContent('<div class="section-head fiscal-head"><div><h2>Documentos fiscais</h2>'+
     '<span class="muted">Rascunhos, notas e protocolos das ordens de serviço e vendas</span></div>'+
@@ -44,6 +51,7 @@ async function renderFiscal({cursor=null,loaded=[]}={}){
   if($('#fiscalCertA1'))$('#fiscalCertA1').onclick=()=>fiscalCertificateA1Modal();
   if($('#fiscalCertA3'))$('#fiscalCertA3').onclick=()=>fiscalCertificateA3Modal();
   if($('#fiscalDiagnose'))$('#fiscalDiagnose').onclick=()=>fiscalRunDiagnosis();
+  $$('[data-nfse-competence]').forEach(b=>b.onclick=()=>fiscalReviseCompetence(Number(b.dataset.nfseCompetence)).catch(e=>toast(e.message,true)));
   $$('[data-fiscal-details]').forEach(b=>b.onclick=()=>showFiscalHistory(Number(b.dataset.fiscalDetails)).catch(e=>toast(e.message,true)));
   $$('[data-fiscal-submit]').forEach(b=>b.onclick=()=>fiscalAction(Number(b.dataset.fiscalSubmit),'submit'));
   $$('[data-fiscal-check]').forEach(b=>b.onclick=()=>fiscalAction(Number(b.dataset.fiscalCheck),'reconcile'));
@@ -51,7 +59,6 @@ async function renderFiscal({cursor=null,loaded=[]}={}){
   $$('[data-fiscal-cancel]').forEach(button=>button.onclick=()=>fiscalCancelModal(Number(button.dataset.fiscalCancel)));
    showPagedLoadMore({cursor:page.nextCursor,loaded:docs.length,total:page.total,onMore:()=>renderFiscal({cursor:page.nextCursor,loaded:docs})});
 }
-
 
 async function fiscalRunDiagnosis(){
   try{
@@ -128,12 +135,17 @@ async function fiscalCertificateA3Modal(){
 function fiscalSettingsModal(current){
   const selected=(value,expected)=>value===expected?' selected':'';
   const safe=value=>esc(value||'');
+  const prDDD44=Array.isArray(globalThis.PR_DDD44_MUNICIPIOS)?globalThis.PR_DDD44_MUNICIPIOS:[];
   showModal('Configuração fiscal da empresa',
     '<form class="form-stack">'+
     '<p class="muted">Somente dados cadastrais. Nunca informe certificado digital, senha ou chave privada nesta tela.</p>'+
     '<label>CNPJ emissor<input name="issuerCnpj" value="'+safe(current.issuer_cnpj)+'" inputmode="numeric" maxlength="18"></label>'+
-    '<div class="field-row"><label>UF<select name="issuerUf"><option value="">Selecione</option>'+['SP','PR','MG','RJ','SC','RS'].map(uf=>'<option value="'+uf+'"'+selected(current.issuer_uf,uf)+'>'+uf+'</option>').join('')+'</select></label>'+
-    '<label>Município IBGE<input name="municipalityIbge" inputmode="numeric" maxlength="7" value="'+safe(current.municipality_ibge)+'"></label></div>'+
+    '<div class="field-row"><label>UF<select id="fiscalIssuerUf" name="issuerUf"><option value="">Selecione</option>'+['SP','PR','MG','RJ','SC','RS'].map(uf=>'<option value="'+uf+'"'+selected(current.issuer_uf,uf)+'>'+uf+'</option>').join('')+'</select></label>'+
+    '<label>Município IBGE<input id="fiscalMunicipalityIbge" name="municipalityIbge" inputmode="numeric" maxlength="7" value="'+safe(current.municipality_ibge)+'"></label></div>'+
+    '<label id="fiscalDDD44Lookup" hidden>Municípios do DDD 44 (PR) — seleção opcional'+
+    '<select id="fiscalDDD44City"><option value="">Escolha a cidade para preencher o IBGE</option>'+
+    prDDD44.map(city=>'<option value="'+city.ibge+'"'+selected(String(current.municipality_ibge),city.ibge)+'>'+esc(city.name)+'</option>').join('')+
+    '</select><small>Para cidades fora do DDD 44, digite o código IBGE acima.</small></label>'+
     '<div class="field-row"><label>Inscrição estadual<input name="stateRegistration" value="'+safe(current.state_registration)+'"></label>'+
     '<label>Inscrição municipal<input name="municipalRegistration" value="'+safe(current.municipal_registration)+'"></label></div>'+
     '<label>Regime tributário<select name="taxRegime">'+
@@ -158,6 +170,17 @@ function fiscalSettingsModal(current){
       toast('Configuração fiscal salva. Documentos de homologação não têm validade fiscal.');
       await refreshCurrentPage();
     });
+  const issuerUf=$('#fiscalIssuerUf'),ibge=$('#fiscalMunicipalityIbge');
+  const lookup=$('#fiscalDDD44Lookup'),city=$('#fiscalDDD44City');
+  const syncCity=()=>{
+    lookup.hidden=issuerUf.value!=='PR';
+    lookup.style.display=issuerUf.value==='PR'?'':'none';
+    city.value=issuerUf.value==='PR'&&prDDD44.some(item=>item.ibge===ibge.value)?ibge.value:'';
+  };
+  issuerUf.onchange=syncCity;
+  ibge.oninput=syncCity;
+  city.onchange=()=>{if(city.value)ibge.value=city.value};
+  syncCity();
 }
 
 function fiscalDraftModal(){
@@ -170,7 +193,9 @@ function fiscalDraftModal(){
     '<div id="fiscalOriginOptions" class="fiscal-origin-options" role="group" aria-label="Resultados da busca"></div>'+
     '<input type="hidden" name="originId" id="fiscalOriginId">'+
     '<div id="fiscalOriginSelection" class="fiscal-origin-selection" role="status" aria-live="polite">Nenhuma operação selecionada.</div>'+
-    '<label>Documento<select id="fiscalKind" name="kind"><option value="NFE">NF-e — peças</option><option value="NFCE">NFC-e — venda ao consumidor</option><option value="NFSE">NFS-e — mão de obra</option></select></label>'+
+    '<label>Documento<select id="fiscalKind" name="kind"><option value="NFE">NF-e — peças</option><option value="NFCE">NFC-e — venda ao consumidor</option><option value="NFSE">NFS-e — mão de obra</option></select></label>'+ 
+    '<div id="fiscalNfseCompetence" hidden><label>Data de competência do serviço<input type="date" id="fiscalCompetenceDate" name="competenceDate"></label>'+
+    '<p id="fiscalNfseRoute" class="muted" role="status" aria-live="polite">Informe a competência para verificar o emissor obrigatório.</p></div>'+
     '<div class="fiscal-draft-preview"><strong>Prévia do documento</strong><p id="fiscalDraftPreview" class="muted">Selecione uma operação para conferir a origem. Os itens e valores fiscais serão validados pelo servidor.</p></div>'+
     '<button id="fiscalDraftSubmit" class="btn primary" type="submit" disabled>Criar rascunho</button></form>',
     async form=>{
@@ -178,7 +203,8 @@ function fiscalDraftModal(){
       const originId=Number(values.originId);
       if(!Number.isSafeInteger(originId)||originId<1)throw new Error('Selecione uma OS ou venda na lista.');
       const doc=await api('/api/fiscal/drafts',{method:'POST',body:{
-        originType:values.originType,originId,kind:values.kind,requestId
+        originType:values.originType,originId,kind:values.kind,
+        ...(values.kind==='NFSE'?{competenceDate:values.competenceDate}:{}),requestId
       }});
       if(!doc||doc.id==null)throw new Error('Criação do rascunho ainda não confirmada.');
       toast('Rascunho fiscal salvo. A nota ainda não foi autorizada.');
@@ -187,7 +213,28 @@ function fiscalDraftModal(){
   const type=$('#fiscalOriginType'),search=$('#fiscalOriginSearch'),options=$('#fiscalOriginOptions');
   const selected=$('#fiscalOriginSelection'),hidden=$('#fiscalOriginId'),submit=$('#fiscalDraftSubmit');
   const preview=$('#fiscalDraftPreview'),kind=$('#fiscalKind');
-  let sequence=0,timer=null,origin=null;
+  const competence=$('#fiscalCompetenceDate'),routeText=$('#fiscalNfseRoute'),competenceGroup=$('#fiscalNfseCompetence');
+  let sequence=0,timer=null,origin=null,nfseSequence=0,nfseRoute=null;
+  const updateSubmit=()=>{submit.disabled=!origin||(kind.value==='NFSE'&&!nfseRoute)};
+  const updateNfseRoute=async()=>{
+    const ticket=++nfseSequence;
+    competenceGroup.hidden=kind.value!=='NFSE';
+    competenceGroup.style.display=kind.value==='NFSE'?'':'none';
+    nfseRoute=null;updateSubmit();
+    if(kind.value!=='NFSE')return;
+    if(!competence.value){routeText.textContent='Informe a competência do serviço para definir o canal fiscal.';return}
+    routeText.textContent='Verificando o emissor conforme competência, município e regime…';
+    try{
+      const route=await api('/api/fiscal/nfse/route',{method:'POST',body:{competenceDate:competence.value}});
+      if(ticket!==nfseSequence||!routeText.isConnected)return;
+      nfseRoute=route.channel==='PENDENTE'?null:route.channel;
+      routeText.textContent=(nfseRoute?'Canal definido: '+(nfseRoute==='NACIONAL'?'Emissor Nacional':'Emissor Municipal')+'. ':'Emissão ainda não preparada. ')+route.reason;
+    }catch(error){
+      if(ticket!==nfseSequence||!routeText.isConnected)return;
+      routeText.textContent='Não foi possível definir o emissor: '+friendlyUiMessage(error.message);
+    }
+    updateSubmit();
+  };
 
   const updatePreview=()=>{
     if(!origin){preview.textContent='Selecione uma operação para conferir a origem. Os itens e valores fiscais serão validados pelo servidor.';return}
@@ -222,7 +269,7 @@ function fiscalDraftModal(){
       if(!item)return;
       origin=item;hidden.value=String(item.id);
       selected.textContent='Selecionado: '+item.label+' · '+item.detail;
-      submit.disabled=false;
+      updateSubmit();
       $$('[data-fiscal-origin]',options).forEach(b=>b.setAttribute('aria-pressed',String(b===button)));
       updatePreview();
     });
@@ -232,8 +279,44 @@ function fiscalDraftModal(){
   }});
   type.onchange=()=>{search.value='';++sequence;clearTimeout(timer);clearSelection();findSafe()};
   search.oninput=()=>{++sequence;clearTimeout(timer);clearSelection();timer=setTimeout(findSafe,220)};
-  kind.onchange=updatePreview;
+  kind.onchange=()=>{updatePreview();void updateNfseRoute()};
+  competence.onchange=()=>{void updateNfseRoute()};
+  void updateNfseRoute();
   void findSafe();
+}
+
+async function fiscalReviseCompetence(id){
+  const doc=await api('/api/fiscal/'+id);
+  if(doc.kind!=='NFSE'||doc.status!=='RASCUNHO')throw new Error('Apenas rascunhos NFS-e permitem corrigir competência.');
+  const current=fiscalSnapshot(doc).nfseRoute?.competenceDate||'';
+  showModal('Ajustar competência da NFS-e',
+    '<form class="form-stack"><p class="muted">O documento ainda não foi transmitido. A competência determina o emissor nacional ou municipal; alterar aqui preserva os itens e o histórico.</p>'+
+    '<label>Data de competência<input id="nfseReviseDate" type="date" name="competenceDate" value="'+esc(current)+'" required></label>'+
+    '<p id="nfseReviseResult" role="status" aria-live="polite" class="muted">Verificando o emissor…</p>'+
+    '<button type="submit" class="btn primary" id="nfseReviseSubmit" disabled>Salvar competência</button></form>',
+    async form=>{
+      const competenceDate=formObj(form).competenceDate;
+      await api('/api/fiscal/'+id+'/nfse/competence',{method:'POST',body:{competenceDate,requestId:newCommandId()}});
+      toast('Competência e emissor do rascunho NFS-e atualizados. Nenhuma nota foi transmitida.');
+      await refreshCurrentPage();
+    });
+  const input=$('#nfseReviseDate'),result=$('#nfseReviseResult'),submit=$('#nfseReviseSubmit');
+  let sequence=0;
+  const preview=async()=>{
+    const ticket=++sequence;submit.disabled=true;
+    if(!input.value){result.textContent='Informe uma competência para continuar.';return}
+    result.textContent='Verificando o canal de NFS-e…';
+    try{
+      const route=await api('/api/fiscal/nfse/route',{method:'POST',body:{competenceDate:input.value}});
+      if(ticket!==sequence||!result.isConnected)return;
+      const ready=route.channel!=='PENDENTE';
+      result.textContent=(ready?'Emissor '+(route.channel==='NACIONAL'?'Nacional':'Municipal')+'. ':'Configuração pendente. ')+route.reason;
+      submit.disabled=!ready;
+    }catch(error){if(ticket===sequence&&result.isConnected)
+      result.textContent='Não foi possível verificar: '+friendlyUiMessage(error.message)}
+  };
+  input.onchange=()=>{void preview()};
+  void preview();
 }
 
 async function downloadFiscalPdf(id){

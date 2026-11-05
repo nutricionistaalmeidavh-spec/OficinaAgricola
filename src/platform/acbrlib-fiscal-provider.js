@@ -175,6 +175,8 @@ export function createAcbrLibFiscalProvider(opts={}){
   };
   return {
     name:'acbrlib-local',
+    nfseChannel:opts.nfseChannel||null,
+    nfseMunicipalityIbge:opts.nfseMunicipalityIbge||null,
     certificateStatus:()=>certificateStore?certificateStore.status():{configured:false},
     installCertificate:input=>{
       if(!certificateStore)throw Error('Instalação de A1 requer ACBr local embarcado');
