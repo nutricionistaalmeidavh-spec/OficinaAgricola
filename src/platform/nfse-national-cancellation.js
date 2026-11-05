@@ -1,3 +1,4 @@
+import {DOMParser} from '@xmldom/xmldom';
 // Pedido de cancelamento 101101 conforme Anexo II SEFIN.
 // Nenhuma autorização é inferida do envio: exige consulta ao evento oficial.
 const digits=(v,len,name)=>{
