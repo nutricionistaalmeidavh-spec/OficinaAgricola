@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {attachNationalRtc,validateNationalRtc} from '../src/platform/nfse-national-rtc.js';
 
-const id='DPS3106200211222333000181000010000000000000025';
+const id='DPS310620021122233300018100001000000000000025';
 const xml='<DPS xmlns="http://www.sped.fazenda.gov.br/nfse" versao="1.01">'+
  '<infDPS Id="'+id+'"><tpAmb>1</tpAmb><valores><vServPrest><vServ>100.00</vServ></vServPrest></valores></infDPS></DPS>';
 const declarations={finNFSe:'0',cIndOp:'010101',indDest:'0',CST:'000',cClassTrib:'000001'};
