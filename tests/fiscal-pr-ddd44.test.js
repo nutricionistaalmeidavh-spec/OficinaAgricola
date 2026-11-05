@@ -45,11 +45,12 @@ test('catálogo é carregado antes da UI fiscal e não depende de serviços pago
   assert.ok(fiscalSource.includes("lookup.hidden=issuerUf.value!=='PR'"),'seletor deve aparecer somente quando a UF for PR');
 });
 
-test('tela fiscal usa seletor de coleção para eventos, mesmo sem documentos',()=>{
+test('tela fiscal usa seletores de coleção nos eventos, mesmo sem documentos',()=>{
  const source=readFileSync(new URL('../public/app-fiscal.js',import.meta.url),'utf8');
  for(const name of ['data-nfse-competence','data-fiscal-details','data-fiscal-origin']){
-   assert.ok(!source.includes("$('["+name+"]').forEach"),
-     'querySelector único não pode receber forEach: '+name);
-   assert.ok(source.includes("$$('["+name+']"),'eventos precisam de querySelectorAll: '+name);
+   const bind=source.split('\n').filter(line=>line.includes('['+name+']')&&line.includes('.forEach('));
+   assert.ok(bind.length>0,'handler ausente: '+name);
+   assert.ok(bind.every(line=>line.includes("$$('["+name+"]')")),
+     'os handlers devem utilizar seletor de coleção: '+name);
  }
 });
