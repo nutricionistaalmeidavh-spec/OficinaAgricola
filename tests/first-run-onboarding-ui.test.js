@@ -7,7 +7,7 @@ test('primeiro acesso tem tela e navegação explícita no app',()=>{
  assert.match(html,/src="\/app-onboarding\.js"/);
  assert.match(html,/data-page="onboarding"/);
  assert.match(core,/openInitialPage/);
- assert.match(core,/onboarding:renderOnboarding/);
+ assert.match(core,/dashboard,onboarding,customers/);
  assert.match(ui,/Começar a trabalhar/);
  assert.match(ui,/api\/onboarding\/diagnostics/);
  assert.match(ui,/action:'finish'/);
