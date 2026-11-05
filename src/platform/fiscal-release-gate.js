@@ -42,8 +42,8 @@ function officialNfeXml({xml,accessKey,protocol,cnpj,kind}){
 // Esta função é usada SOMENTE depois de retorno AUTORIZADA do emissor ACBr,
 // validado no worker. Não aceita prova fornecida por uma rota HTTP do cliente.
 export function createFiscalEvidence({document,result,providerName,certificateIdentity}={}){
-  if(providerName!=='acbrlib-local'||!validDigest(certificateIdentity)||
-     !supportedModels.includes(document?.kind)||
+  if(!validDigest(certificateIdentity)||
+     !allModels.includes(document?.kind)||
      document?.environment!=='HOMOLOGACAO'||
      result?.status!=='AUTORIZADA'||result.environment!=='HOMOLOGACAO')
     return null;
@@ -51,9 +51,15 @@ export function createFiscalEvidence({document,result,providerName,certificateId
   try{issuer=JSON.parse(document.issuer_snapshot_json||'null');}
   catch{return null;}
   const issuerCnpj=digits(issuer?.cnpj);
-  if(!/^\d{14}$/.test(issuerCnpj)||issuer?.environment!=='HOMOLOGACAO'||
-     !officialNfeXml({xml:result.xml,accessKey:result.accessKey,
-       protocol:result.protocol,cnpj:issuerCnpj,kind:document.kind}))return null;
+  if(!/^\d{14}$/.test(issuerCnpj)||issuer?.environment!=='HOMOLOGACAO')return null;
+  const official=document.kind==='NFSE'
+    ?providerName==='sefin-nacional-direta'&&validNationalNfseReceipt({
+      xml:result.xml,key:result.accessKey,protocol:result.protocol,
+      cnpj:issuerCnpj,environment:'HOMOLOGACAO'})
+    :providerName==='acbrlib-local'&&officialNfeXml({xml:result.xml,
+      accessKey:result.accessKey,protocol:result.protocol,
+      cnpj:issuerCnpj,kind:document.kind});
+  if(!official)return null;
   return {
     document_id:Number(document.id),kind:document.kind,
     issuer_digest:issuerEvidenceDigest(issuer),
