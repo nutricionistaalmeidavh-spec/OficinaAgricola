@@ -161,6 +161,15 @@ export function createLocalFiscalCertificateStore({directory}={}){
      });
    }finally{content=null;}
  }
- return Object.freeze({status,install,selectA3,
+ // Identidade sem senha ou PFX para revogar a prova ao trocar o certificado.
+ function identity(){
+   const a3=selectedA3();
+   if(a3)return createHash('sha256').update(
+     ['A3',a3.serial,a3.issuerCnpj,a3.configuredAt].join(':')).digest('hex');
+   const a1=envelope();
+   return a1?createHash('sha256').update(
+     ['A1',a1.fingerprint,a1.configuredAt].join(':')).digest('hex'):null;
+ }
+ return Object.freeze({status,identity,install,selectA3,
    activeSerial:()=>selectedA3()?.serial||null,withConfig,withDiscoveryConfig});
 }
