@@ -32,6 +32,16 @@ class AcbrWorkerSecurityTests(unittest.TestCase):
         self.assertFalse(worker.authorized_nfe_xml(xml.replace("<Signature/>", ""), "13512345"))
         self.assertEqual(worker.nfe_identity(xml)[0], KEY)
 
+    def test_nfce_model_and_uf_are_checked_before_any_transmission(self):
+        xml = ('<NFe><infNFe Id="NFe' + KEY + '"><ide><mod>55</mod></ide>'
+               '<emit><CNPJ>11222333000181</CNPJ></emit></infNFe></NFe>')
+        req = {"kind": "NFE", "issuerCnpj": "11222333000181", "issuerUf": "SP"}
+        self.assertEqual(worker.assert_nfe_model(xml, req), KEY)
+        with self.assertRaisesRegex(worker.ACBrError, "Modelo"):
+            worker.assert_nfe_model(xml, {**req, "kind": "NFCE"})
+        with self.assertRaisesRegex(worker.ACBrError, "UF"):
+            worker.assert_nfe_model(xml, {**req, "issuerUf": "MG"})
+
     def test_xml_nfe_must_match_the_canonical_amount(self):
         xml = '<NFe><infNFe Id="NFe' + KEY + '"></infNFe><total><ICMSTot><vNF>123.45</vNF></ICMSTot></total></NFe>'
         self.assertEqual(worker.nfe_total_cents(xml), 12345)
