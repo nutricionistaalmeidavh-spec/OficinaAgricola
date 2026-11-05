@@ -33,7 +33,9 @@ jobs:
           import urllib.request,re
           for url in [
             'https://portalunico.siscomex.gov.br/classif/api/publico/nomenclatura/download/json',
-            'https://www.nfe.fazenda.gov.br/portal/listaConteudo.aspx?tipoConteudo=%2FNJarYc9nus%3D'
+            'https://www.nfe.fazenda.gov.br/portal/listaConteudo.aspx?tipoConteudo=%2FNJarYc9nus%3D',
+            'https://dfe-portal.svrs.rs.gov.br/CFF/ClassificacaoTributaria',
+            'https://dfe-portal.svrs.rs.gov.br/Nfag/Documentos'
           ]:
             try:
               req=urllib.request.Request(url,headers={'User-Agent':'Mozilla/5.0','Accept':'*/*'})
@@ -43,6 +45,11 @@ jobs:
                 if 'nfe.fazenda' in url:
                   html=data.decode('utf-8','replace')
                   print('OFFICIAL_FILES',[m for m in re.findall(r'href=["\\x27]([^"\\x27]+)',html,re.I) if 'exibirArquivo' in m][:8])
+                elif 'svrs.rs.gov.br' in url:
+                  html=data.decode('utf-8','replace')
+                  print('OFFICIAL_SCRIPTS',re.findall(r'<script[^>]+src=["\\x27]([^"\\x27]+)',html,re.I)[-30:])
+                  for key in ['ExportarJSON','ExportarCsv','csv','json','Download','ClassTrib','classTrib']:
+                    print('FOUND_KEY',key,[html[max(0,i-150):i+150] for i in [html.find(key)] if i>=0][:1])
                 else: print('RFB_PREFIX',data[:90])
             except Exception as e:print('OFFICIAL_SOURCE_ERROR',type(e).__name__,str(e)[:300])
       - name: Lint
