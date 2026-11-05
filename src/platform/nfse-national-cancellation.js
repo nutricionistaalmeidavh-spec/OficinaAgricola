@@ -20,7 +20,7 @@ export function buildNationalCancelRequest({issuer,accessKey,reason,at=new Date(
  const time=new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo',
   year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',
   minute:'2-digit',second:'2-digit',hourCycle:'h23'}).format(at).replace(' ','T')+'-03:00';
- const id='PRE'+key+'101101001';
+ const id='PRE'+key+'101101';
  const xml='<?xml version="1.0" encoding="UTF-8"?>'+
   '<pedRegEvento xmlns="http://www.sped.fazenda.gov.br/nfse" versao="1.00">'+
   '<infPedReg Id="'+id+'"><tpAmb>'+(issuer.environment==='PRODUCAO'?'1':'2')+
