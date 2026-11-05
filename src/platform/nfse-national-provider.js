@@ -4,6 +4,8 @@ import {createNationalNfseClient} from './nfse-national-api.js';
 import {createLocalNationalDpsStore} from './nfse-national-dps-store.js';
 import {createLocalFiscalTaxStore} from './local-fiscal-tax-store.js';
 import {join} from 'node:path';
+import {pathToFileURL} from 'node:url';
+import {existsSync} from 'node:fs';
 import {prepareNationalDpsInput} from './nfse-national-automatic.js';
 
 export function createNationalNfseProvider({certificateStore,inputDir,client}={}){
@@ -32,7 +34,13 @@ export function createNationalNfseProvider({certificateStore,inputDir,client}={}
    const prepared=prepareNationalDpsInput({document,issuer,profile,customer,issuance});
    // SDK fiscal open source é opcional: carregado só quando a empresa utiliza NFS-e direta.
    let sdk;
-   try{sdk=await import('@useinvio/nfse-sdk')}catch{throw Error('Módulo opcional OSS NFS-e Nacional não instalado neste servidor')}
+   try{
+     const packaged=process.resourcesPath?join(process.resourcesPath,'nfse-national','node_modules',
+       '@useinvio','nfse-sdk','dist','index.js'):null;
+     sdk=packaged&&existsSync(packaged)
+       ?await import(pathToFileURL(packaged).href)
+       :await import('@useinvio/nfse-sdk');
+   }catch{throw Error('Módulo opcional OSS NFS-e Nacional não instalado neste servidor')}
    const built=sdk.buildDpsFromJson(prepared.payload);
    if(built.id!==prepared.idDps)throw Error('DPS gerada tem identificação divergente');
    const xmlSigned=await certificateStore.withTlsIdentity({cnpj:issuer.cnpj},identity=>{
