@@ -1,7 +1,10 @@
 // Gate offline para impedir publicar instalador com tabelas de teste/parciais.
 import {existsSync,readFileSync} from 'node:fs';
+import {resolve} from 'node:path';
 import {bundledFiscalCatalogPath,loadFiscalCatalog} from '../src/platform/fiscal-official-catalog.js';
-const file=bundledFiscalCatalogPath();
+const source=bundledFiscalCatalogPath();
+const file=process.argv.includes('--dist')
+  ?resolve('dist/src/platform/fiscal-data/catalog.json'):source;
 if(!existsSync(file))throw Error('Catálogo fiscal oficial não embutido: impedir release');
 const catalog=loadFiscalCatalog({path:file});
 const {ncm,cfop,ibscbs}=catalog.tables;
@@ -18,8 +21,10 @@ for(const name of ['ncm','cfop','ibscbs']){
   if(!/^[0-9a-f]{64}$/.test(catalog.sources[name].sha256||''))
     throw Error('Proveniência SHA-256 ausente na fonte '+name);
 }
-const path='src/platform/fiscal-data/catalog.json';
-const raw=readFileSync(path,'utf8');
+const raw=readFileSync(file,'utf8');
+if(process.argv.includes('--dist')&&
+   !readFileSync(source).equals(readFileSync(file)))
+  throw Error('Catálogo embarcado em dist diverge do snapshot oficial de src');
 if(raw.includes('fixture-only')||raw.includes('exemplo.com'))
   throw Error('Dados de teste encontrados no catálogo distribuído');
 console.log('Catálogo oficial válido e incluído: NCM',ncm.length,'CFOP',cfop.length,
