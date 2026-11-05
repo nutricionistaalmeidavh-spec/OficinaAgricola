@@ -17,7 +17,7 @@ async function renderInventory({cursor=null,loaded=[]}={}){
    p.min_stock,money(p.sale_price_cents),
    office?`<button class="btn sm" data-entry="${p.id}">Movimentar</button> <button class="btn sm" data-fitments="${p.id}">Aplicações</button>`:''
   ]))}
-  ${office?`<section class="card" style="margin-top:18px"><div class="section-head"><div><h2>Pedidos de compra</h2><span class="muted">Receba por etapas sem duplicar saldos</span></div></div>
+  ${office?`<section class="card" style="margin-top:18px"><div class="section-head"><div><h2>Pedidos de compra</h2><span class="muted">Receba por etapas sem duplicar saldos</span></div><button type="button" id="allPurchaseOrders" class="btn sm">Ver todos</button></div>
    <div class="list">${orders.length?orders.map(o=>`<div class="list-item"><div><strong>${esc(o.reference||'Pedido '+String(o.id).slice(-6))}</strong> ${badge(o.status)}
     <br><small>${esc(o.supplier_name)} · ${dt(o.created_at)}</small></div>
     <button type="button" class="btn sm" data-purchase-open="${o.id}">Ver pedido</button></div>`).join(''):'<p class="empty">Nenhum pedido de compra cadastrado.</p>'}</div></section>`:''}`);
@@ -25,6 +25,7 @@ async function renderInventory({cursor=null,loaded=[]}={}){
  $('#stockHistory').onclick=()=>openInventoryHistory().catch(e=>toast(e.message,true));
  if($('#suppliersManage'))$('#suppliersManage').onclick=()=>showSuppliersModal().catch(e=>toast(e.message,true));
  if($('#purchaseNew'))$('#purchaseNew').onclick=()=>newPurchaseOrderModal().catch(e=>toast(e.message,true));
+ if($('#allPurchaseOrders'))$('#allPurchaseOrders').onclick=()=>showPurchaseOrdersList().catch(e=>toast(e.message,true));
  $$('[data-entry]').forEach(b=>b.onclick=()=>stockMoveModal(Number(b.dataset.entry),parts.find(p=>p.id===Number(b.dataset.entry))));
  $$('[data-fitments]').forEach(b=>b.onclick=()=>partFitmentsModal(parts.find(p=>p.id===Number(b.dataset.fitments))));
  $$('[data-purchase-open]').forEach(b=>b.onclick=()=>openPurchaseOrder(Number(b.dataset.purchaseOpen)).catch(e=>toast(e.message,true)));
