@@ -8,6 +8,7 @@ import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {existsSync} from 'node:fs';
 import {prepareNationalDpsInput} from './nfse-national-automatic.js';
+import {buildNationalCancelRequest} from './nfse-national-cancellation.js';
 
 export function createNationalNfseProvider({certificateStore,inputDir,client,danfseLogoPng}={}){
  if(!certificateStore||typeof certificateStore.withTlsIdentity!=='function')
@@ -73,6 +74,34 @@ export function createNationalNfseProvider({certificateStore,inputDir,client,dan
    const saved=dps.read({document,issuer});
    if(!saved)return {status:'INDETERMINADO',message:'DPS assinada não encontrada no backup local'};
    return api.reconcile({issuer,idDps:saved.idDps});
+  },
+  prepareCancellation:({document,issuer,reason}={})=>{
+   if(document?.kind!=='NFSE'||issuer?.cnpj!==issuerFor(document).cnpj||
+      issuer.environment!==document.environment||!document.access_key)
+     throw Error('NFS-e de cancelamento não pertence ao emissor e ambiente');
+   if(certificateStore.status().certificateType!=='A1')
+     throw Error('Cancelamento SEFIN Nacional exige certificado A1');
+   return buildNationalCancelRequest({issuer,accessKey:document.access_key,reason});
+  },
+  cancel:async({document,reason}={})=>{
+   const issuer=issuerFor(document);
+   const request=buildNationalCancelRequest({issuer,accessKey:document.access_key,reason});
+   if(certificateStore.status().certificateType!=='A1')throw Error('A1 local obrigatório');
+   let sdk;
+   try{sdk=await import('@useinvio/nfse-sdk')}
+   catch{throw Error('SDK local de assinatura nacional indisponível')}
+   const signed=await certificateStore.withTlsIdentity({cnpj:issuer.cnpj},identity=>{
+    const material=sdk.loadPfxFromBuffer(identity.pfx,identity.passphrase);
+    return sdk.signEnveloped(request.xml,request.id,'infPedReg',material);
+   });
+   const accepted=await api.registerEvent({issuer,accessKey:document.access_key,signedEventXml:signed});
+   if(accepted.status!=='EVENTO_RECEBIDO_PENDENTE_CONFIRMACAO')
+     return {status:'INDETERMINADO',message:'SEFIN não confirmou o recebimento do evento'};
+   return api.queryCancellation({issuer,accessKey:document.access_key});
+  },
+  consultCancellation:async({document}={})=>{
+   const issuer=issuerFor(document);
+   return api.queryCancellation({issuer,accessKey:document.access_key});
   },
   printPdf:async({document}={})=>{
    if(document?.kind!=='NFSE'||!['AUTORIZADA','AUTORIZADA_HOMOLOGACAO'].includes(document.status))
