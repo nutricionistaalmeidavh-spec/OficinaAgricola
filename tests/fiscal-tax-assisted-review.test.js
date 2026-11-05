@@ -1,8 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
+import {mkdtempSync,readFileSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {createLocalFiscalTaxStore} from '../src/platform/local-fiscal-tax-store.js';
 import {validateTaxProfile,assembleAssistedTaxReview} from '../src/platform/fiscal-tax-review.js';
-import {compileReviewedFiscalIni} from '../src/platform/fiscal-ini-preparer.js';
+import {compileReviewedFiscalIni,prepareReviewedFiscalIni} from '../src/platform/fiscal-ini-preparer.js';
 
 const issuer={cnpj:'11222333000181',uf:'MG',municipalityIbge:'3106200',taxRegime:'SIMPLES',
  stateRegistration:'12345678',environment:'HOMOLOGACAO'};
@@ -54,4 +58,26 @@ test('revisão recusa documentos já transmitidos, perfil ausente e fraude de de
  assert.throws(()=>assembleAssistedTaxReview({document:doc,issuer,company,customer,
   issuance:{number:'123',series:'1',nature:'Venda'},items:[{profileId:'missing'}],
   profiles:[{...goods,id:'filtro'}]}),/perfil|classifica/i);
+});
+
+test('revisão da tela gera arquivos ACBr localmente e bloqueia alteração após preparo',()=>{
+ const root=mkdtempSync(join(tmpdir(),'oficina-tax-ini-'));
+ try{
+   const store=createLocalFiscalTaxStore({directory:join(root,'tributario'),inputDir:root});
+   const saved=store.saveProfile({issuer,profile:goods});
+   const request={document:doc,issuer,company,customer,
+     issuance:{series:'1',number:'123',nature:'Venda de mercadorias'},
+     items:[{profileId:saved.id}]};
+   const response=store.saveDocumentReview(request);
+   assert.equal(response.reviewed,true);
+   assert.equal(store.getDocumentReview({document:doc,issuer}).reviewed,true);
+   assert.equal(prepareReviewedFiscalIni({inputDir:root,document:doc,issuer}),true);
+   const name=doc.kind+'-'+doc.id+'-'+doc.snapshot_hash;
+   const ini=readFileSync(join(root,name+'.ini'),'utf8');
+   assert.match(ini,/\[Emitente\]/);
+   assert.match(ini,/\[ICMS001\]/);
+   assert.match(ini,/vNF=80\.00/);
+   assert.equal(store.getDocumentReview({document:doc,issuer}).locked,true);
+   assert.throws(()=>store.saveDocumentReview(request),/INI|sobrescrever|preparado/i);
+ }finally{rmSync(root,{force:true,recursive:true});}
 });
