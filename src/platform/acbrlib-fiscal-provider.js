@@ -9,6 +9,7 @@ import {isAbsolute,join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {prepareReviewedFiscalIni,compileReviewedFiscalIni} from './fiscal-ini-preparer.js';
 import {compileReviewedNfseIni,prepareReviewedNfseIni} from './fiscal-nfse-preparer.js';
+import {assertMunicipalNfseProductionReady} from './fiscal-municipal-profile.js';
 
 function localFile(path,label){
   if(typeof path!=='string'||!isAbsolute(path))
@@ -134,6 +135,19 @@ export function createAcbrLibFiscalProvider(opts={}){
     // ao snapshot. Nunca inferir impostos, NCM, CFOP ou condições de produção.
     // Sem A1 do cofre, a configuração ACBr privada preexistente pode representar A3.
     // A biblioteca nativa valida presença/uso do certificado antes de qualquer emissão.
+    if(kind==='NFSE'&&safeIssuer.environment==='PRODUCAO'){
+      // Nunca transmitir NFS-e de município desconhecido ou com revisão obsoleta.
+      const reviewFile=join(inputDir,'NFSE-'+document.id+'-'+document.snapshot_hash+'.review.json');
+      if(!existsSync(reviewFile)||statSync(reviewFile).size>1024*1024)
+        throw new Error('Revisão fiscal municipal do documento não encontrada');
+      let review;
+      try{review=JSON.parse(readFileSync(reviewFile,'utf8'));}
+      catch{throw new Error('Revisão fiscal municipal ilegível');}
+      assertMunicipalNfseProductionReady({
+        path:opts.nfseMunicipalProfilePath??process.env.OFICINA_NFSE_MUNICIPAL_PROFILE_PATH,
+        issuer:safeIssuer,serviceCode:review?.sections?.Servico?.ItemListaServico
+      });
+    }
     if(kind==='NFSE')prepareReviewedNfseIni({inputDir,document,issuer:safeIssuer});
     else prepareReviewedFiscalIni({inputDir,document,issuer:safeIssuer});
     const iniPath=resolveInputs(inputDir,document,safeIssuer);
