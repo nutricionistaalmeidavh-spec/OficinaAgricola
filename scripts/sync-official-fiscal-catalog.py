@@ -95,6 +95,10 @@ def full_ncm(blob, today):
                     for row in raw if isinstance(row, dict) and
                     re.fullmatch(r"\d{8}", str(row.get("Codigo", "")).strip())})
     if len(codes) < MIN_COUNTS["ncm"]:
+        from collections import Counter
+        print("NCM_DIAG", "TOTAL",len(raw),"SAMPLES",[r.get("Codigo") for r in raw[:18]],
+              "LENGTHS",Counter(len(str(r.get("Codigo",""))) for r in raw).most_common(15),
+              "KEYS",list(raw[0]) if raw else [])
         raise ValueError("NCM oficial incompleta: " + str(len(codes)))
     return codes, str(source.get("Ato", "NCM Siscomex vigente")), str(
         source.get("Data_Ultima_Atualizacao_NCM"))
