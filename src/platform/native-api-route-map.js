@@ -174,7 +174,7 @@ const definitions=ROUTES.map(line=>{
  const names=[];
  const expression=new RegExp('^'+legacy.replace(/:([A-Za-z]+)/g,(_,name)=>{
   names.push(name);
-  return name==='barcode'?'(\\d{8}|\\d{12}|\\d{13}|\\d{14})':name==='barcode'?'(\\d{8}|\\d{12}|\\d{13}|\\d{14})':name==='plate'?'([A-Z0-9-]{1,16})':['intentId','planId','installmentId','entryId','refundId'].includes(name)?'([a-f0-9]{32})':'([1-9][0-9]*)';
+  return name==='barcode'?'(\\d{8}|\\d{12}|\\d{13}|\\d{14})':name==='plate'?'([A-Z0-9-]{1,16})':['intentId','planId','installmentId','entryId','refundId'].includes(name)?'([a-f0-9]{32})':'([1-9][0-9]*)';
  })+'$');
  return Object.freeze({method,legacy,native,roles:ROLES[role],transform,names,expression});
 });
@@ -219,7 +219,7 @@ export const nativeRouteCoverage=Object.freeze(definitions.map(x=>x.method+' '+x
 const nativeDefinitions=definitions.map(spec=>Object.freeze({
  method:spec.method,roles:spec.roles,
  expression:new RegExp('^'+spec.native.replace(/:([A-Za-z]+)/g,(_,name)=>
-  name==='plate'?'([A-Z0-9-]{1,16})':
+  name==='barcode'?'(\\d{8}|\\d{12}|\\d{13}|\\d{14})':name==='plate'?'([A-Z0-9-]{1,16})':
   ['intentId','planId','installmentId','entryId','refundId'].includes(name)?
     '([a-f0-9]{32})':'([1-9][0-9]*)')+'$')
 }));
