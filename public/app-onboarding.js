@@ -5,7 +5,7 @@
   const KEY='oficina:first-access-dismissed:v1:';
   const safeText=value=>typeof value==='string'?value.trim():'';
   const array=value=>Array.isArray(value)?value:[];
-  const available=value=>value&&typeof value==='object'&&!value.error;
+  const available=value=>Boolean(value)&&typeof value==='object'&&!value.error;
   const unitKey=()=>String(window.OficinaTenant?.getUnitId?.()||'default');
   const preferenceKey=()=>KEY+String(window.OficinaTenant?.getUnitId?.()||'default')+
     ':'+String(state.user?.id||'admin');
