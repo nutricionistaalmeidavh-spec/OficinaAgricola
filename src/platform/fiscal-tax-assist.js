@@ -1,3 +1,5 @@
+import {validateFiscalClassification} from './fiscal-official-catalog.js';
+
 // Guardas fiscais determinísticas. O enquadramento é informado pelo responsável;
 // este módulo valida consistência, jamais escolhe NCM/CFOP/CST ou alíquotas.
 const fail=message=>{throw new Error(message);};
@@ -34,7 +36,7 @@ function calculation(group,baseName,rateName,amountName,label){
  if(Math.abs(Math.round(base*percent/100)-result)>1)
    fail(label+' valor diverge do cálculo revisado');
 }
-export function validateReviewedTaxItems({issuer={},sections={},lines=[]}={}){
+export function validateReviewedTaxItems({issuer={},sections={},lines=[],catalog=null}={}){
  if(!Array.isArray(lines)||lines.length<1||lines.length>100)fail('Itens comerciais inválidos');
  const regime=string(issuer.taxRegime).toUpperCase();
  if(regime&&!['MEI','SIMPLES','NORMAL'].includes(regime))fail('Regime tributário do emitente inválido');
@@ -46,6 +48,9 @@ export function validateReviewedTaxItems({issuer={},sections={},lines=[]}={}){
   if(!item||!icms||!pis||!cofins)
     fail('Tributação ICMS/PIS/COFINS incompleta no item '+suffix);
   whole(item.NCM,'NCM do item '+suffix,/^\d{8}$/);
+  if(catalog)validateFiscalClassification({catalog,ncm:item.NCM,cfop:item.CFOP});
+  else if(issuer.environment==='PRODUCAO')
+    fail('Catálogo fiscal oficial local obrigatório antes de transmitir em produção');
   const cfop=whole(item.CFOP,'CFOP do item '+suffix,/^[567]\d{3}$/);
   if(idDest==='1'&&!cfop.startsWith('5')||
      idDest==='2'&&!cfop.startsWith('6')||
@@ -92,25 +97,57 @@ export function validateReviewedTaxItems({issuer={},sections={},lines=[]}={}){
   const cst=whole(ibs.CST,'IBS/CBS CST',/^\d{3}$/);
   const classe=whole(ibs.cClassTrib,'IBS/CBS cClassTrib',/^\d{6}$/);
   if(!classe.startsWith(cst))fail('IBS/CBS cClassTrib divergente do CST no item '+suffix);
-  // A apuração geral é segura apenas para o CST 000 nesta fase.
-  // Regimes reduzidos, monofásicos e diferidos exigem regra legal própria.
-  if(cst!=='000')fail('IBS/CBS exige revisão especializada para CST '+cst);
+  // Somente o catálogo versionado admite combinações CST x cClassTrib.
+  const row=validateFiscalClassification({catalog,ncm:item.NCM,cfop:item.CFOP,
+    cst,cClassTrib:classe});
+  if(row.regime==='ESPECIAL')fail('Regime IBS/CBS especial exige integração específica e revisão');
+  if(row.regime==='REDUCAO'&&!row.reduction||row.regime==='DIFERIMENTO'&&!row.deferral)
+   fail('Indicadores da classificação não permitem redução/diferimento');
   const bc=amount(base.vBC,'IBS/CBS base do item '+suffix);
-  const validateSub=(part,percentKey,valueKey,label)=>{
-   const p=rate(part[percentKey],label+' alíquota');
-   const v=amount(part[valueKey],label+' valor');
-   if(Math.abs(Math.round(bc*p/100)-v)>1)fail(label+' valor diverge do cálculo revisado');
-   return v;
+  const checkPart=(part,percentKey,valueKey,label)=>{
+   const nominal=rate(part[percentKey],label+' alíquota');
+   const reduction=part.pRedAliq!==undefined||part.pAliqEfet!==undefined;
+   const deferral=part.pDif!==undefined||part.vDif!==undefined;
+   if(row.regime==='REDUCAO'&&!reduction||row.regime==='DIFERIMENTO'&&!deferral)
+     fail(label+' redução/diferimento incompleto para a classificação');
+   if(reduction&&(!row.reduction||part.pRedAliq===undefined||part.pAliqEfet===undefined))
+     fail(label+' redução não permitida ou incompleta');
+   if(deferral&&(!row.deferral||part.pDif===undefined||part.vDif===undefined))
+     fail(label+' diferimento não permitido ou incompleto');
+   if(reduction&&deferral)
+     fail(label+' combinação de redução com diferimento exige revisão específica');
+   let effective=nominal;
+   if(reduction){
+     const red=rate(part.pRedAliq,label+' redução');
+     const stated=rate(part.pAliqEfet,label+' alíquota efetiva');
+     effective=Math.round(nominal*(1-red/100)*10000)/10000;
+     if(Math.abs(stated-effective)>0.0001)
+       fail(label+' alíquota efetiva incompatível com redução');
+   }
+   const gross=Math.round(bc*effective/100);
+   let postponed=0;
+   if(deferral){
+     const p=rate(part.pDif,label+' percentual de diferimento');
+     postponed=Math.round(gross*p/100);
+     if(Math.abs(amount(part.vDif,label+' valor diferido')-postponed)>1)
+       fail(label+' vDif diverge do diferimento revisado');
+   }
+   const total=amount(part[valueKey],label+' valor');
+   if(Math.abs(gross-postponed-total)>1)
+     fail(label+' valor diverge do cálculo revisado');
+   if(Object.keys(part).some(k=>/^(?:vDevTrib|pDevTrib|vCredPres|pCredPres)$/.test(k)))
+     fail(label+' créditos/devoluções exigem validação específica');
+   return total;
   };
-  const vu=validateSub(uf,'pIBSUF','vIBSUF','IBS UF');
-  const vm=validateSub(mun,'pIBSMun','vIBSMun','IBS Município');
-  validateSub(cbs,'pCBS','vCBS','CBS');
+  const vu=checkPart(uf,'pIBSUF','vIBSUF','IBS UF');
+  const vm=checkPart(mun,'pIBSMun','vIBSMun','IBS Município');
+  checkPart(cbs,'pCBS','vCBS','CBS');
+  const emissionYear=Number(String(sections.Identificacao?.dhEmi||'').match(/20\d{2}/)?.[0]||
+    new Date().getFullYear());
+  if(emissionYear===2026&&rate(mun.pIBSMun,'IBS municipal')!==0)
+    fail('Em 2026 a alíquota IBS municipal informada deve ser 0');
   if(Math.abs(amount(base.vIBS,'IBS total')-vu-vm)>1)
-   fail('IBS total difere da soma UF + Município');
-  for(const [name,part] of Object.entries({base,uf,mun,cbs})){
-   if(Object.keys(part).some(k=>/^(?:pDif|vDif|pDevTrib|vDevTrib|pRedAliq|pAliqEfet)$/.test(k)))
-    fail('IBS/CBS '+name+' com redução/diferimento requer revisão especializada');
-  }
+    fail('IBS total difere da soma UF + Município');
  }
  return true;
 }
