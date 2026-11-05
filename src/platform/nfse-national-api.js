@@ -37,7 +37,8 @@ function signedDocument(xml,kind){
  if(typeof xml!=='string'||Buffer.byteLength(xml,'utf8')>MAX_XML||xml.length<80||
    /<!DOCTYPE|<!ENTITY/i.test(xml))fail('XML fiscal não suportado ou inseguro');
  if(!new RegExp('<(?:[A-Za-z0-9_]+:)?'+kind+'(?:\\s|>)').test(xml)||
-   !/<(?:[A-Za-z0-9_]+:)?Signature(?:\s|>)/.test(xml))fail('XML fiscal precisa estar assinado');
+   !/<(?:[A-Za-z0-9_]+:)?Signature(?:\s|>)/.test(xml)||
+   !/<(?:[A-Za-z0-9_]+:)?SignatureValue>[A-Za-z0-9+/=]+<\/(?:[A-Za-z0-9_]+:)?SignatureValue>/.test(xml))fail('XML fiscal precisa estar assinado');
  return xml;
 }
 function signedDps(xml,id,issuer){
