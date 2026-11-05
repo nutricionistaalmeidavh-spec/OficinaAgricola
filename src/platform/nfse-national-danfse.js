@@ -111,6 +111,24 @@ function pdfWriter(){
   ops.push(colors+' rg BT /'+font+' '+fmt(size)+' Tf 1 0 0 1 '+
     fmt(x)+' '+fmt(Y(top+size))+' Tm ('+pdfString(t)+') Tj ET');
  };
+ const paragraph=(value,x,y,{size=7,width=570,maxLines=7,lineHeight=9}={})=>{
+  if(!value)return;
+  const cap=Math.max(8,Math.floor(width/(size*.53))),tokens=safe(value).split(/\s+/).filter(Boolean);
+  const lines=[];let current='';
+  for(const word of tokens){
+    if(!current){current=word;continue;}
+    if(current.length+1+word.length<=cap)current+=' '+word;
+    else {lines.push(current);current=word;}
+  }
+  if(current)lines.push(current);
+  // Não inventar conteúdo. Conforme NT, reticências sinalizam truncamento.
+  if(lines.length>maxLines){
+    lines.length=maxLines;
+    lines[maxLines-1]=lines[maxLines-1].slice(0,Math.max(1,cap-3))+'...';
+  }
+  for(const [i,line] of lines.entries())
+    text(line,x,y+i*lineHeight,{size,max:cap,width});
+ };
  const header=(name,y,h=17)=>{
   rectangle(8.5,y,578.3,h,{shade:true});
   text(name.toUpperCase(),12,y+4,{bold:true,size:7,max:97,width:560});
@@ -138,7 +156,7 @@ function pdfWriter(){
   }
   line(8.5,y+h,586.8,y+h,.5);
  };
- return {ops,line,rectangle,text,group,header,block};
+ return {ops,line,rectangle,text,paragraph,group,header,block};
 }
 function toPdf(commands,url,logo){
  const fonts=loadDanfseFonts();
@@ -213,10 +231,10 @@ export function renderNationalDanfse({xml,accessKey,environment,issuerCnpj,logoP
  const ly=HEIGHT-(12.47+(24.09-lh)/2)-lh;
  p.ops.push('q '+fmt(lw)+' 0 0 '+fmt(lh)+' '+fmt(lx)+' '+fmt(ly)+' cm /ImLogo Do Q');
  // Cabeçalho: área central de 10,19 cm e área direita de 5,09 cm.
- p.text('DANFSe v2.0',230,11,{size:9,bold:true,max:30,width:178});
- p.text('Documento Auxiliar da NFS-e',198,23,{size:9,bold:true,max:44,width:233});
+ p.text('DANFSe v2.0',230,9,{size:9,bold:true,max:30,width:178});
+ p.text('Documento Auxiliar da NFS-e',198,20,{size:9,bold:true,max:44,width:233});
  if(environment==='HOMOLOGACAO')
-   p.text('NFS-e SEM VALIDADE JURÍDICA',196,33,{size:9,bold:true,color:'red',max:43,width:242});
+   p.text('NFS-e SEM VALIDADE JURÍDICA',196,30,{size:9,bold:true,color:'red',max:43,width:242});
  if(data.city)p.text('Município: '+data.city,443,9,{size:8,max:36,width:135});
  p.text('Ambiente Gerador: '+data.generator,443,21,{size:6,max:38,width:137});
  p.text('Tipo de Ambiente: '+(environment==='HOMOLOGACAO'?'Homologação':'Produção'),
@@ -252,7 +270,8 @@ export function renderNationalDanfse({xml,accessKey,environment,issuerCnpj,logoP
    [data.taxNational,data.taxMunicipal].filter(Boolean).join(' / '),284);
  p.group('Código NBS',301,387,data.nbs,140);
  p.group('Local da prestação / Sigla UF / País',448,387,data.location,133);
- p.group('Descrição do serviço',12,413,data.description,568);
+ p.group('Descrição do serviço',12,413,'',568);
+ p.paragraph(data.description,12,426,{size:7,width:565,maxLines:6,lineHeight:9});
  p.line(8.5,485,586.8,485);
  p.header('Tributação municipal (ISSQN)',486,17);
  const iss=child(data.iss,'tribMun');
@@ -297,7 +316,7 @@ export function renderNationalDanfse({xml,accessKey,environment,issuerCnpj,logoP
  p.group('Total IBS/CBS',450,719,money(field(ibs,'vIBSCBS')),128);
  p.line(8.5,743,586.8,743);
  p.header('Informações complementares',744,17);
- p.text(data.extra,12,766,{size:7,max:150,width:568});
+ p.paragraph(data.extra,12,765,{size:7,width:568,maxLines:6,lineHeight:9});
  p.line(8.5,826,586.8,826);
  p.text('NFS-e '+data.number+' / '+data.key,12,827,{size:6,max:105,width:570});
  const pdf=toPdf(p.ops,url,logo);
