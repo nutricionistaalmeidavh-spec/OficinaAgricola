@@ -152,10 +152,16 @@ export function createAcbrLibFiscalProvider(opts={}){
         throw new Error('Cadastre o certificado A1 da empresa antes do diagnóstico');
       if(!libraries.NFE)return {ready:false,nfe:{status:'BIBLIOTECA_AUSENTE'},
         nfse:{status:'VERIFICACAO_MUNICIPAL_NECESSARIA'}};
-      const response=await invoke({...libraries.NFE,kind:'NFE',operation:'status',
-        environment:settings.environment,issuerCnpj:settings.issuer_cnpj,
-        issuerUf:settings.issuer_uf});
+      const basis={...libraries.NFE,kind:'NFE',environment:settings.environment,
+        issuerCnpj:settings.issuer_cnpj,issuerUf:settings.issuer_uf};
+      const certificate=await invoke({...basis,operation:'certificate'});
+      if(certificate?.status!=='CERTIFICATE_MATCH')
+        return {ready:false,environment:settings.environment,
+          certificate:{status:'CNPJ_NAO_CONFIRMADO'},
+          nfe:{status:'NAO_TESTADO'},nfse:{status:'VERIFICACAO_MUNICIPAL_NECESSARIA'}};
+      const response=await invoke({...basis,operation:'status'});
       return {ready:response?.status==='ONLINE',environment:settings.environment,
+        certificate:{status:'CNPJ_CONFIRMADO'},
         nfe:{status:response?.status||'INDETERMINADO',
           code:response?.code||null,uf:settings.issuer_uf},
         nfse:{status:'VERIFICACAO_MUNICIPAL_NECESSARIA'}};
