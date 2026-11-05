@@ -75,21 +75,40 @@ export function compileReviewedFiscalIni({document,issuer,review}={}){
      fail('Preço e quantidade não conciliam com a origem');
    const name=String(line.description||'').trim();
    if(!name||name.length>120)fail('Descrição canônica do item inválida');
-   item.Codigo=String(line.sourceItemId);
-   item.Descricao=name;
-   item.Quantidade=String(q);
-   item.ValorUnitario=cents(line.unitPriceCents);
-   item.ValorTotal=cents(line.subtotalCents);
-   item.ValorDesconto=cents(line.discountCents);
+   // ACBrLib NFe usa as tags do modelo INI oficial: cProd/xProd/qCom/vUnCom/vProd.
+   // Os valores comerciais vêm exclusivamente do snapshot imutável, nunca do formulário.
+   delete item.Codigo;delete item.Descricao;delete item.Quantidade;
+   delete item.ValorUnitario;delete item.ValorTotal;delete item.ValorDesconto;
+   item.cProd=String(line.sourceItemId);
+   item.xProd=name;
+   item.uCom=String(item.uCom||item.Unidade||'UN');
+   item.qCom=String(q);
+   item.vUnCom=cents(line.unitPriceCents);
+   item.vProd=cents(line.subtotalCents);
+   item.vDesc=cents(line.discountCents);
+   item.uTrib=String(item.uTrib||item.uCom);
+   item.qTrib=String(q);
+   item.vUnTrib=cents(line.unitPriceCents);
+   item.cEAN=String(item.cEAN||'SEM GTIN');
+   item.cEANTrib=String(item.cEANTrib||item.cEAN);
+   item.indTot='1';
+   delete item.Unidade;
    gross+=Number(line.subtotalCents);
    discount+=Number(line.discountCents);
    net+=Number(line.totalCents);
  });
  if(net!==Number(document.amount_cents)||
-     money(sections.Total.ValorProduto)!==gross||
-     money(sections.Total.ValorDesconto)!==discount||
-     money(sections.Total.ValorNota)!==net)
+     money(sections.Total.vProd??sections.Total.ValorProduto)!==gross||
+     money(sections.Total.vDesc??sections.Total.ValorDesconto)!==discount||
+     money(sections.Total.vNF??sections.Total.ValorNota)!==net)
    fail('Totais tributários divergem dos lançamentos canônicos');
+ // Convertemos também totais legados antes de gerar o INI oficial do ACBr.
+ delete sections.Total.ValorProduto;
+ delete sections.Total.ValorDesconto;
+ delete sections.Total.ValorNota;
+ sections.Total.vProd=cents(gross);
+ sections.Total.vDesc=cents(discount);
+ sections.Total.vNF=cents(net);
  for(const [section,fields] of Object.entries(sections)){
    if(!/^[A-Za-z][A-Za-z0-9_]{0,55}$/.test(section)||
        !fields||typeof fields!=='object'||Array.isArray(fields))
