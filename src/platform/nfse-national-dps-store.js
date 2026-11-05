@@ -1,7 +1,7 @@
 // DPS assinada revisada por documento, confinada à pasta privada da unidade.
 // Nunca aceita XML de outras empresas, alterações do snapshot ou fontes remotas.
 import {createHash,randomBytes} from 'node:crypto';
-import {existsSync,lstatSync,readFileSync,writeFileSync,renameSync,rmSync,mkdirSync} from 'node:fs';
+import {existsSync,lstatSync,readFileSync,writeFileSync,linkSync,rmSync,mkdirSync} from 'node:fs';
 import {isAbsolute,join} from 'node:path';
 import {buildNationalDpsId} from './nfse-national-api.js';
 
@@ -95,9 +95,11 @@ export function createLocalNationalDpsStore({directory}={}){
     environment:issuer.environment,idDps:checked.idDps,signedXml:checked.xml};
   const tmp=file+'.tmp-'+randomBytes(8).toString('hex');
   try{writeFileSync(tmp,JSON.stringify(info),{mode:0o600,flag:'wx'});
-    // Evitar sobrescrever outra sessão.
-    if(regular(file))fail('DPS já preparada por outra sessão');
-    renameSync(tmp,file);
+    // Hard link é criação atômica sem sobrescrever outra sessão (inclui NTFS).
+    try{linkSync(tmp,file)}catch(error){
+      if(error.code==='EEXIST')fail('DPS já preparada por outra sessão');
+      throw error;
+    }
   }finally{if(existsSync(tmp))rmSync(tmp,{force:true});}
   return {prepared:true,idDps:checked.idDps};
  }
