@@ -82,6 +82,6 @@ test('NFC-e pode omitir destinatário sem divergência de cliente da venda',()=>
  delete review.sections.Destinatario;
  review.sections.pag001={tPag:'01',vPag:'80.00'};
  const result=compileReviewedFiscalIni({document:doc,issuer,review});
- assert.match(result.ini,/\\[pag001\\]/);
- assert.doesNotMatch(result.ini,/\\[Destinatario\\]/);
+ assert.match(result.ini,/\[pag001\]/);
+ assert.doesNotMatch(result.ini,/\[Destinatario\]/);
 });
