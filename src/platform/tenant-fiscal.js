@@ -110,10 +110,6 @@ export function resolveTenantFiscalProvider({
       consultCancellation:async args=>{ensureIssuer(args);return underlying.consultCancellation(args);}}:{}),
     ...(typeof underlying.prepareCancellation==='function'?{
       prepareCancellation:args=>{ensureIssuer(args);return underlying.prepareCancellation(args);}}:{}),
-    ...(typeof underlying.certificateStatus==='function'?{
-      certificateStatus:()=>underlying.certificateStatus()}:{}),
-    ...(typeof underlying.installCertificate==='function'?{
-      installCertificate:args=>underlying.installCertificate(args)}:{}),
     ...(typeof underlying.listTaxProfiles==='function'?{
       listTaxProfiles:args=>{ensureIssuer(args);return underlying.listTaxProfiles(args)}}:{}),
     ...(typeof underlying.saveTaxProfile==='function'?{
