@@ -424,7 +424,11 @@ function logout(){
 }
 
 function pageRenderer(page){
-  const dashboard=typeof renderDashboard==='function'?renderDashboard:async()=>{};
+  const dashboard=typeof renderDashboard==='function'?async()=>{
+    await renderDashboard();
+    if(state.user?.role==='ADMIN'&&window.OficinaFirstAccess)
+      await window.OficinaFirstAccess.renderBanner();
+  }:async()=>{};
   const fiscal=typeof renderFiscal==='function'?renderFiscal:async()=>{};
   const market=typeof renderMarketParity==='function'?renderMarketParity:async()=>{};
   return ({
