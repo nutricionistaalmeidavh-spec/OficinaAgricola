@@ -9,6 +9,7 @@ import {pathToFileURL} from 'node:url';
 import {existsSync} from 'node:fs';
 import {prepareNationalDpsInput} from './nfse-national-automatic.js';
 import {buildNationalCancelRequest} from './nfse-national-cancellation.js';
+import {attachNationalRtc} from './nfse-national-rtc.js';
 
 async function loadNationalSdk(){
  try{
