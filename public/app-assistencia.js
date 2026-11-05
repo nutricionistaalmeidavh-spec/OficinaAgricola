@@ -71,16 +71,21 @@ async function renderSales({cursor=null,loaded=[]}={}) {
 }
 
 async function saleModal() {
-  // Mesma chave em todos os retries deste formulário (inclusive após timeout HTTP).
+  // A chave é estável em todos os reenvios desta venda (inclusive em timeout).
   const requestId = globalThis.crypto?.randomUUID?.() || `sale-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const [parts, services, customers] = await Promise.all([api('/api/parts'), api('/api/services'), api('/api/customers')]);
-  const options = [
-    ...parts.filter(p => p.active).map(p => ({ value: `P:${p.id}`, label: `Peça · ${p.sku} — ${p.description} · ${money(p.sale_price_cents)} · estoque ${p.quantity}` })),
-    ...services.filter(s => s.active).map(s => ({ value: `S:${s.id}`, label: `Serviço · ${s.code} — ${s.name} · ${money(s.price_cents)}` })),
-  ];
-  if (!options.length) { toast('Cadastre uma peça ou serviço antes da venda.', true); return; }
+  // Nunca descarregar estoque ou clientes inteiros no formulário: usa pesquisa remota.
+  const [partPage, services] = await Promise.all([
+    api('/api/parts/page?limit=1'), api('/api/services')
+  ]);
+  const serviceOptions=services.filter(s=>s.active).map(s=>({
+    id:Number(s.id), label:`Serviço · ${s.code} — ${s.name} · ${money(s.price_cents)}`
+  }));
+  if (!partPage.total && !serviceOptions.length) {
+    toast('Cadastre uma peça ou serviço antes da venda.', true); return;
+  }
+  const defaultKind=partPage.total?'P':'S';
   showModal('Nova venda de balcão', `<form class="form-stack">
-    <label>Cliente<select name="customerId"><option value="">Consumidor</option>${customers.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></label>
+    <label>Cliente (opcional)<select name="customerId" id="saleCustomer"><option value="">Consumidor</option></select></label>
     <div class="card-head"><strong>Itens</strong><button type="button" class="btn sm soft" id="addSaleItem">+ Item</button></div>
     <div id="saleItems"></div>
     <div class="field-row"><label>Desconto (R$)<input name="discount" type="number" min="0" step="0.01" value="0"></label><label>Pagamento<select name="paymentMethod"><option>DINHEIRO</option><option>PIX</option><option>CARTAO_DEBITO</option><option>CARTAO_CREDITO</option><option>TRANSFERENCIA</option></select></label></div>
@@ -88,9 +93,13 @@ async function saleModal() {
     <button class="btn primary" type="submit">Concluir venda</button>
   </form>`, async fd => {
     const items = $$('.sale-item-row').map(row => {
-      const [kind, id] = $('[data-sale-select]', row).value.split(':');
-      const quantity = Number($('[data-sale-qty]', row).value);
-      return kind === 'P' ? { partId: Number(id), quantity } : { serviceId: Number(id), quantity };
+      const kind=$('[data-sale-kind]',row).value;
+      const select=kind==='P'?$('[data-sale-part]',row):$('[data-sale-service]',row);
+      const id=Number(select?.value||0);
+      const quantity=Number($('[data-sale-qty]',row).value);
+      if(!Number.isSafeInteger(id)||id<=0||!Number.isFinite(quantity)||quantity<=0)
+        throw new Error('Selecione um item válido e quantidade positiva.');
+      return kind==='P'?{partId:id,quantity}:{serviceId:id,quantity};
     });
     if (!items.length) throw new Error('Inclua ao menos um item');
     const customerId = fd.get('customerId');
@@ -105,12 +114,34 @@ async function saleModal() {
     toast('Venda concluída e estoque atualizado');
     await refreshCurrentPage();
   });
+  attachPagedLookup($('#saleCustomer'),{resource:'customers',label:'cliente',empty:'Consumidor'});
   const addRow = () => {
     const row = document.createElement('div');
     row.className = 'field-row sale-item-row';
-    row.innerHTML = `<label>Item<select data-sale-select>${options.map(item => `<option value="${item.value}">${esc(item.label)}</option>`).join('')}</select></label><label>Quantidade<input data-sale-qty type="number" min="0.01" step="0.01" value="1"></label><button type="button" class="btn danger sm" data-remove-sale>Remover</button>`;
+    row.innerHTML = `<label>Tipo<select data-sale-kind>
+      <option value="P" ${defaultKind==='P'?'selected':''}>Peça</option>
+      <option value="S" ${defaultKind==='S'?'selected':''}>Serviço</option>
+    </select></label><label data-sale-part-label>Peça<select data-sale-part required><option value="">Pesquisar peça</option></select></label>
+    <label data-sale-service-label>Serviço<select data-sale-service><option value="">Selecione serviço</option>
+      ${serviceOptions.map(s=>`<option value="${s.id}">${esc(s.label)}</option>`).join('')}
+    </select></label>
+    <label>Quantidade<input data-sale-qty type="number" min="0.01" step="0.01" value="1" required></label>
+    <button type="button" class="btn danger sm" data-remove-sale>Remover</button>`;
     $('#saleItems').appendChild(row);
-    $('[data-remove-sale]', row).onclick = () => row.remove();
+    const selectKind=$('[data-sale-kind]',row);
+    const partSelect=$('[data-sale-part]',row);
+    const serviceSelect=$('[data-sale-service]',row);
+    attachPagedLookup(partSelect,{resource:'parts',label:'peça',placeholder:'Pesquisar SKU ou descrição'});
+    const synchronizeKind=()=>{
+      const part=selectKind.value==='P';
+      $('[data-sale-part-label]',row).classList.toggle('hidden',!part);
+      $('[data-sale-service-label]',row).classList.toggle('hidden',part);
+      partSelect.required=part;
+      serviceSelect.required=!part;
+    };
+    selectKind.addEventListener('change',synchronizeKind);
+    synchronizeKind();
+    $('[data-remove-sale]',row).onclick = () => row.remove();
   };
   addRow();
   $('#addSaleItem').onclick = addRow;

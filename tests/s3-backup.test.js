@@ -71,19 +71,26 @@ test('S3 backups reject insecure public endpoints and missing credentials',()=>{
   assert.throws(()=>createS3BackupClient({...settings,endpoint:'https://user:pass@example.org'}),/endpoint/i);
 });
 
-test('backup mirror rejects symbolic links instead of uploading files outside the archive',{skip:process.platform==='win32'},async t=>{
+test('backup creation and S3 mirror reject symbolic links before external files can be uploaded',{skip:process.platform==='win32'},async t=>{
   const root=mkdtempSync(join(tmpdir(),'oficina-s3-link-'));
   t.after(()=>rmSync(root,{recursive:true,force:true}));
   const dbPath=join(root,'db.sqlite');const db=openDatabase(dbPath);migrate(db);db.close();
   const uploads=join(root,'uploads');mkdirSync(uploads);
   const privateFile=join(root,'private-secret.txt');writeFileSync(privateFile,'do-not-exfiltrate');
-  symlinkSync(privateFile,join(uploads,'out-of-root.txt'));
-  const backupRoot=join(root,'backups');
-  const archive=createBackup({databasePath:dbPath,uploadsPath:uploads,backupRoot:join(backupRoot,'registry')});
+  const sourceLink=join(uploads,'out-of-root.txt');
+  symlinkSync(privateFile,sourceLink);
+  const backupRoot=join(root,'backups'),registryRoot=join(backupRoot,'registry');
+  // Hardened createBackup rejects a symlink before it can become an archive.
+  assert.throws(()=>createBackup({databasePath:dbPath,uploadsPath:uploads,backupRoot:registryRoot}),/link simbólico|symlink/i);
+  rmSync(sourceLink);
+  writeFileSync(join(uploads,'normal.txt'),'safe');
+  const archive=createBackup({databasePath:dbPath,uploadsPath:uploads,backupRoot:registryRoot});
+  // Also reject a post-creation symlink tampering attempt during mirroring.
+  symlinkSync(privateFile,join(archive.backupDir,'uploads','out-of-root.txt'));
   const writes=[];
   const client={async putFile(arg){writes.push(arg.key);}};
   await assert.rejects(()=>mirrorVerifiedTenantBackups({
     records:[{backupDir:archive.backupDir,created:true,verified:true}],backupRoot,client
-  }),/link simbólico|symlink/i);
-  assert.ok(!writes.includes('registry/out-of-root.txt'));
+  }),/link simbólico|symlink|arquivos não verificados/i);
+  assert.equal(writes.length,0,'remote mirror must upload nothing from tampered archive');
 });

@@ -79,6 +79,38 @@ try{
  if(-not($rows | Where-Object { $_.id -eq $customer.id })){
    throw 'Cliente PostgreSQL desapareceu após reabrir o aplicativo'
  }
+
+ # Reinstalação silenciosa da MESMA versão; não substitui teste de migração entre versões.
+ $sentinelDir=Join-Path $root 'ArtiSys\Oficina\storage\uploads'
+ New-Item -ItemType Directory -Path $sentinelDir -Force | Out-Null
+ $sentinel=Join-Path $sentinelDir 'qa-reinstall-preserve.txt'
+ Set-Content -LiteralPath $sentinel -Value 'arquivo-de-teste-pg' -NoNewline -Encoding utf8
+ Stop-Officina
+ $installerAgain=Start-Process -FilePath $exe.FullName -ArgumentList @('/S',"/D=$installDir") -Wait -PassThru
+ if($installerAgain.ExitCode -ne 0){throw "Reinstalação silenciosa falhou: $($installerAgain.ExitCode)"}
+ Start-Officina
+ $afterSetup=Invoke-RestMethod 'http://127.0.0.1:3344/api/setup/status'
+ if($afterSetup.required -ne $false){throw 'Reinstalação perdeu o administrador'}
+ $afterLogin=Invoke-RestMethod 'http://127.0.0.1:3344/api/auth/login' -Method POST -ContentType 'application/json' -Body '{"username":"pg-admin-qa","password":"SenhaFortePG2026!Local"}'
+ if(-not $afterLogin.token){throw 'Reinstalação invalidou o login'}
+ $afterHeaders=@{Authorization="Bearer $($afterLogin.token)"}
+ $afterCustomers=@(Invoke-RestMethod 'http://127.0.0.1:3344/api/customers' -Headers $afterHeaders)
+ if(-not($afterCustomers | Where-Object { $_.id -eq $customer.id -and $_.name -eq $customer.name })){
+   throw 'Reinstalação perdeu cadastro persistido no PostgreSQL'
+ }
+ if((Get-FileHash $secret -Algorithm SHA256).Hash -ne $originalHash){
+   throw 'Reinstalação alterou credenciais privadas do PostgreSQL'
+ }
+ if((Get-Content -LiteralPath $sentinel -Raw -Encoding utf8) -ne 'arquivo-de-teste-pg'){
+   throw 'Reinstalação apagou arquivos locais da oficina'
+ }
+ $afterFiscal=Invoke-RestMethod 'http://127.0.0.1:3344/api/fiscal/settings' -Headers $afterHeaders
+ if($afterFiscal.enabled -eq $true -or $afterFiscal.enabled -eq 1){
+   throw 'Reinstalação habilitou emissão fiscal sem credenciamento'
+ }
+ Remove-Item -LiteralPath $sentinel -Force
+ Write-Host 'PASS: Reinstalação PostgreSQL preservou administrador, cliente, cluster e anexos'
+
  Write-Host 'PASS: PostgreSQL 16 offline instalado automaticamente pelo Oficina, login e dados persistentes sem npm/terminal.'
 }finally{
  Stop-Officina
