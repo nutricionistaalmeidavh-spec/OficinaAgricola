@@ -31,7 +31,7 @@ async function renderFiscal({cursor=null,loaded=[]}={}){
       '<br><small>Competência '+esc(nfse.competenceDate)+' · '+esc(nfse.channel==='NACIONAL'?'Emissor Nacional':'Emissor Municipal')+'</small>':
       '<br><small>NFS-e antiga: rota e competência precisam de revisão antes de emitir</small>'):'';
     return '<div class="list-item"><div><strong>'+esc(fiscalDisplayTitle(d))+'</strong> · '+esc(fiscalOriginTitle(d))+
-      '<br><small>'+esc(d.status)+' · '+money(d.amount_cents)+'</small>'+routeText+'</div><div class="action-row'+'+'>'+
+      '<br><small>'+esc(d.status)+' · '+money(d.amount_cents)+'</small>'+routeText+'</div><div class="action-row">'+
       '<button class="btn sm soft" data-fiscal-details="'+d.id+'">Histórico</button>'+pdf+cancel+actions+'</div></div>';
   }).join('');
   setContent('<div class="section-head fiscal-head"><div><h2>Documentos fiscais</h2>'+
