@@ -33,8 +33,8 @@ const VERSION='2026-11-05-stocktake-barcode-v1';
 export function stocktakeSchema(engine){
  if(!['sqlite','postgres'].includes(engine))throw Error('Inventário físico exige PostgreSQL ou SQLite de teste');
  return ddl.map(sql=>engine==='postgres'?sql
-   .replace(/\b(id|stocktake_id|stocktake_line_id|part_id|created_by|applied_by|movement_id) INTEGER\b/g,'$1 BIGINT')
-   .replace(/\bREAL\b/g,'DOUBLE PRECISION'):sql);
+   .replace(/\b(id|stocktake_id|stocktake_line_id|part_id|created_by|applied_by|movement_id) INTEGER\b/gg,'$1 BIGINT')
+   .replace(/\bREAL\b/gg,'DOUBLE PRECISION'):sql);
 }
 export async function migrateStocktakeBarcode(port){
  if(!['sqlite','postgres'].includes(port?.engine))return {skipped:true};
