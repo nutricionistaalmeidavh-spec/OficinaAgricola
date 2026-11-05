@@ -92,6 +92,9 @@ test('primeiro acesso: UI é carregada após fiscal e ligada à página inicial'
   const html=readFileSync(new URL('../public/index.html',import.meta.url),'utf8');
   const core=readFileSync(new URL('../public/app-core.js',import.meta.url),'utf8');
   assert.ok(html.indexOf('/app-fiscal.js')<html.indexOf('/app-onboarding.js'));
+  const sw=readFileSync(new URL('../public/sw.js',import.meta.url),'utf8');
+  assert.match(sw,/['"]\\/app-onboarding\\.js['"]/);
+  assert.match(sw,/['"]\\/app-fiscal\\.js['"]/);
   assert.match(core,/await window\.OficinaFirstAccess\.renderBanner\(\)/);
   assert.doesNotMatch(source,/productionConfirmed:\s*true|authorizationVerified:\s*true/);
 });
