@@ -1,3 +1,4 @@
+import {danfseTestLogo} from './fixtures/nfse-logo-fixture.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {renderNationalDanfse} from '../src/platform/nfse-national-danfse.js';
@@ -19,7 +20,7 @@ const xml='<NFSe xmlns="http://www.sped.fazenda.gov.br/nfse"><infNFSe Id="NFS'+k
 '</infDPS></DPS><valores><vLiq>150.00</vLiq></valores></infNFSe></NFSe>';
 
 test('DANFSe gerado localmente em A4 retrato, com QR oficial e aviso de homologação',()=>{
- const pdf=renderNationalDanfse({xml,accessKey:key,environment:'HOMOLOGACAO'});
+ const pdf=renderNationalDanfse({xml,accessKey:key,environment:'HOMOLOGACAO',logoPng:danfseTestLogo});
  assert.ok(Buffer.isBuffer(pdf));
  const text=pdf.toString('latin1');
  assert.match(text,/^%PDF-1\./);
@@ -33,8 +34,8 @@ test('DANFSe gerado localmente em A4 retrato, com QR oficial e aviso de homologa
  assert.ok(pdf.length<6*1024*1024);
 });
 test('DANFSe rejeita XML não oficial, chave ou ambiente divergentes',()=>{
- assert.throws(()=>renderNationalDanfse({xml:'<html></html>',accessKey:key,environment:'HOMOLOGACAO'}),/NFSe|XML/i);
- assert.throws(()=>renderNationalDanfse({xml,accessKey:'1'.repeat(50),environment:'HOMOLOGACAO'}),/chave|Id/i);
- assert.throws(()=>renderNationalDanfse({xml,accessKey:key,environment:'PRODUCAO'}),/ambiente|tpAmb/i);
- assert.throws(()=>renderNationalDanfse({xml:'<!DOCTYPE x>'+xml,accessKey:key,environment:'HOMOLOGACAO'}),/DOCTYPE|XML/i);
+ assert.throws(()=>renderNationalDanfse({xml:'<html></html>',accessKey:key,environment:'HOMOLOGACAO',logoPng:danfseTestLogo}),/NFSe|XML/i);
+ assert.throws(()=>renderNationalDanfse({xml,accessKey:'1'.repeat(50),environment:'HOMOLOGACAO',logoPng:danfseTestLogo}),/chave|Id/i);
+ assert.throws(()=>renderNationalDanfse({xml,accessKey:key,environment:'PRODUCAO',logoPng:danfseTestLogo}),/ambiente|tpAmb/i);
+ assert.throws(()=>renderNationalDanfse({xml:'<!DOCTYPE x>'+xml,accessKey:key,environment:'HOMOLOGACAO',logoPng:danfseTestLogo}),/DOCTYPE|XML/i);
 });
