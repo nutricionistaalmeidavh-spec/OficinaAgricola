@@ -90,6 +90,7 @@ function fiscalSettingsModal(current){
   const issuerUf=$('#fiscalIssuerUf'),ibge=$('#fiscalMunicipalityIbge');
   const lookup=$('#fiscalDDD44Lookup'),city=$('#fiscalDDD44City');
   const syncCity=()=>{
+    lookup.hidden=issuerUf.value!=='PR';
     lookup.style.display=issuerUf.value==='PR'?'':'none';
     city.value=issuerUf.value==='PR'&&prDDD44.some(item=>item.ibge===ibge.value)?ibge.value:'';
   };
