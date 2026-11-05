@@ -81,3 +81,42 @@ test('PDF and cancellation fail closed without provider or authorization',async(
   await assert.rejects(ws.getFiscalPdf(doc.id),/PDF|emissor|disponível/i);
  }finally{db.close();}
 });
+
+test('official SEFAZ cStat 101 receipt without event XML confirms cancellation',async()=>{
+ const provider={name:'acbr-test',
+  async transmit(){return authorized();},
+  async cancel(){return {status:'CANCELADA',environment:'HOMOLOGACAO',
+   accessKey:authorized().accessKey,protocol:'cancel-protocol-123',xml:'',
+   officialReceipt:{cStat:101,accessKey:authorized().accessKey,
+    protocol:'cancel-protocol-123',receivedAt:'2026-11-04T13:10:00-03:00',
+    environment:'HOMOLOGACAO'}};},
+  async consultCancellation(){throw Error('Não deveria consultar após sucesso');}
+ };
+ const {db,ws,doc}=await fixture(provider);
+ try{
+  await ws.submitFiscalDocument(doc.id);
+  const canceled=await ws.cancelFiscalDocument(doc.id,{reason:'Nota emitida com valores incorretos'});
+  assert.equal(canceled.status,'CANCELADA');
+  const receipt=JSON.parse(canceled.response_json);
+  assert.equal(receipt.officialReceipt.cStat,101);
+  assert.equal(receipt.cancellationProtocol,'cancel-protocol-123');
+  assert.equal(canceled.authorized_xml,authorized().xml);
+ }finally{db.close();}
+});
+test('unmatched SEFAZ cancellation receipt fails closed',async()=>{
+ const provider={name:'acbr-test',
+  async transmit(){return authorized();},
+  async cancel(){return {status:'CANCELADA',environment:'HOMOLOGACAO',
+   accessKey:authorized().accessKey,protocol:'receipt-01',xml:'',
+   officialReceipt:{cStat:101,accessKey:'DIFFERENT',
+    protocol:'receipt-01',receivedAt:'2026-11-04T13:10:00-03:00',
+    environment:'HOMOLOGACAO'}};},
+  async consultCancellation(){return {status:'INDETERMINADO'};}
+ };
+ const {db,ws,doc}=await fixture(provider);
+ try{
+  await ws.submitFiscalDocument(doc.id);
+  await assert.rejects(ws.cancelFiscalDocument(doc.id,{reason:'Nota emitida com valores incorretos'}),/comprovante/i);
+  assert.equal((await ws.getFiscalDocument(doc.id)).status,'INDETERMINADO');
+ }finally{db.close();}
+});
