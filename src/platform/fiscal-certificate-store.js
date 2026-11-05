@@ -161,6 +161,34 @@ export function createLocalFiscalCertificateStore({directory}={}){
      });
    }finally{content=null;}
  }
+// mTLS da API Nacional: o PFX só existe em memória durante a requisição.
+ // Não exportar este método em rotas HTTP nem persistir o PFX decifrado.
+ async function withTlsIdentity({cnpj}={},action){
+   if(!/^\d{14}$/.test(String(cnpj??''))||typeof action!=='function')
+     throw Error('Identidade mTLS da empresa inválida');
+   if(selectedA3())throw Error('API Nacional direta exige A1; A3 deve utilizar emissor ACBr compatível');
+   const saved=envelope();
+   if(!saved)throw Error('Certificado A1 local não configurado');
+   let secret,pfx;
+   try{
+     const decipher=createDecipheriv('aes-256-gcm',key(),Buffer.from(saved.iv,'base64'));
+     decipher.setAAD(Buffer.from('artisys-oficina-fiscal-a1-v1'));
+     decipher.setAuthTag(Buffer.from(saved.tag,'base64'));
+     secret=JSON.parse(Buffer.concat([
+       decipher.update(Buffer.from(saved.cipherText,'base64')),decipher.final()
+     ]).toString('utf8'));
+     pfx=Buffer.from(secret.pfx,'base64');
+     createSecureContext({pfx,passphrase:secret.password});
+     return await action({pfx,passphrase:secret.password});
+   }catch(error){
+     if(error?.message?.includes('API Nacional')||error?.message?.includes('SEFIN'))
+       throw error;
+     throw Error('Falha ao utilizar certificado A1 local ou na conexão autenticada');
+   }finally{
+     if(pfx)pfx.fill(0);
+     if(secret){secret.pfx='';secret.password='';}
+   }
+ }
  return Object.freeze({status,install,selectA3,
-   activeSerial:()=>selectedA3()?.serial||null,withConfig,withDiscoveryConfig});
+   activeSerial:()=>selectedA3()?.serial||null,withConfig,withDiscoveryConfig,withTlsIdentity});
 }
