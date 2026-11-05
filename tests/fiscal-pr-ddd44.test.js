@@ -40,5 +40,7 @@ test('catálogo é carregado antes da UI fiscal e não depende de serviços pago
   const catalog=html.indexOf('src="/pr-ddd44-municipios.js"');
   const fiscal=html.indexOf('src="/app-fiscal.js"');
   assert.ok(catalog!==-1&&fiscal>catalog,'catálogo deve existir antes do formulário fiscal');
-  assert.match(readFileSync(new URL('../public/app-fiscal.js',import.meta.url),'utf8'),/PR_DDD44_MUNICIPIOS/);
+  const fiscalSource=readFileSync(new URL('../public/app-fiscal.js',import.meta.url),'utf8');
+  assert.match(fiscalSource,/PR_DDD44_MUNICIPIOS/);
+  assert.match(fiscalSource,/lookup\\.hidden=issuerUf\\.value!=='PR'/,'seletor deve aparecer somente quando a UF for PR');
 });
