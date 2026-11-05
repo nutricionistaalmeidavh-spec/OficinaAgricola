@@ -76,8 +76,10 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
        WHERE d.status='AUTORIZADA_HOMOLOGACAO'
          AND e.issuer_digest=? AND e.certificate_digest=?`,
        [issuerEvidenceDigest(settings),certificateIdentity]):[];
+   const providerNames=Object.fromEntries(['NFE','NFCE','NFSE'].map(kind=>
+     [kind,clean(provider?.nameForKind?.(kind)||providerName)]));
    const release=buildFiscalReleaseStatus({settings,certificate,certificateIdentity,
-     providerName,providerReady,proofs});
+     providerName,providerNames,providerReady,proofs});
    return {...release,environment:settings.environment,
      issuerCnpj:settings.issuer_cnpj||'',certificate,providerReady};
  }
@@ -347,7 +349,7 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
    // falha de pré-validação mantém o rascunho intacto, sem transmissão.
    assertNfseRouteForTransmission(doc,issuer,provider);
    if(typeof provider.prepare==='function')await provider.prepare({document:doc,issuer});
-   const attemptId=randomUUID(),providerName=clean(provider.name)||'local',at=now();
+   const attemptId=randomUUID(),providerName=clean(provider.nameForKind?.(doc.kind)||provider.name)||'local',at=now();
    const update={sql:`UPDATE fiscal_documents SET
      status='INDETERMINADO',provider_name=?,attempt_id=?,issuer_snapshot_json=?,updated_at=?
      WHERE id=? AND status='RASCUNHO'`,params:[
@@ -454,7 +456,7 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
      fail('Documento sem identificação fiscal autorizada',409);
    if(typeof provider.prepareCancellation==='function')
      await provider.prepareCancellation({document:doc,issuer,reason:justification});
-   const attemptId=randomUUID(),at=now(),providerName=clean(provider.name)||'local';
+   const attemptId=randomUUID(),at=now(),providerName=clean(provider.nameForKind?.(doc.kind)||provider.name)||'local';
    const update={sql:`UPDATE fiscal_documents SET
      status='INDETERMINADO',attempt_id=?,response_json=?,last_error='',updated_at=?
      WHERE id=? AND status=?`,params:[attemptId,JSON.stringify({
@@ -490,8 +492,8 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
    try{result=await provider[method]({document:doc,attemptId:doc.attempt_id});}
    catch(error){await uncertain(doc.id,error?.message||error);throw error;}
    return cancel
-     ?finishFiscalCancellation(doc.id,doc.attempt_id,result,clean(provider.name)||'local')
-     :applyResult(doc.id,doc.attempt_id,result,clean(provider.name)||'local');
+     ?finishFiscalCancellation(doc.id,doc.attempt_id,result,clean(provider.nameForKind?.(doc.kind)||provider.name)||'local')
+     :applyResult(doc.id,doc.attempt_id,result,clean(provider.nameForKind?.(doc.kind)||provider.name)||'local');
  }
  return Object.freeze({getFiscalSettings,getNationalDpsStatus,saveNationalDps,prepareAutomaticNationalDps,setFiscalSettings,getFiscalTaxProfiles,
    saveFiscalTaxProfile,getFiscalTaxReview,saveFiscalTaxReview,getFiscalOnboardingStatus,
