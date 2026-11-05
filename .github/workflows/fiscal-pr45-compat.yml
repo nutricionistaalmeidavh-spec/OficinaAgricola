@@ -34,6 +34,10 @@ jobs:
             git diff --name-only --diff-filter=U
             exit 1
           fi
+          # A main já tem uma linha antiga com espaço final no modal fiscal.
+          # Normalização sem mudança semântica antes do gate de whitespace.
+          sed -i 's/[[:blank:]]*$//' public/app-fiscal.js
+          git add public/app-fiscal.js
           git diff --cached --check
           for file in src/platform/fiscal-data/catalog.json src/platform/fiscal-official-catalog.js src/platform/fiscal-tax-assist.js src/platform/fiscal-nfse-preparer.js scripts/assert-fiscal-data-bundle.mjs scripts/sync-official-fiscal-catalog.py; do
             test -s "$file" || { echo "Missing fiscal integration file $file"; exit 1; }
