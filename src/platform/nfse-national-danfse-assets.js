@@ -13,7 +13,7 @@ export function nationalDanfseLogo({logoPng}={}){
  const paths=[
   ...(process.resourcesPath?[join(process.resourcesPath,'nfse-national','danfse-logo.png')]:[]),
   join(directory,'danfse-logo.png'),
-  join(directory,'..','..','..','build','nfse-national','danfse-logo.png')
+  join(directory,'..','..','build','nfse-national','danfse-logo.png')
  ];
  for(const path of paths)if(existsSync(path))return readFileSync(path);
  error('Logomarca NFS-e oficial ausente do pacote DANFSe: não substituir por imagem improvisada');
