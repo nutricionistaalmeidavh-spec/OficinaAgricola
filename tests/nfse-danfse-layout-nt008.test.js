@@ -29,6 +29,11 @@ test('QR tem origem oficial 17,48 x 1,67 cm e nota de homologação vermelha',()
  assert.match(content,/NFS-e SEM VALIDADE JUR/);
  assert.match(content,/0 1 1 0 k/);
  assert.match(content,/ConsultaPublica/);
+ assert.ok(content.includes('A autenticidade desta NFS-e pode ser verificada'));
+ assert.ok(content.includes('pela leitura deste código QR ou pela consulta'));
+ assert.ok(content.includes('da chave de acesso no portal nacional da NFS-e'));
+ assert.ok(!content.includes('código Q...'), 'A frase de consulta não pode ser truncada');
+
 });
 test('logomarca PNG íntegra é requisito de distribuição, sem substituição silenciosa por texto',()=>{
  assert.throws(()=>renderNationalDanfse({xml,accessKey:KEY,environment:'HOMOLOGACAO',logoPng:Buffer.from('nao-e-png')}),/logomarca|Logo|PNG/i);
