@@ -48,9 +48,10 @@ export function createNationalNfseProvider({certificateStore,inputDir,client,dan
    const sdk=await loadNationalSdk();
    const built=sdk.buildDpsFromJson(prepared.payload);
    if(built.id!==prepared.idDps)throw Error('DPS gerada tem identificação divergente');
+   const unsigned=prepared.rtc?attachNationalRtc(built.xml,prepared.rtc):built.xml;
    const xmlSigned=await certificateStore.withTlsIdentity({cnpj:issuer.cnpj},identity=>{
      const material=sdk.loadPfxFromBuffer(identity.pfx,identity.passphrase);
-     const signed=sdk.signDps(built.xml,prepared.idDps,material);
+     const signed=sdk.signDps(unsigned,prepared.idDps,material);
      if(!sdk.verifyDps(signed,material.certPem))
        throw Error('Assinatura XMLDSig local inválida: DPS não armazenada');
      return signed;
