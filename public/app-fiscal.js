@@ -70,11 +70,12 @@ async function fiscalTaxProfilesModal(){
     esc(p.name)+'</strong><br><small>'+esc(p.kind==='GOODS'
       ?'NCM '+p.ncm+' · CFOP '+p.cfop+' · '+p.icmsScheme+' '+p.icmsCode
       :'Serviço '+p.serviceListCode+' · município '+p.municipalityIbge)+
-    '</small></div></div>').join('');
+    '</small></div><button type="button" class="btn sm soft" data-tax-edit="'+esc(p.id)+'">Editar</button></div>').join('');
   showModal('Perfis tributários da empresa',
     '<div class="card"><strong>Perfis cadastrados</strong><div class="list">'+
     (rows||'<p class="muted">Nenhum perfil cadastrado nesta unidade.</p>')+'</div></div>'+
     '<form class="form-stack">'+
+    '<input name="id" type="hidden">'+
     '<p class="muted">O responsável fiscal ou contador deve confirmar classificação e alíquotas. Não há determinação automática de impostos.</p>'+
     '<label>Tipo de regra<select id="taxKind" name="kind">'+
     '<option value="GOODS">Mercadorias — NF-e / NFC-e</option>'+
@@ -102,7 +103,7 @@ async function fiscalTaxProfilesModal(){
     '<button type="submit" class="btn primary">Salvar perfil tributário</button></form>',
     async form=>{
       const x=formObj(form);
-      const profile={kind:x.kind,name:x.name,...(x.kind==='GOODS'?{
+      const profile={...(x.id?{id:x.id}:{}),kind:x.kind,name:x.name,...(x.kind==='GOODS'?{
         ncm:x.ncm,cfop:x.cfop,origin:x.origin,icmsScheme:x.icmsScheme,
         icmsCode:x.icmsCode,pisCst:x.pisCst,cofinsCst:x.cofinsCst,unit:x.unit,
         cest:x.cest,benefitCode:x.benefitCode
@@ -119,6 +120,19 @@ async function fiscalTaxProfilesModal(){
   const update=()=>{goods.hidden=kind.value!=='GOODS';service.hidden=kind.value!=='SERVICE';goods.style.display=goods.hidden?'none':'flex';service.style.display=service.hidden?'none':'flex'};
   kind.onchange=update;
   update();
+  const form=$('#modalBody form');
+  $('[data-tax-edit]').forEach(button=>button.onclick=()=>{
+    const selected=profiles.find(p=>p.id===button.dataset.taxEdit);
+    if(!selected||!form)return;
+    for(const [key,value] of Object.entries(selected)){
+      const field=form.elements.namedItem(key);
+      if(!field)continue;
+      if(field.type==='checkbox')field.checked=value===true;
+      else field.value=String(value??'');
+    }
+    kind.value=selected.kind;update();
+    form.querySelector('[name="name"]')?.focus();
+  });
 }
 async function fiscalTaxReviewModal(id){
   const [doc,profiles,settings]=await Promise.all([
