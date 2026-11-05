@@ -9,7 +9,7 @@ import {pathToFileURL} from 'node:url';
 import {existsSync} from 'node:fs';
 import {prepareNationalDpsInput} from './nfse-national-automatic.js';
 
-export function createNationalNfseProvider({certificateStore,inputDir,client}={}){
+export function createNationalNfseProvider({certificateStore,inputDir,client,danfseLogoPng}={}){
  if(!certificateStore||typeof certificateStore.withTlsIdentity!=='function')
    throw Error('NFS-e Nacional exige cofre de certificado A1 local');
  const dps=createLocalNationalDpsStore({directory:inputDir});
@@ -85,7 +85,7 @@ export function createNationalNfseProvider({certificateStore,inputDir,client}={}
    if(typeof document.authorized_xml!=='string'||!document.authorized_xml)
      throw Error('XML autorizado obrigatório para gerar DANFSe local');
    return renderNationalDanfse({xml:document.authorized_xml,accessKey:document.access_key,
-     environment:issuer.environment,issuerCnpj:issuer.cnpj});
+     environment:issuer.environment,issuerCnpj:issuer.cnpj,logoPng:danfseLogoPng});
   }
  });
 }
