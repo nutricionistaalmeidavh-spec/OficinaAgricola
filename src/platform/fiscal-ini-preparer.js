@@ -1,7 +1,7 @@
 // Emissão determinística a partir de revisão tributária explícita.
 // Nunca presume NCM, CFOP, CSOSN/CST, base de cálculo, alíquotas ou série.
 // Certificados e senhas pertencem exclusivamente à configuração ACBr local.
-import {createHash} from 'node:crypto';
+import {createHash,randomInt} from 'node:crypto';
 import {readFileSync,statSync,writeFileSync,existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {assertReviewedFiscalUf} from './fiscal-uf.js';
@@ -54,6 +54,22 @@ export function compileReviewedFiscalIni({document,issuer,review}={}){
  // cUF e cMunFG não são inferidos: a revisão tributária deve coincidir
  // exatamente com o município e a UF da empresa.
  assertReviewedFiscalUf({kind:document.kind,issuer,sections});
+ const ide=sections.Identificacao;
+ if(!/^[1-9][0-9]{0,8}$/.test(String(ide.nNF||''))||
+    !/^(?:0|[1-9][0-9]{0,2})$/.test(String(ide.serie||'')))
+   fail('Número ou série da NF-e inválidos');
+ // cNF identifica a nota; não deve ser calculado a partir do número fiscal.
+ if(!ide.cNF)ide.cNF=String(randomInt(0,100000000)).padStart(8,'0');
+ if(!/^\d{8}$/.test(String(ide.cNF)))fail('Código aleatório cNF inválido');
+ if(!ide.dhEmi){
+   const values=Object.fromEntries(new Intl.DateTimeFormat('en-GB',{
+     timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit',
+     hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'
+   }).formatToParts(new Date()).map(x=>[x.type,x.value]));
+   ide.dhEmi=values.day+'/'+values.month+'/'+values.year+' '+
+     values.hour+':'+values.minute+':'+values.second;
+ }
+
  if(String(sections.Emitente.CNPJCPF||'').replace(/\D/g,'')!==issuer.cnpj)
    fail('CNPJ revisado diverge do emitente');
  const customer=String(snapshot.customer?.document||'').replace(/\D/g,'');
@@ -78,21 +94,40 @@ export function compileReviewedFiscalIni({document,issuer,review}={}){
      fail('Preço e quantidade não conciliam com a origem');
    const name=String(line.description||'').trim();
    if(!name||name.length>120)fail('Descrição canônica do item inválida');
-   item.Codigo=String(line.sourceItemId);
-   item.Descricao=name;
-   item.Quantidade=String(q);
-   item.ValorUnitario=cents(line.unitPriceCents);
-   item.ValorTotal=cents(line.subtotalCents);
-   item.ValorDesconto=cents(line.discountCents);
+   // ACBrLib NFe usa as tags do modelo INI oficial: cProd/xProd/qCom/vUnCom/vProd.
+   // Os valores comerciais vêm exclusivamente do snapshot imutável, nunca do formulário.
+   delete item.Codigo;delete item.Descricao;delete item.Quantidade;
+   delete item.ValorUnitario;delete item.ValorTotal;delete item.ValorDesconto;
+   item.cProd=String(line.sourceItemId);
+   item.xProd=name;
+   item.uCom=String(item.uCom||item.Unidade||'UN');
+   item.qCom=String(q);
+   item.vUnCom=cents(line.unitPriceCents);
+   item.vProd=cents(line.subtotalCents);
+   item.vDesc=cents(line.discountCents);
+   item.uTrib=String(item.uTrib||item.uCom);
+   item.qTrib=String(q);
+   item.vUnTrib=cents(line.unitPriceCents);
+   item.cEAN=String(item.cEAN||'SEM GTIN');
+   item.cEANTrib=String(item.cEANTrib||item.cEAN);
+   item.indTot='1';
+   delete item.Unidade;
    gross+=Number(line.subtotalCents);
    discount+=Number(line.discountCents);
    net+=Number(line.totalCents);
  });
  if(net!==Number(document.amount_cents)||
-     money(sections.Total.ValorProduto)!==gross||
-     money(sections.Total.ValorDesconto)!==discount||
-     money(sections.Total.ValorNota)!==net)
+     money(sections.Total.vProd??sections.Total.ValorProduto)!==gross||
+     money(sections.Total.vDesc??sections.Total.ValorDesconto)!==discount||
+     money(sections.Total.vNF??sections.Total.ValorNota)!==net)
    fail('Totais tributários divergem dos lançamentos canônicos');
+ // Convertemos também totais legados antes de gerar o INI oficial do ACBr.
+ delete sections.Total.ValorProduto;
+ delete sections.Total.ValorDesconto;
+ delete sections.Total.ValorNota;
+ sections.Total.vProd=cents(gross);
+ sections.Total.vDesc=cents(discount);
+ sections.Total.vNF=cents(net);
  for(const [section,fields] of Object.entries(sections)){
    if(!/^[A-Za-z][A-Za-z0-9_]{0,55}$/.test(section)||
        !fields||typeof fields!=='object'||Array.isArray(fields))
