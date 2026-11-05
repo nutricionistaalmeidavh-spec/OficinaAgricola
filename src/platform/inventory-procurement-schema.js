@@ -48,9 +48,9 @@ const VERSION='2026-11-05-inventory-procurement-v1';
 export function inventoryProcurementSchema(engine){
  if(!['sqlite','postgres','d1'].includes(engine))throw Error('Engine de compras inválido');
  return DDL.map(sql=>engine==='postgres'?sql
-   .replace(/\\b([a-z_][a-z0-9_]*_id|id|created_by|movement_id) INTEGER\\b/g,'$1 BIGINT')
-   .replace(/\\bcost_cents INTEGER\\b/g,'cost_cents BIGINT')
-   .replace(/\\bREAL\\b/g,'DOUBLE PRECISION'):sql);
+   .replace(/\b([a-z_][a-z0-9_]*_id|id|created_by|movement_id) INTEGER\b/g,'$1 BIGINT')
+   .replace(/\bcost_cents INTEGER\b/g,'cost_cents BIGINT')
+   .replace(/\bREAL\b/g,'DOUBLE PRECISION'):sql);
 }
 export async function migrateInventoryProcurement(port){
  if(!port||!['sqlite','postgres','d1'].includes(port.engine))
