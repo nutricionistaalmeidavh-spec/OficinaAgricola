@@ -111,7 +111,7 @@ async function fiscalTaxProfilesModal(){
       await refreshCurrentPage();
     });
   const kind=$('#taxKind'),goods=$('#taxGoods'),service=$('#taxService');
-  const update=()=>{goods.hidden=kind.value!=='GOODS';service.hidden=kind.value!=='SERVICE'};
+  const update=()=>{goods.hidden=kind.value!=='GOODS';service.hidden=kind.value!=='SERVICE';goods.style.display=goods.hidden?'none':'flex';service.style.display=service.hidden?'none':'flex'};
   kind.onchange=update;
   update();
 }
@@ -158,7 +158,7 @@ async function fiscalTaxReviewModal(id){
     '<label>Número fiscal<input name="number" maxlength="9" required></label></div>'+
     '<label>Natureza da operação<input name="nature" maxlength="60" required></label>'+
     (doc.kind==='NFCE'?'<label>Meio de pagamento (tPag, 2 dígitos)<input name="paymentCode" maxlength="2" required></label>':'')+
-    addressForm('issuer','Endereço completo do emitente',{name:settings.issuer_cnpj||''})+
+    addressForm('issuer','Endereço completo do emitente')+
     (doc.kind==='NFE'||snap.customer?.document?addressForm('customer','Endereço do destinatário',{name:snap.customer?.name||''}):'')+
     '<h3>Tributação dos itens</h3>'+itemRows+
     '<button class="btn primary" type="submit">Validar e salvar revisão</button></form>',
