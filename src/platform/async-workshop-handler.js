@@ -458,6 +458,29 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
        includeInactive:u.searchParams.get('includeInactive')==='1',
        cursor:u.searchParams.get('cursor'),limit:u.searchParams.get('limit')||50
      }));
+   const barcodePath=path.match(/^\/v1\/parts\/barcode\/(\d{8}|\d{12}|\d{13}|\d{14})$/);
+   if(barcodePath&&method==='GET'){
+     const found=await services.findPartByBarcode(barcodePath[1]);
+     return found?json(found):json({error:'Código não encontrado'},404);
+   }
+   if(path==='/v1/stocktakes'&&method==='GET')
+     return json(await services.listStocktakes({limit:u.searchParams.get('limit')||30}));
+   if(path==='/v1/stocktakes'&&method==='POST')
+     return json(await services.createStocktake({...await dataFrom(request),actorId:actor.id}),201);
+   const stocktakeOne=path.match(/^\/v1\/stocktakes\/([1-9]\d*)$/);
+   if(stocktakeOne&&method==='GET')
+     return json(await services.getStocktake(Number(stocktakeOne[1])));
+   const stocktakeCounts=path.match(/^\/v1\/stocktakes\/([1-9]\d*)\/counts$/);
+   if(stocktakeCounts&&method==='POST')
+     return json(await services.saveStocktakeCounts({
+       ...await dataFrom(request),stocktakeId:Number(stocktakeCounts[1]),actorId:actor.id
+     }));
+   const stocktakeApply=path.match(/^\/v1\/stocktakes\/([1-9]\d*)\/apply$/);
+   if(stocktakeApply&&method==='POST')
+     return json(await services.applyStocktake({
+       ...await dataFrom(request),stocktakeId:Number(stocktakeApply[1]),
+       actorId:actor.id,actorRole:actor.role
+     }));
    if(path==='/v1/parts/low-stock'&&method==='GET')
      return json(await services.lowStockParts());
    const part=path.match(/^\/v1\/parts\/([1-9]\d*)$/);
