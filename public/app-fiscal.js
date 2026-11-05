@@ -53,19 +53,29 @@ async function renderFiscal({cursor=null,loaded=[]}={}){
       '<button class="btn sm soft" data-fiscal-details="'+d.id+'">Histórico</button>'+revise+pdf+cancel+actions+'</div></div>';
   }).join('');
   const modelLabels={NFE:'NF-e',NFCE:'NFC-e',NFSE:'NFS-e'};
+  // Etapas editoriais; a autorização continua exclusiva do backend por modelo.
   const modelsSummary=Object.entries(modelLabels).map(([kind,title])=>{
     const model=readiness.models?.[kind];
-    return title+': '+(model?.productionReady?'produção tecnicamente habilitada':
-      model?.homologationVerified?'homologação comprovada, produção pendente':
-        model?.reason||'verificação pendente');
-  }).join(' · ');
+    const configured=settings.enabled===true;
+    const verified=model?.homologationVerified===true;
+    const released=model?.productionReady===true;
+    const stage=(number,label,done,detail)=>'<li><strong>'+number+'. '+label+'</strong> — '+
+      (done?'Concluído':esc(detail))+'</li>';
+    return '<section class="card" aria-label="Etapas de emissão '+title+'">'+
+      '<h3>'+title+'</h3><ol>'+
+      stage(1,'Configurar dados fiscais',configured,'Preencha os dados da empresa e o certificado')+
+      stage(2,'Testar em homologação',verified,model?.reason||'É necessária uma nota de teste autorizada')+
+      stage(3,'Habilitar produção',released,verified?'Confirme os requisitos de produção':'Conclua a homologação primeiro')+
+      '</ol><small class="muted">'+(released?'Pronta para tentar emitir; cada nota ainda será validada.':
+        'A emissão em produção continua protegida até a validação do sistema.')+'</small></section>';
+  }).join('');
   setContent('<div class="section-head fiscal-head"><div><h2>Documentos fiscais</h2>'+
     '<span class="muted">Rascunhos, notas e protocolos das ordens de serviço e vendas</span></div>'+
     '<div class="action-row">'+(state.user.role==='ADMIN'?'<button id="fiscalSettings" class="btn">Configuração fiscal</button><button id="fiscalCertA1" class="btn">Certificado A1</button><button id="fiscalCertA3" class="btn">Token A3</button><button id="fiscalDiagnose" class="btn">Testar SEFAZ</button>':'')+
     '<button id="fiscalNew" class="btn primary">+ Preparar documento</button></div></div>'+
     '<div class="card"><p><strong>Cadastro fiscal:</strong> '+(settings.enabled?'Cadastro concluído':'Aguardando cadastro fiscal')+' · '+esc(settings.environment)+
     ' · CNPJ '+esc(settings.issuer_cnpj||'não informado')+'</p>'+
-    '<p><strong>Situação por modelo:</strong> '+esc(modelsSummary)+'</p>'+
+    '<div class="fiscal-model-steps">'+modelsSummary+'</div>'+
     '<p><strong>Emissão efetiva:</strong> exige certificado/credenciamento, classificação tributária e um emissor local validado. '+
     'Um rascunho ou um envio sem confirmação não substitui NF-e, NFC-e ou NFS-e autorizada.</p></div>'+
     '<div class="card"><div class="card-head"><h2>Registro fiscal</h2><small>'+docs.length+' documento(s) recente(s)</small></div>'+
