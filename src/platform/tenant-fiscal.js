@@ -17,6 +17,13 @@ export function validateTenantFiscalConfigs(configs){
     if(cnpj.length!==14||/^(\d)\1+$/.test(cnpj))fail('CNPJ do emissor obrigatório e inválido para empresa '+id);
     if(claimed.has(cnpj))fail('CNPJ duplicado entre empresas no mapa fiscal');
     claimed.add(cnpj);
+    // Configuração de canal NFS-e é local à empresa: sem fallback automático.
+    if(config.nfseChannel!==undefined&&
+        !['NACIONAL','MUNICIPAL'].includes(config.nfseChannel))
+      fail('Canal NFS-e inválido: use NACIONAL ou MUNICIPAL');
+    if(config.nfseChannel==='MUNICIPAL'&&
+        !/^\\d{7}$/.test(String(config.nfseMunicipalityIbge||'')))
+      fail('Emissor municipal NFS-e exige município IBGE configurado');
     if(config.type==='sidecar'){
       let url;
       try{url=new URL(String(config.url||''));}catch{fail('Emissor local deve usar loopback HTTP');}
@@ -63,6 +70,8 @@ export function resolveTenantFiscalProvider({
   };
   return Object.freeze({
     name:underlying.name||('tenant-'+cfg.type),
+    nfseChannel:cfg.nfseChannel||null,
+    nfseMunicipalityIbge:cfg.nfseMunicipalityIbge||null,
     ...(typeof underlying.prepare==='function'?{prepare:args=>{ensureIssuer(args);return underlying.prepare(args);}}:{}),
     transmit:async args=>{ensureIssuer(args);return underlying.transmit(args);},
     consult:async args=>{ensureIssuer(args);return underlying.consult(args);},
