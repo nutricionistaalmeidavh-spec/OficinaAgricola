@@ -1,0 +1,37 @@
+name: Sync official fiscal tables to draft PR
+on:
+  push:
+    branches:
+      - feat/fiscal-onboarding-integrado-20261105
+    paths:
+      - .github/workflows/fiscal-sync-official.yml
+permissions:
+  contents: write
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout fiscal draft branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+      - name: Fetch public RFB + ENCAT + SVRS and generate complete snapshot
+        run: python3 scripts/sync-official-fiscal-catalog.py --checked-at 2026-11-05
+      - name: Verify official downloaded data and schema offline
+        run: |
+          node scripts/assert-fiscal-data-bundle.mjs
+          node --test tests/fiscal-packaged-official-data.test.js tests/fiscal-official-catalog.test.js
+      - name: Commit snapshot on draft fiscal branch (no merge or release)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/platform/fiscal-data/catalog.json
+          if ! git diff --cached --quiet; then
+            git commit -m "data(fiscal): add verified official NCM CFOP cClassTrib snapshot 2026-11-05"
+            git push origin HEAD:feat/fiscal-onboarding-integrado-20261105
+          fi
