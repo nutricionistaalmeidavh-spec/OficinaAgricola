@@ -16,6 +16,7 @@ const sha=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex'
 const restrict=(n,min,max)=>Math.max(min,Math.min(max,Number(n)||min));
 export function createAsyncWorkshopInventory(port){
  if(!['sqlite','postgres','d1'].includes(port?.engine))fail('Adaptador SQL inválido');
+ const barcodeEnabled=async()=>port.engine==='postgres'||port.engine==='sqlite'&&Boolean(await port.first("SELECT 1 FROM pragma_table_info('parts') WHERE name='barcode'"));
  async function atomic(queries){
    if(port.engine==='d1')return port.batch(queries);
    return port.transaction(async tx=>{
@@ -28,16 +29,16 @@ export function createAsyncWorkshopInventory(port){
    return row;
  }
  async function listParts({includeInactive=false,search=''}={}){
-   const like='%'+clean(search)+'%';
+   const like='%'+clean(search)+'%',hasBarcode=await barcodeEnabled();
    return port.all(`SELECT * FROM parts WHERE (?=1 OR active=1)
-     AND (sku LIKE ? OR description LIKE ? OR category LIKE ? OR barcode LIKE ?)
-     ORDER BY description,id`,[includeInactive?1:0,like,like,like,like]);
+     AND (sku LIKE ? OR description LIKE ? OR category LIKE ? ${hasBarcode?'OR barcode LIKE ?':''})
+     ORDER BY description,id`,[includeInactive?1:0,like,like,like,...(hasBarcode?[like]:[])]);
  }
  async function listPartsPage({includeInactive=false,search='',limit=50,cursor=null}={}){
-   const filter=['(?=1 OR active=1)'],params=[includeInactive?1:0];
+   const filter=['(?=1 OR active=1)'],params=[includeInactive?1:0],hasBarcode=await barcodeEnabled();
    if(clean(search)){const like='%'+clean(search)+'%';
-     filter.push('(sku LIKE ? OR description LIKE ? OR category LIKE ? OR barcode LIKE ?)');
-     params.push(like,like,like,like);
+     filter.push('(sku LIKE ? OR description LIKE ? OR category LIKE ? '+(hasBarcode?'OR barcode LIKE ?':'')+')');
+     params.push(like,like,like,...(hasBarcode?[like]:[]));
    }
    const where=' WHERE '+filter.join(' AND '),size=restrict(limit,1,100);
    const total=Number((await port.first('SELECT COUNT(*) n FROM parts'+where,params)).n);
@@ -49,19 +50,20 @@ export function createAsyncWorkshopInventory(port){
    return {items,total,nextCursor:more?items.at(-1)?.id??null:null};
  }
  async function updatePart(partId,input={}){
-   const old=await getPart(partId);
+   const old=await getPart(partId),hasBarcode=await barcodeEnabled();
+   if(!hasBarcode&&input.barcode!=null&&clean(input.barcode))fail('GTIN indisponível neste backend sem migração',501);
    const pick=(name,field)=>input[name]===undefined?old[field]:clean(input[name]);
    const sku=pick('sku','sku'),description=pick('description','description');
    if(!sku||!description)fail('SKU e descrição são obrigatórios');
    const minStock=input.minStock===undefined?Number(old.min_stock):Number(input.minStock);
    if(!Number.isFinite(minStock)||minStock<0)fail('Estoque mínimo inválido');
    await port.run(`UPDATE parts SET sku=?,description=?,category=?,unit=?,
-     cost_cents=?,sale_price_cents=?,min_stock=?,location=?,barcode=?,active=?,updated_at=? WHERE id=?`,[
+     cost_cents=?,sale_price_cents=?,min_stock=?,location=?,${hasBarcode?'barcode=?,':''}active=?,updated_at=? WHERE id=?`,[
      sku,description,pick('category','category'),pick('unit','unit'),
      input.costCents===undefined?old.cost_cents:nonnegative(input.costCents,'Custo'),
      input.salePriceCents===undefined?old.sale_price_cents:nonnegative(input.salePriceCents,'Preço'),
      minStock,pick('location','location'),
-     input.barcode===undefined?old.barcode:normalizeGtin(input.barcode),
+     ...(hasBarcode?[input.barcode===undefined?old.barcode:normalizeGtin(input.barcode)]:[]),
      input.active===undefined?old.active:input.active?1:0,at(),old.id
    ]);
    return getPart(old.id);
