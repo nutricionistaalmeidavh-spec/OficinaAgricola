@@ -34,8 +34,8 @@ export function createAsyncWorkshopProcurement(port){
   }
   if(cursor!=null&&cursor!==''){where.push('m.id<?');params.push(key(cursor));}
   const size=maxLimit(limit);
-  const items=await port.all(`SELECT m.*,p.sku,p.description FROM inventory_movements m
-   JOIN parts p ON p.id=m.part_id ${where.length?'WHERE '+where.join(' AND '):''}
+  const items=await port.all(`SELECT m.*,p.sku,p.description,u.name author_name FROM inventory_movements m
+   JOIN parts p ON p.id=m.part_id LEFT JOIN users u ON u.id=m.created_by ${where.length?'WHERE '+where.join(' AND '):''}
    ORDER BY m.id DESC LIMIT ?`,[...params,size+1]);
   return {items:items.slice(0,size),nextCursor:items.length>size?items[size-1].id:null};
  }
