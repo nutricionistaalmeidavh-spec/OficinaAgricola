@@ -17,6 +17,7 @@ import {loadTenantReminderSenders} from './platform/tenant-reminder-smtp.js';
 import {loadTenantFiscalConfigs,resolveTenantFiscalProvider} from './platform/tenant-fiscal.js';
 import {createAcbrLibFiscalProvider} from './platform/acbrlib-fiscal-provider.js';
 import {createNationalNfseProvider} from './platform/nfse-national-provider.js';
+import {selectManagedFiscalEngine} from './platform/nfse-national-provider-selection.js';
 import {createLocalFiscalCertificateStore} from './platform/fiscal-certificate-store.js';
 
 const registryUrl=process.env.OFICINA_POSTGRES_REGISTRY_URL;
@@ -114,17 +115,21 @@ function fiscalProviderForUnit(unit){
     ...(nfeLib?{nfeConfig:privateIni('ACBrLibNFe.ini')}:{}),
     ...(nfseLib?{nfseConfig:privateIni('ACBrLibNFSe.ini')}:{})
   });
-  // Opt-in explícito: não alterar instalações ACBr/A3 existentes.
-  if(process.env.OFICINA_NFSE_NACIONAL_DIRETA!=='true')return acbr;
+  // A1 habilita API nacional direta no modelo NFS-e, sem exigir flag técnica.
+  // A3 mantém ACBr; configurações explícitas por empresa têm precedência acima.
   const national=createNationalNfseProvider({certificateStore,inputDir});
+  const select=kind=>selectManagedFiscalEngine({
+    kind,certificateType:certificateStore.status().certificateType
+  })==='nacional'?national:acbr;
   const service=method=>async args=>{
-    const target=args?.document?.kind==='NFSE'?national:acbr;
+    const target=select(args?.document?.kind);
     if(typeof target?.[method]!=='function')
       throw Error('Operação fiscal não habilitada para este emissor');
     return target[method](args);
   };
   return Object.freeze({...acbr,
     nfseChannel:'NACIONAL',
+    nameForKind:kind=>select(kind).name,
     prepare:service('prepare'),transmit:service('transmit'),
     consult:service('consult'),printPdf:service('printPdf'),
     cancel:service('cancel'),consultCancellation:service('consultCancellation'),
