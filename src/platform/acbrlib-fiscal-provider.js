@@ -117,7 +117,7 @@ export function createAcbrLibFiscalProvider(opts={}){
   const validatedWorker=workerExe?localFile(workerExe,'executor ACBrLib integrado'):null;
   const runner=opts.runner??(args=>executeWorker(args,{python,workerExe:validatedWorker}));
   const certificateStore=opts.certificateStore||null;
-  const invoke=async args=>certificateStore
+  const invoke=async args=>certificateStore?.status().configured
     ?certificateStore.withConfig({
        kind:args.kind,environment:args.environment,uf:args.issuerUf
      },configPath=>runner({...args,configPath}))
@@ -131,14 +131,14 @@ export function createAcbrLibFiscalProvider(opts={}){
       throw new Error('Emitente fiscal ausente; configure antes do envio ACBr');
     // Se houver revisão tributária do documento, gerar INI e manifesto vinculados
     // ao snapshot. Nunca inferir impostos, NCM, CFOP ou condições de produção.
-    if(certificateStore&&!certificateStore.status().configured)
-      throw new Error('Cadastre o certificado A1 desta unidade antes da emissão');
+    // Sem A1 do cofre, a configuração ACBr privada preexistente pode representar A3.
+    // A biblioteca nativa valida presença/uso do certificado antes de qualquer emissão.
     prepareReviewedFiscalIni({inputDir,document,issuer:safeIssuer});
     const iniPath=resolveInputs(inputDir,document,safeIssuer);
     return {kind,documentId:Number(document.id),iniPath,
       snapshotHash:document.snapshot_hash,amountCents:Number(document.amount_cents),environment:safeIssuer.environment,
       issuerCnpj:safeIssuer.cnpj,issuerUf:safeIssuer.uf,
-      ...libraries[libraryKind],issuerUf:safeIssuer.uf};
+      ...libraries[libraryKind]};
   };
   return {
     name:'acbrlib-local',
@@ -173,6 +173,10 @@ export function createAcbrLibFiscalProvider(opts={}){
     installCertificate:input=>{
       if(!certificateStore)throw new Error('Instalação de certificado disponível apenas no Oficina local');
       return certificateStore.install(input);
+    },
+    installCsc:input=>{
+      if(!certificateStore)throw new Error('CSC exige cofre local desta unidade');
+      return certificateStore.installCsc(input);
     },
     diagnose:async({settings}={})=>{
       if(!settings||!settings.enabled||!settings.issuer_cnpj||!settings.issuer_uf)
