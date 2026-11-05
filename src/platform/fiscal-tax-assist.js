@@ -57,11 +57,17 @@ export function validateReviewedTaxItems({issuer={},sections={},lines=[]}={}){
    if(icms.CST!==undefined)whole(icms.CST,'CST ICMS',/^\d{2}$/);
    if(icms.CSOSN!==undefined)whole(icms.CSOSN,'CSOSN ICMS',/^\d{3}$/);
   }
+  if(regime==='NORMAL'&&string(icms.CST)==='00'&&
+    ['vBC','pICMS','vICMS'].some(k=>string(icms[k])===''))
+    fail('ICMS do item '+suffix+' exige base, alíquota e valor completos');
   calculation(icms,'vBC','pICMS','vICMS','ICMS do item '+suffix);
   for(const [name,part,rateKey,valueKey] of [
    ['PIS',pis,'pPIS','vPIS'],['COFINS',cofins,'pCOFINS','vCOFINS']
   ]){
-   whole(part.CST,name+' CST do item '+suffix,/^\d{2}$/);
+   const cstValue=whole(part.CST,name+' CST do item '+suffix,/^\d{2}$/);
+   if(['01','02'].includes(cstValue)&&
+      ['vBC',rateKey,valueKey].some(k=>string(part[k])===''))
+     fail(name+' do item '+suffix+' requer base, alíquota e valor completos');
    calculation(part,'vBC',rateKey,valueKey,name+' do item '+suffix);
   }
   const ibs=sections['IBSCBS'+suffix],base=sections['gIBSCBS'+suffix],
