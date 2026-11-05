@@ -86,8 +86,42 @@ try{
   await page.locator('#modalBody button[type=submit]').click();await page.locator('#modal').waitFor({state:'hidden'});
   const result=await page.evaluate(async id=>({sales:await api('/api/sales'),part:await api('/api/parts/'+id)}),part.id);
   assert.equal(result.sales.length,1);assert.equal(Number(result.sales[0].total_cents),5900);assert.equal(Number(result.part.quantity),8);
-  await screenshot('06-venda-confirmada');assert.deepEqual(errors,[]);
-  await writeFile(path.join(output,'summary.json'),JSON.stringify({status:'passed',engine:'postgres',viewport:viewportName,checks:['first-admin-ui','contextual-customer-machine-order','diagnosis-save-twice','sale-preview','price-conflict-no-write','sale-confirmed-stock-once']},null,2));
+  await screenshot('06-venda-confirmada');
+  await navigate('inventory');
+  await page.locator('#stockHistory').click();
+  await page.locator('#inventoryHistoryRows').getByText('PG-UI-FILTRO').first().waitFor();
+  await page.locator('#inventoryHistoryType').selectOption('SAIDA_MANUAL');
+  await page.locator('#inventoryHistoryFilter').click();
+  await page.locator('#inventoryHistoryRows').getByText('PG-UI-FILTRO').first().waitFor();
+  await screenshot('07-historico-estoque');
+  await page.locator('#modalClose').click();
+  await page.locator('#suppliersManage').click();
+  await page.locator('#supplierNew').click();
+  await page.locator('#modalBody [name=name]').fill('Fornecedor UI QA');
+  await page.locator('#modalBody button[type=submit]').click();
+  await page.locator('#modal').waitFor({state:'hidden'});
+  await page.locator('#purchaseNew').click();
+  await page.locator('#modalBody [name=supplierId]').selectOption({label:'Fornecedor UI QA'});
+  await page.locator('[data-part-id] option[value="'+part.id+'"]').waitFor({state:'attached'});
+  await page.locator('[data-part-id]').selectOption(String(part.id));
+  await page.locator('[data-purchase-qty]').fill('3');
+  await page.locator('[data-purchase-cost]').fill('12.50');
+  await screenshot('08-pedido-compra');
+  await page.locator('#modalBody button[type=submit]').click();
+  await page.locator('#modal').waitFor({state:'hidden'});
+  await page.locator('[data-purchase-open]').first().click();
+  await page.locator('[data-receive-item]').fill('2');
+  await screenshot('09-recebimento-parcial');
+  await page.locator('#modalBody button[type=submit]').click();
+  await page.locator('#modal').waitFor({state:'hidden'});
+  const afterPurchase=await page.evaluate(async id=>({
+   part:await api('/api/parts/'+id),orders:await api('/api/purchases/orders')
+  }),part.id);
+  assert.equal(Number(afterPurchase.part.quantity),10);
+  assert.equal(afterPurchase.orders[0].status,'PARCIAL');
+  await screenshot('10-estoque-compra-confirmada');
+  assert.deepEqual(errors,[]);
+  await writeFile(path.join(output,'summary.json'),JSON.stringify({status:'passed',engine:'postgres',viewport:viewportName,checks:['first-admin-ui','contextual-customer-machine-order','diagnosis-save-twice','sale-preview','price-conflict-no-write','sale-confirmed-stock-once','inventory-history-ui','supplier-create-ui','purchase-order-ui','partial-receipt-ui']},null,2));
 }catch(error){
   const diagnostic=logs.join('').split(/\r?\n/).filter(line=>line.includes('[qa-native-error]')).slice(-8);
   if(diagnostic.length)console.error('SQL QA trace:\n'+diagnostic.join('\n'));

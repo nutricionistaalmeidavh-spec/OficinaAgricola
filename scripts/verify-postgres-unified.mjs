@@ -242,7 +242,46 @@ try{
    assert.equal(sale.status,200,JSON.stringify(sale.data));assert.equal(retry.data.id,sale.data.id);
    assert.equal((await s.getPart(part.id)).quantity,3);
  });
- await test('bound PostgreSQL tenant fails closed if physical schema is missing',async()=>{
+  await test('PostgreSQL real: auditoria e recebimento parcial de compras',async()=>{
+   const signed=await registry.login({username:'admin-p4',password:'TestPass2026!'});
+   const token=signed.token,unit=1;
+   const part=await call('/api/parts',{method:'POST',token,unit,
+     body:{sku:'QA-PROC-PG',description:'Filtro compras PG',requestId:'qa-proc-part-1'}});
+   assert.equal(part.status,200,JSON.stringify(part.data));
+   const entry=await call('/api/inventory/movements',{method:'POST',token,unit,
+     body:{requestId:'qa-proc-in-1',partId:part.data.id,type:'ENTRADA',quantity:5}});
+   assert.equal(entry.status,200,JSON.stringify(entry.data));
+   const adjust=await call('/api/inventory/movements',{method:'POST',token,unit,
+     body:{requestId:'qa-proc-aj-1',partId:part.data.id,type:'AJUSTE',quantity:-2,
+       note:'Conferência física',actorId:999,actorRole:'ATENDIMENTO'}});
+   assert.equal(adjust.status,200,JSON.stringify(adjust.data));
+   const sup=await call('/api/suppliers',{method:'POST',token,unit,
+     body:{requestId:'qa-proc-sup-1',name:'Fornecedor QA PG'}});
+   assert.equal(sup.status,200,JSON.stringify(sup.data));
+   const po=await call('/api/purchases/orders',{method:'POST',token,unit,
+     body:{requestId:'qa-proc-order-1',supplierId:sup.data.id,
+       items:[{partId:part.data.id,quantity:10,costCents:1500}]}});
+   assert.equal(po.status,200,JSON.stringify(po.data));
+   const orderId=po.data.id,itemId=po.data.items[0].id;
+   const body={requestId:'qa-proc-rec-1',note:'Entrega parcial',items:[{itemId,quantity:4}]};
+   const recv=await call('/api/purchases/orders/'+orderId+'/receipts',{method:'POST',token,unit,body});
+   assert.equal(recv.status,200,JSON.stringify(recv.data));
+   const replay=await call('/api/purchases/orders/'+orderId+'/receipts',{method:'POST',token,unit,body});
+   assert.equal(replay.status,200,JSON.stringify(replay.data));
+   assert.equal(replay.data.id,recv.data.id);
+   const order=await call('/api/purchases/orders/'+orderId,{token,unit});
+   assert.equal(order.data.status,'PARCIAL');
+   assert.equal(Number((await call('/api/parts/'+part.data.id,{token,unit})).data.quantity),7);
+   const hist=await call('/api/inventory/history?type=AJUSTE&search=QA-PROC-PG',{token,unit});
+   assert.equal(hist.status,200,JSON.stringify(hist.data));
+   assert.equal(hist.data.items.length,1);
+   assert.notEqual(Number(hist.data.items[0].created_by),999);
+   const fail=await call('/api/purchases/orders/'+orderId+'/receipts',{method:'POST',token,unit,
+     body:{requestId:'qa-proc-over-1',items:[{itemId,quantity:7}]}});
+   assert.equal(fail.status,409,JSON.stringify(fail.data));
+   assert.equal(Number((await call('/api/parts/'+part.data.id,{token,unit})).data.quantity),7);
+ });
+await test('bound PostgreSQL tenant fails closed if physical schema is missing',async()=>{
    const adminId=(await registry.login({username:'admin-p4',password:'TestPass2026!'})).user.id;
    const company=await registry.createCompany(adminId,{slug:'sem-schema',name:'Sem Schema'});
    const schema=tenantSchemaName({id:company.unitId,companyId:company.id},{prefix});

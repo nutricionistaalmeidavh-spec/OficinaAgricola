@@ -1,4 +1,5 @@
 import {startBillingReminderScheduler} from './billing-reminder-scheduler.js';
+import {migrateInventoryProcurement} from './inventory-procurement-schema.js';
 import {createPostgresCommandJournal} from './postgres-command-journal.js';
 import {createLocalTenantObjectStore} from './local-tenant-object-store.js';
 import {createCommonDataAdapter} from './common-data-adapter.js';
@@ -70,6 +71,8 @@ export function createPostgresTenantRuntimeFactory({
        await claimAsyncTenantIdentity(port,{companyId:unit.companyId,unitId:unit.id});
      }
      await assertAsyncTenantIdentity(port,{companyId:unit.companyId,unitId:unit.id});
+     // Additive upgrade for existing units as well as new tenants.
+     await migrateInventoryProcurement(basePort);
      const objectStore=typeof objectStoreForUnit==='function'
        ?await objectStoreForUnit(unit)
        :localStorageRoot?createLocalTenantObjectStore({
