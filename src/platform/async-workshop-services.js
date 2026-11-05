@@ -1,6 +1,6 @@
 import {createPostgresQuoteApprovals} from './async-quote-approval.js';
 import {randomBytes,createHash} from 'node:crypto';
-import {assertTransition,calculateQuote} from '../domain.js';
+import {assertTransition,calculateQuote,nextWorkOrderStatuses} from '../domain.js';
 import {createAsyncWorkshopCatalog} from './async-workshop-catalog.js';
 import {createAsyncWorkshopSales} from './async-workshop-sales.js';
 import {createAsyncWorkshopOperations} from './async-workshop-operations.js';
@@ -70,9 +70,9 @@ export function createAsyncWorkshopServices(port,{fiscalProvider=null,objectStor
    return port.first('SELECT * FROM machines WHERE id=?',[machineId]);
  }
  async function getWorkOrder(workOrderId){
-   const row=await port.first('SELECT * FROM work_orders WHERE id=?',[numericId(workOrderId)]);
+   const row=await port.first(`SELECT wo.*,c.name customer_name,m.brand machine_brand,m.model machine_model,t.name technician_name FROM work_orders wo JOIN customers c ON c.id=wo.customer_id JOIN machines m ON m.id=wo.machine_id LEFT JOIN technicians t ON t.id=wo.technician_id WHERE wo.id=?`,[numericId(workOrderId)]);
    if(!row)fail('Ordem de serviço não encontrada',404);
-   return row;
+   return {...row,availableTransitions:nextWorkOrderStatuses(row.status)};
  }
  async function createWorkOrder(input={}){
    const customerId=numericId(input.customerId),machineId=numericId(input.machineId);

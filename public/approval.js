@@ -16,6 +16,7 @@ async function apiApproval(method,body){
  return result;
 }
 async function load(){
+ el('retry').hidden=true;el('retry').disabled=true;
  if(!/^[a-f0-9]{64}$/.test(token)){message('Link inválido. Solicite outro à oficina.');return;}
  try{
   const data=await apiApproval('GET');
@@ -31,7 +32,7 @@ async function load(){
   el('total').textContent=money(data.totalCents);
   el('expiry').textContent='Prazo do link: '+new Date(data.expiresAt).toLocaleString('pt-BR');
   notice.hidden=true;box.hidden=false;
- }catch(error){message(error.message);}
+ }catch(error){message(error.message);el('retry').hidden=false;}finally{el('retry').disabled=false;}
 }
 async function decide(decision){
  const reason=el('reason').value.trim();
@@ -41,8 +42,9 @@ async function decide(decision){
  try{
   const data=await apiApproval('POST',{decision,reason});
   box.hidden=true;message(data.status==='APROVADO'?'Serviço autorizado.':'Reprovação registrada.');
- }catch(error){message(error.message);el('approve').disabled=false;el('reject').disabled=false;}
+ }catch(error){message('A decisão ainda não foi confirmada. '+error.message+' Consulte a situação antes de tentar novamente.');el('retry').hidden=false;el('retry').disabled=false;el('approve').disabled=false;el('reject').disabled=false;}
 }
+el('retry').addEventListener('click',()=>load());
 el('approve').addEventListener('click',()=>decide('APROVAR'));
 el('reject').addEventListener('click',()=>decide('REJEITAR'));
 void load();

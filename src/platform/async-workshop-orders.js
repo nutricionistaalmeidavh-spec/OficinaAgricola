@@ -1,5 +1,5 @@
 import {randomBytes} from 'node:crypto';
-import {assertTransition} from '../domain.js';
+import {assertTransition,nextWorkOrderStatuses} from '../domain.js';
 
 const nextId=()=>randomBytes(6).readUIntBE(0,6);
 const clean=v=>String(v??'').trim();
@@ -20,7 +20,7 @@ export function createAsyncWorkshopOrders(port,{createWorkOrder,transitionWorkOr
      JOIN machines m ON m.id=wo.machine_id
      LEFT JOIN technicians t ON t.id=wo.technician_id WHERE wo.id=?`,[id(osId)]);
    if(!row)fail('Ordem de serviço não encontrada',404);
-   return row;
+   return {...row,availableTransitions:nextWorkOrderStatuses(row.status)};
  }
  const orderSelect=`SELECT wo.*,c.name customer_name,
    m.type machine_type,m.brand machine_brand,m.model machine_model,t.name technician_name
@@ -35,9 +35,11 @@ export function createAsyncWorkshopOrders(port,{createWorkOrder,transitionWorkOr
    else if(scope==='closed')filters.push('wo.status IN '+TERMINAL);
    if(status){filters.push('wo.status=?');args.push(status);}
    if(clean(search)){
-     filters.push(`(CAST(wo.os_number AS TEXT) LIKE ? OR c.name LIKE ?
-       OR m.model LIKE ? OR wo.problem_reported LIKE ?)`);
-     const q='%'+clean(search)+'%';args.push(q,q,q,q);
+     filters.push(`(CAST(wo.os_number AS TEXT) LIKE ? OR LOWER(c.name) LIKE LOWER(?)
+       OR LOWER(m.model) LIKE LOWER(?) OR LOWER(wo.problem_reported) LIKE LOWER(?)
+       OR REPLACE(UPPER(m.license_plate),'-','') LIKE ? OR UPPER(m.vin) LIKE ?)`);
+     const q='%'+clean(search)+'%';args.push(q,q,q,q,
+       '%'+clean(search).toUpperCase().replace(/[\s-]/g,'')+'%', '%'+clean(search).toUpperCase()+'%');
    }
    return {filters,args};
  }

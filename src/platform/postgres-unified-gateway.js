@@ -1,3 +1,4 @@
+import {normalizePublicOrigin} from './public-access.js';
 import {requestPayloadLimit} from './billing-http-limits.js';
 import {journalEligible} from './postgres-command-journal.js';
 import {createHmac} from 'node:crypto';
@@ -58,7 +59,7 @@ function safeNativeResponse(reply){
  return new Response(reply.body,{status:reply.status===201?200:reply.status,headers});
 }
 export function createPostgresUnifiedGateway({
- registry,tenantHandlerForUnit,serviceToken,allowAdminBootstrap=false
+ registry,tenantHandlerForUnit,serviceToken,allowAdminBootstrap=false,publicOrigin=null
 }={}){
  if(!registry||typeof registry.validateSession!=='function'||
     typeof registry.requireUnitMembership!=='function'||
@@ -66,6 +67,7 @@ export function createPostgresUnifiedGateway({
    throw Error('Gateway PostgreSQL exige registry de sessões e RBAC');
  if(typeof tenantHandlerForUnit!=='function'||typeof serviceToken!=='string'||serviceToken.length<32)
    throw Error('Gateway exige fábrica por tenant e token privado de serviço');
+ publicOrigin=normalizePublicOrigin(publicOrigin);
  const control=createPostgresRegistryControlHandler({registry,allowAdminBootstrap});
  return async function gateway(request,options={}){
   try{
@@ -229,7 +231,8 @@ export function createPostgresUnifiedGateway({
      const result=await native.json();
      if(!/^\/approval\.html\?token=[a-f0-9]{64}$/.test(result?.path??''))
        fail('Link de aprovação retornado inválido',502);
-     return json({...result,path:result.path+'&unit='+unit.id},200);
+     const path=result.path+'&unit='+unit.id;
+     return json({...result,path,url:new URL(path,publicOrigin||u.origin).href,externalAccess:Boolean(publicOrigin)},200);
    }
    return safeNativeResponse(native);
   }catch(error){

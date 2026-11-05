@@ -1,3 +1,4 @@
+import {OS_FLOW} from '../domain.js';
 import { financeSummary } from './finance.js';
 
 function dateBound(value,label){
@@ -19,5 +20,5 @@ export function getOperationalReport(db,{from,to,includeFinance=true}={}){
   const totalCount=rows.reduce((sum,row)=>sum+Number(row.n),0);
   // financeSummary usa intervalo fechado, converte-se o extremo superior exclusivo.
   const finance=includeFinance?financeSummary(db,{from:start,to:new Date(Date.parse(end)-1).toISOString()}):null;
-  return {from:start,to:end,totalCount,openCount,deliveredCount,lowStockCount,statusCounts,finance};
+  return {from:start,to:end,totalCount,openCount,deliveredCount,lowStockCount,statusCounts,finance,flow:OS_FLOW};
 }
