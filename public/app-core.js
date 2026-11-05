@@ -188,7 +188,7 @@ function reconcileChildren(host,incoming){
 }
 function trackDirtyInputs(host){
   if(!host?.addEventListener||host.__draftTracking)return;
-  host.addEventListener('input',e=>{if(e.target)dirtyInputs.add(e.target)});
+  host.addEventListener('input',e=>{if(e.target)dirtyInputs.add(e.target);if(host.id==='content'&&e.target?.closest?.('form'))state.pageDirty=true});
   host.__draftTracking=true;
 }
 const money=c=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(c||0)/100);
@@ -213,7 +213,7 @@ async function api(path,{method='GET',body,raw=false,binary=false}={}){
   }
   const text=await res.text();
   if(isRead&&(signal?.aborted||epoch!==state.pageEpoch))throw new DOMException('Consulta obsoleta','AbortError');
-  if(!res.ok){let msg=text;try{msg=JSON.parse(text).error}catch{}throw new Error(msg||'Erro na operação')}
+  if(!res.ok){let msg=text;try{msg=JSON.parse(text).error}catch{}throw Object.assign(new Error(msg||'Erro na operação'),{status:res.status})}
   return raw?text:(text?JSON.parse(text):null);
 }
 let toastTimer=null;
@@ -317,10 +317,11 @@ function showModal(title,html,onSubmit,{entityKey=null}={}){
     const btn=$('button[type=submit]',form);if(btn)btn.disabled=true;
     try{
       await onSubmit(new FormData(form));
+      $$('input,textarea,select',form).forEach(input=>dirtyInputs.delete(input));
       // Um callback pode abrir outro modal; não fechar seu sucessor.
       if(state.modalToken===token)closeModal();
     }catch(err){
-      if(err?.pending&&state.modalToken===token)closeModal();
+      // Manter o rascunho mesmo se a confirmação estiver pendente na fila.
       if(state.modalToken===token){
         let error=$('[data-form-error]',form);
         if(!error){error=document.createElement('p');error.dataset.formError='';error.className='error';error.setAttribute('role','alert');form.prepend(error)}
@@ -423,7 +424,11 @@ function logout(){
 }
 
 function pageRenderer(page){
-  const dashboard=typeof renderDashboard==='function'?renderDashboard:async()=>{};
+  const dashboard=typeof renderDashboard==='function'?async()=>{
+    await renderDashboard();
+    if(state.user?.role==='ADMIN'&&window.OficinaFirstAccess)
+      await window.OficinaFirstAccess.renderBanner();
+  }:async()=>{};
   const fiscal=typeof renderFiscal==='function'?renderFiscal:async()=>{};
   const market=typeof renderMarketParity==='function'?renderMarketParity:async()=>{};
   return ({
@@ -451,6 +456,7 @@ async function refreshCurrentPage(){
   finally{refreshPromise=null;refreshQueued=false}
 }
 async function navigate(page,{force=false}={}){
+  if(page!==state.page&&!allowLeaveWorkshop())return;
   $('#mobileMorePanel')?.classList.add('hidden');
   $('#mobileMoreBtn')?.setAttribute?.('aria-expanded','false');
   if(state.page===page&&state.pageReady){
@@ -479,3 +485,24 @@ async function navigate(page,{force=false}={}){
 
 function stat(label,value,cls=''){return `<div class="stat"><small>${label}</small><strong class="${cls}">${value}</strong></div>`}
 
+
+// Mudanças de unidade, navegação, logout e fechamento preservam o mesmo contrato.
+function allowLeaveWorkshop(){
+  if(modalSession?.busy||state.pageSaving){toast('Aguarde a confirmação da operação.');return false;}
+  if((modalSession?.dirty||state.pageDirty)&&!confirm('Há alterações não salvas. Deseja descartá-las e continuar?'))return false;
+  state.pageDirty=false;
+  if(modalSession)closeModal();
+  return true;
+}
+window.OficinaDrafts={allowLeave:allowLeaveWorkshop};
+window.addEventListener?.('beforeunload',event=>{
+  if(modalSession?.dirty||modalSession?.busy||state.pageDirty||state.pageSaving){event.preventDefault();event.returnValue='';}
+});
+
+// Trocar a ação da OS não pode apagar um diagnóstico em edição.
+document.addEventListener?.('click',event=>{
+  if(!modalSession?.dirty)return;
+  const action=event.target?.closest?.('#quoteBtn,#partBtn,#checkBtn,#photoBtn,#payBtn,#collectBtn,#billingPlanBtn,#editFullOS,#duplicateOS,#historyOS,#approvalLinkOS,[data-reverse-part],[data-reverse-receipt]');
+  if(!action||!action.closest('#modalBody'))return;
+  event.preventDefault();event.stopImmediatePropagation();toast('Salve as alterações antes de abrir outra ação da OS.',true);
+},true);

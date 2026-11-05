@@ -435,6 +435,37 @@ def nfse_cancel(lib, req):
     return {"status": "INDETERMINADO", "message": "NFS-e exige confirmação específica do provedor municipal"}
 
 
+
+def parse_certificate_records(raw):
+    # NFE_ObterCertificados: serie|nome|CNPJ|validade|certificadora.
+    # Dados vindos do token/Windows não são instruções executáveis.
+    if not isinstance(raw,str) or len(raw)>128*1024:
+        return []
+    result=[]
+    for line in raw.replace("\r","\n").split("\n"):
+        line=re.sub(r"^OK:\s*","",line.strip(),flags=re.IGNORECASE)
+        if len(line)>1024:
+            continue
+        parts=[v.strip() for v in line.split("|")]
+        if len(parts)!=5:
+            continue
+        serial,name,cnpj,valid_until,issuer=parts
+        serial=serial.replace(" ","").upper()
+        cnpj=re.sub(r"\D","",cnpj)
+        if (not re.fullmatch(r"[A-F0-9]{6,80}",serial) or
+            not re.fullmatch(r"[0-9]{14}",cnpj) or
+            not re.fullmatch(r"[0-9]{2}/[0-9]{2}/[0-9]{4}",valid_until)):
+            continue
+        if any(ord(x)<32 or ord(x)==127 for x in name+issuer):
+            continue
+        result.append({"serial":serial,"name":name[:120],
+                       "cnpj":cnpj,"validUntil":valid_until,"issuer":issuer[:120]})
+        if len(result)>=100:
+            break
+    return result
+
+
+
 _dll_directories = []
 
 
@@ -461,14 +492,14 @@ def probe_library(path):
 
 
 def execute(req):
-    if req.get("operation") not in ("transmit", "consult", "cancel", "consultCancellation", "pdf", "status", "certificate") or req.get("kind") not in ("NFE", "NFCE", "NFSE"):
+    if req.get("operation") not in ("transmit", "consult", "cancel", "consultCancellation", "pdf", "status", "certificates", "certificate") or req.get("kind") not in ("NFE", "NFCE", "NFSE"):
         raise ACBrError("Operação fiscal inválida")
     if req.get("environment") not in ("HOMOLOGACAO", "PRODUCAO"):
         raise ACBrError("Ambiente fiscal não identificado")
     if not re.fullmatch(r"\d{14}", str(req.get("issuerCnpj", ""))):
         raise ACBrError("CNPJ de emitente ausente")
-    required = ("libraryPath", "configPath") if req["operation"] in ("status", "certificate") else ("libraryPath", "configPath", "iniPath")
-    for field in required:
+    expected_files = ("libraryPath", "configPath") if req["operation"] in ("status", "certificates", "certificate") else ("libraryPath", "configPath", "iniPath")
+    for field in expected_files:
         if not Path(req.get(field, "")).is_file():
             raise ACBrError("Arquivo local obrigatório não encontrado: " + field)
     lib = native_library(req["libraryPath"])
@@ -501,23 +532,27 @@ def execute(req):
                    encoded("0"), types=[ct.c_char_p] * 3)
         if req["operation"] == "certificate":
             if req["kind"] != "NFE":
-                raise ACBrError("Certificado NFS-e depende de provedor municipal")
-            detail = response(lib, "NFE_ObterCertificados", limit=128 * 1024)
-            # A ACBr retorna um ou mais registros Serial|Razao|CNPJ|Vencimento|CA.
-            # Não retornar lista de terceiros ou nomes ao backend.
-            issuer = req["issuerCnpj"]
-            matched = re.search(r"\|"+re.escape(issuer)+r"\|", detail) is not None
-            return {"status": "CERTIFICATE_MATCH" if matched else "CERTIFICATE_MISMATCH"}
+                raise ACBrError("Verificação de certificado requer biblioteca NF-e")
+            records=parse_certificate_records(response(lib,"NFE_ObterCertificados",limit=128*1024))
+            expected_serial=str(req.get("expectedSerial") or "").upper()
+            valid=[x for x in records if x["cnpj"]==req["issuerCnpj"]
+                   and (not expected_serial or x["serial"]==expected_serial)]
+            return {"status":"CERTIFICATE_MATCH" if valid else "CERTIFICATE_MISMATCH"}
+        if req["operation"] == "certificates":
+            if req["kind"] != "NFE":
+                raise ACBrError("Listagem A3 suporta biblioteca NF-e")
+            records=response(lib,"NFE_ObterCertificados",limit=128*1024)
+            return {"status":"OK","certificates":parse_certificate_records(records)}
         if req["operation"] == "status":
             if req["kind"] != "NFE":
-                raise ACBrError("Diagnóstico de NFS-e requer provedor municipal")
-            status_data = parse_sections(response(lib, "NFE_StatusServico", limit=128 * 1024))
-            status = status_data.get("STATUS", {})
-            expected = "2" if req["environment"] == "HOMOLOGACAO" else "1"
-            if status.get("TPAMB") != expected:
-                return {"status": "INDETERMINADO", "message": "Ambiente da SEFAZ divergente"}
-            code = str(status.get("CSTAT", ""))
-            return {"status": "ONLINE" if code == "107" else "INDISPONIVEL", "code": code}
+                raise ACBrError("Diagnóstico requer provedor municipal para NFS-e")
+            raw_status=response(lib,"NFE_StatusServico",limit=128*1024)
+            data=parse_sections(raw_status).get("STATUS",{})
+            expected="2" if req["environment"]=="HOMOLOGACAO" else "1"
+            if data.get("TPAMB") != expected:
+                return {"status":"INDETERMINADO","message":"Ambiente SEFAZ divergente"}
+            code=str(data.get("CSTAT",""))
+            return {"status":"ONLINE" if code=="107" else "INDISPONIVEL","code":code}
         if req["operation"] == "pdf":
             return document_pdf(lib, req)
         if req["kind"] in ("NFE", "NFCE"):

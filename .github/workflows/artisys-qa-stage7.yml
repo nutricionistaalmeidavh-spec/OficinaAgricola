@@ -19,6 +19,20 @@ jobs:
         viewport: [desktop, mobile]
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: oficina_ci
+          POSTGRES_PASSWORD: ci-only-disposable
+          POSTGRES_DB: oficina_ui
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U oficina_ci -d oficina_ui"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     steps:
       - name: Checkout ArtiSys Oficina
         uses: actions/checkout@v4
@@ -49,6 +63,12 @@ jobs:
           rm -rf .qa
           DATABASE_PATH=.qa/artisys-oficina.sqlite STORAGE_DIR=.qa/uploads EVENT_LOG_PATH=.qa/events.jsonl NODE_ENV=development node scripts/seed-qa-demo.mjs
           node scripts/qa-cliente-os.mjs ${{ matrix.viewport }} "$PWD/qa-artifacts/jornada"
+
+      - name: Production PostgreSQL browser journey (disposable database)
+        if: ${{ !cancelled() }}
+        env:
+          POSTGRES_TEST_URL: postgresql://oficina_ci:ci-only-disposable@127.0.0.1:5432/oficina_ui
+        run: node scripts/qa-postgres-journey.mjs ${{ matrix.viewport }} "$PWD/qa-artifacts/postgres"
 
       - name: Upload QA screenshots, video and logs
         if: always()

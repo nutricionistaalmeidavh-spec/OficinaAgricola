@@ -17,6 +17,14 @@ const transitions = new Map([
   ['REPROVADA', new Set(['ORCAMENTO', 'CANCELADA'])]
 ]);
 
+// O mesmo contrato alimenta quadros, relatórios e ações da interface.
+export const OS_FLOW = Object.freeze([
+  ['entrada','ENTRADA','Entrada'], ['diagnostico','DIAGNOSTICO','Diagnóstico'],
+  ['orcamento','ORCAMENTO','Orçamento'], ['aprovacao','AGUARDANDO_APROVACAO','Aguardando aprovação'],
+  ['aprovada','APROVADA','Aprovada'], ['servico','EM_SERVICO','Em serviço'], ['pronta','PRONTA','Pronta']
+].map(([key,status,label])=>Object.freeze({key,label,statuses:Object.freeze([status])})));
+export function nextWorkOrderStatuses(status){return [...(transitions.get(status)||[])];}
+
 export function assertTransition(from, to) {
   if (!transitions.has(from) || !transitions.has(to) || !transitions.get(from).has(to)) {
     throw new Error(`Transição inválida de ${from} para ${to}`);

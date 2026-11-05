@@ -28,3 +28,15 @@ test('fiscal config rejects ambiguous or incomplete tenant mappings',()=>{
   assert.throws(()=>validateTenantFiscalConfigs({'2':{type:'acbr',cnpj:'11222333000181'}}),/ACBr/);
   assert.throws(()=>validateTenantFiscalConfigs({'2':{type:'sidecar',url:'http://127.0.0.1:4102',cnpj:'11222333000181'},'3':{type:'sidecar',url:'http://127.0.0.1:4103',cnpj:'11222333000181'}}),/CNPJ.*duplicado/);
 });
+
+test('tenant fiscal binds NFS-e channel to company and municipality without fallback',()=>{
+ const cfg={'2':{type:'sidecar',url:'http://127.0.0.1:4102',cnpj:'11222333000181',
+   nfseChannel:'MUNICIPAL',nfseMunicipalityIbge:'4128104'}};
+ const provider=resolveTenantFiscalProvider({companyId:2,configs:cfg,providers:{sidecar:()=>({
+   name:'mock-local',async transmit(){return {status:'INDETERMINADO'};},async consult(){return {status:'INDETERMINADO'};}
+ })}});
+ assert.equal(provider.nfseChannel,'MUNICIPAL');
+ assert.equal(provider.nfseMunicipalityIbge,'4128104');
+ assert.throws(()=>validateTenantFiscalConfigs({'2':{...cfg['2'],nfseChannel:'AUTO'}}),/Canal NFS-e/);
+ assert.throws(()=>validateTenantFiscalConfigs({'2':{...cfg['2'],nfseMunicipalityIbge:'999'}}),/município IBGE/);
+});

@@ -1,3 +1,4 @@
+import {OS_FLOW} from '../domain.js';
 import {createHash} from 'node:crypto';
 
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
@@ -21,8 +22,7 @@ const nextCursor=(row,signature,key)=>Buffer.from(JSON.stringify({
 export function createAsyncLegacyViews(port,services){
  const statuses=['ENTRADA','DIAGNOSTICO','ORCAMENTO','AGUARDANDO_APROVACAO','APROVADA',
   'EM_SERVICO','PRONTA','ENTREGUE','CANCELADA','REPROVADA','TRANSFERIDA'];
- const groups={entrada:['ENTRADA'],diagnostico:['DIAGNOSTICO','ORCAMENTO'],
-  aprovacao:['AGUARDANDO_APROVACAO','APROVADA'],servico:['EM_SERVICO'],pronta:['PRONTA']};
+ const groups=Object.fromEntries(OS_FLOW.map(group=>[group.key,group.statuses]));
  async function getCustomer(id){
   const row=await port.first('SELECT * FROM customers WHERE id=?',[positive(id)]);
   if(!row)fail('Cliente não encontrado',404);
@@ -59,13 +59,13 @@ export function createAsyncLegacyViews(port,services){
   const after=unpackCursor(cursor,signature);
   const args=[active,q,q,q];
   let sql=`FROM customers c WHERE (?=1 OR c.active=1)
-   AND (c.name LIKE ? OR c.document LIKE ? OR c.phone LIKE ?)`;
+   AND (LOWER(c.name) LIKE LOWER(?) OR c.document LIKE ? OR c.phone LIKE ?)`;
   if(after){sql+=' AND (LOWER(c.name)>? OR (LOWER(c.name)=? AND c.id>?))';
    args.push(after.k,after.k,after.i);}
   const rows=await port.all('SELECT c.* '+sql+' ORDER BY LOWER(c.name) ASC,c.id ASC LIMIT ?',
     [...args,size+1]);
   const total=await port.first(`SELECT COUNT(*) n FROM customers c
-   WHERE (?=1 OR c.active=1) AND (c.name LIKE ? OR c.document LIKE ? OR c.phone LIKE ?)`,
+   WHERE (?=1 OR c.active=1) AND (LOWER(c.name) LIKE LOWER(?) OR c.document LIKE ? OR c.phone LIKE ?)`,
    [active,q,q,q]);
   const hasMore=rows.length>size,items=rows.slice(0,size);
   return {items,total:Number(total.n),nextCursor:hasMore?
@@ -77,10 +77,11 @@ export function createAsyncLegacyViews(port,services){
   let where='(?=1 OR m.active=1)';
   if(customerId!=null&&customerId!==''){where+=' AND m.customer_id=?';args.push(positive(customerId));}
   if(String(search).trim()){
-   where+=` AND (m.type LIKE ? OR m.brand LIKE ? OR m.model LIKE ?
-    OR m.serial_number LIKE ? OR m.license_plate LIKE ? OR m.vin LIKE ?
-    OR m.renavam LIKE ? OR m.engine LIKE ? OR c.name LIKE ?)`;
-   args.push(...Array(9).fill(q));
+   where+=` AND (LOWER(m.type) LIKE LOWER(?) OR LOWER(m.brand) LIKE LOWER(?) OR LOWER(m.model) LIKE LOWER(?)
+    OR LOWER(m.serial_number) LIKE LOWER(?) OR m.license_plate LIKE ? OR LOWER(m.vin) LIKE LOWER(?)
+    OR m.renavam LIKE ? OR LOWER(m.engine) LIKE LOWER(?) OR LOWER(c.name) LIKE LOWER(?)
+    OR LOWER(m.internal_id) LIKE LOWER(?) OR REPLACE(UPPER(m.license_plate),'-','') LIKE ?)`;
+   args.push(...Array(10).fill(q),'%'+String(search).trim().toUpperCase().replace(/[\s-]/g,'')+'%');
   }
   const signature=cursorSignature('machines',{customerId,search:String(search),includeInactive});
   const after=unpackCursor(cursor,signature);
@@ -185,7 +186,7 @@ export function createAsyncLegacyViews(port,services){
   const maintenanceAlerts=await services.listMaintenanceAlerts({limit:8});
   const finance=['ADMIN','FINANCEIRO'].includes(role)
     ?await services.financeSummary({from:start.toISOString(),to:new Date(next.getTime()-1).toISOString()}):null;
-  return {...(finance?{finance}:{}),counts,board,upcoming,lowStock,maintenanceAlerts};
+  return {...(finance?{finance}:{}),counts,board,upcoming,lowStock,maintenanceAlerts,flow:OS_FLOW};
  }
  async function getOperationalReport({from,to,includeFinance=true}={}){
   const current=new Date(),begin=date(from||new Date(current.getFullYear(),current.getMonth(),1).toISOString(),'Data inicial'),
@@ -204,7 +205,7 @@ export function createAsyncLegacyViews(port,services){
    from:begin,to:new Date(Date.parse(end)-1).toISOString()
   }):null;
   return {from:begin,to:end,totalCount,openCount,deliveredCount:Number(delivered.n),
-    lowStockCount:Number(low.n),statusCounts,finance};
+    lowStockCount:Number(low.n),statusCounts,finance,flow:OS_FLOW};
  }
  async function getCurrentCashSession(){
   return port.first("SELECT * FROM cash_sessions WHERE status='ABERTO' ORDER BY id DESC LIMIT 1");

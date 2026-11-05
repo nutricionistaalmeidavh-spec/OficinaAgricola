@@ -1,3 +1,4 @@
+import {normalizePublicOrigin,workshopRequestUrl} from './platform/public-access.js';
 import {requestPayloadLimit} from './platform/billing-http-limits.js';
 import {fileURLToPath} from 'node:url';
 // Backend canônico PostgreSQL. Sem SQLite ou fallback para o runtime do Oficina.
@@ -27,6 +28,7 @@ try{({Pool}=await import('pg'));}catch{
 }
 const registryPool=new Pool({connectionString:registryUrl,max:5,
   connectionTimeoutMillis:5000,idleTimeoutMillis:20000,statement_timeout:10000});
+const publicOrigin=normalizePublicOrigin(process.env.OFICINA_PUBLIC_ORIGIN);
 const host='127.0.0.1',port=Number(process.env.OFICINA_POSTGRES_PORT||3344);
 if(!Number.isInteger(port)||port<1024||port>65535)
  throw Error('Porta PostgreSQL inválida');
@@ -104,6 +106,9 @@ function fiscalProviderForUnit(unit){
   return createAcbrLibFiscalProvider({
     nfeLib,nfseLib,workerExe:process.env.FISCAL_ACBR_WORKER_EXE,inputDir,
     certificateStore:createLocalFiscalCertificateStore({directory:join(privateRoot,'segredos')}),
+    // A biblioteca NFSe integrada usa o canal nacional; rotas municipais exigem
+    // configuração isolada específica da empresa, nunca fallback silencioso.
+    ...(nfseLib?{nfseChannel:'NACIONAL'}:{}),
     ...(nfeLib?{nfeConfig:privateIni('ACBrLibNFe.ini')}:{}),
     ...(nfseLib?{nfseConfig:privateIni('ACBrLibNFSe.ini')}:{})
   });
@@ -143,15 +148,13 @@ try{
  });
  const gateway=createPostgresUnifiedGateway({
    registry,tenantHandlerForUnit:tenantFactory.handlerForUnit,
-   serviceToken:token,allowAdminBootstrap:fresh
+   serviceToken:token,allowAdminBootstrap:fresh,publicOrigin
  });
  const server=createServer(async(req,res)=>{
   const requestedHost=String(req.headers.host||'');
-  if(!/^(?:localhost|127\.0\.0\.1|\[::1\]):[0-9]{2,5}$/.test(requestedHost))
-   return respond(res,400,{},'Host inválido');
   let url;
-  try{url=new URL(req.url||'/', 'http://'+requestedHost);}catch{
-   return respond(res,400,{},'URL inválida');
+  try{url=workshopRequestUrl(req.url||'/',requestedHost,publicOrigin);}catch{
+   return respond(res,400,{},'Host ou URL inválido');
   }
   if(!url.pathname.startsWith('/api/')){
    if(req.method!=='GET'&&req.method!=='HEAD')

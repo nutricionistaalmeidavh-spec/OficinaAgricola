@@ -89,3 +89,64 @@ test('diagnostics uses ACBr worker status, not fake authorization',async()=>{
   assert.equal(observed[1].kind,'NFE');
  }finally{rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('A3 selects Windows token for this unit without copying a PFX or saving PIN',async()=>{
+ const root=mkdtempSync(join(tmpdir(),'oficina-cert-a3-'));
+ try{
+  const a=createLocalFiscalCertificateStore({directory:join(root,'empresa-A','segredos')});
+  const b=createLocalFiscalCertificateStore({directory:join(root,'empresa-B','segredos')});
+  assert.throws(()=>a.selectA3({serial:'xx\nbad',cnpj:'11222333000181'}),/série|serial/i);
+  assert.throws(()=>a.selectA3({serial:'AABB1122',cnpj:'000'}),/CNPJ/i);
+  assert.equal(a.selectA3({serial:'AABB11223344',cnpj:'11222333000181'}).certificateType,'A3');
+  assert.equal(a.status().configured,true);
+  assert.equal(b.status().configured,false);
+  assert.equal(a.status().certificateType,'A3');
+  await a.withConfig({kind:'NFE',environment:'HOMOLOGACAO',uf:'SP',cnpj:'11222333000181'},async ini=>{
+    const text=readFileSync(ini,'utf8');
+    assert.match(text,/NumeroSerie=AABB11223344/);
+    assert.match(text,/SSLCryptLib=3/);
+    assert.match(text,/SSLHttpLib=2/);
+    assert.match(text,/SSLXmlSignLib=4/);
+    assert.doesNotMatch(text,/Senha=|ArquivoPFX=|DadosPFX=/);
+    assert.match(text,/\[NFe\]\nAmbiente=1/);
+  });
+  await assert.rejects(a.withConfig({kind:'NFE',environment:'HOMOLOGACAO',uf:'SP',cnpj:'77889911000100'},async()=>{}),/CNPJ/i);
+  assert.ok(!JSON.stringify(a.status()).toLowerCase().includes('pin'));
+ }finally{rmSync(root,{recursive:true,force:true});}
+});
+
+test('A3 provider lists Windows certificates and binds selected serial to issuer CNPJ',async()=>{
+ const root=mkdtempSync(join(tmpdir(),'oficina-cert-provider-a3-'));
+ try{
+  const {writeFileSync,mkdirSync}=await import('node:fs');
+  const dir=join(root,'input');mkdirSync(dir);
+  for(const name of ['ACBrNFe64.dll','ACBrLibNFe.ini','worker.exe'])writeFileSync(join(root,name),'test');
+  const certificateStore=createLocalFiscalCertificateStore({directory:join(root,'empresa-2','segredos')});
+  const observed=[];
+  const provider=createAcbrLibFiscalProvider({inputDir:dir,nfeLib:join(root,'ACBrNFe64.dll'),
+   nfeConfig:join(root,'ACBrLibNFe.ini'),workerExe:join(root,'worker.exe'),certificateStore,platform:'win32',
+   runner:async req=>{
+     observed.push(req);
+     if(req.operation==='certificates')return {status:'OK',certificates:[
+      {serial:'AA998877',cnpj:'11222333000181',name:'Empresa A',validUntil:'31/12/2032'},
+      {serial:'BB887766',cnpj:'99888777000166',name:'Empresa B',validUntil:'31/12/2032'}
+     ]};
+     if(req.operation==='certificate')return {status:'CERTIFICATE_MATCH'};
+     return {status:'ONLINE',code:'107'};
+   }});
+  const settings={enabled:1,issuer_cnpj:'11222333000181',issuer_uf:'SP',environment:'HOMOLOGACAO'};
+  const found=await provider.listCertificates({settings});
+  assert.equal(found.length,1);
+  assert.equal(found[0].serial,'AA998877');
+  await assert.rejects(provider.selectA3Certificate({serial:'BB887766',settings}),/CNPJ|empresa|certificado/i);
+  await assert.rejects(provider.selectA3Certificate({serial:'MISSING999',settings}),/série|serial|certificado/i);
+  const selected=await provider.selectA3Certificate({serial:'AA998877',settings});
+  assert.equal(selected.certificateType,'A3');
+  assert.equal(certificateStore.status().certificateType,'A3');
+  const status=await provider.diagnose({settings});
+  assert.equal(status.ready,true);
+  assert.equal(observed.at(-1).operation,'status');
+  assert.equal(observed.at(-1).kind,'NFE');
+ }finally{rmSync(root,{recursive:true,force:true});}
+});

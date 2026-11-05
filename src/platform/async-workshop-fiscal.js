@@ -1,5 +1,6 @@
 import {createHash,randomUUID,randomBytes} from 'node:crypto';
 import {assertFiscalIssuerUf} from './fiscal-uf.js';
+import {assertNfseRouteForTransmission,resolveNfseRoute} from './nfse-routing.js';
 
 const validStates=new Set(['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']);
 const validRegimes=new Set(['MEI','SIMPLES','NORMAL']);
@@ -66,7 +67,6 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
      certificate:typeof provider?.certificateStatus==='function'
        ?provider.certificateStatus():{configured:false},
      providerReady:Boolean(provider&&typeof provider.transmit==='function'),
-     // Não atribuir validade fiscal ao simples status do servidor SEFAZ.
      authorizationVerified:false,
      taxProfileVerified:false};
  }
@@ -79,46 +79,106 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
      pfxBase64:input.pfxBase64,password:input.password
    });
  }
- async function installFiscalCsc(input={}){
+ async function listFiscalCertificates(){
    const settings=await getFiscalSettings();
-   if(!settings.enabled)fail('Cadastre os dados fiscais da empresa antes do CSC',409);
-   if(!provider||typeof provider.installCsc!=='function')
-     fail('CSC NFC-e requer ACBr embarcado desta unidade',503);
-   return provider.installCsc({idCsc:input.idCsc,csc:input.csc});
+   if(!settings.enabled)fail('Cadastre a empresa antes de selecionar A3',409);
+   if(!provider||typeof provider.listCertificates!=='function')
+     fail('Leitura de token A3 indisponível',503);
+   return provider.listCertificates({settings});
+ }
+ async function selectFiscalA3Certificate(input={}){
+   const settings=await getFiscalSettings();
+   if(!settings.enabled)fail('Cadastre a empresa antes de selecionar A3',409);
+   if(!provider||typeof provider.selectA3Certificate!=='function')
+     fail('Seleção de token A3 indisponível',503);
+   return provider.selectA3Certificate({serial:input.serial,settings});
  }
  async function diagnoseFiscal(){
    const settings=await getFiscalSettings();
    if(!settings.enabled)fail('Cadastro fiscal incompleto',409);
    if(!provider||typeof provider.diagnose!=='function')
-     fail('Diagnóstico fiscal requer ACBr local configurado',503);
+     fail('Diagnóstico requer ACBr local configurado',503);
    return provider.diagnose({settings});
+ }
+ async function getFiscalTaxProfiles(){
+   const issuer=assertReadyForTax(await getFiscalSettings());
+   if(typeof provider?.listTaxProfiles!=='function')
+     fail('Perfis tributários exigem emissor ACBr local',503);
+   return provider.listTaxProfiles({issuer});
+ }
+ function assertReadyForTax(settings){
+   if(!settings.enabled)fail('Cadastre a empresa antes da classificação tributária',409);
+   if(!validCnpj(settings.issuer_cnpj)||!settings.issuer_uf||!settings.municipality_ibge)
+     fail('Cadastro fiscal incompleto',409);
+   assertFiscalIssuerUf({uf:settings.issuer_uf,municipalityIbge:settings.municipality_ibge});
+   return issuerFrom(settings);
+ }
+ async function saveFiscalTaxProfile(input={}){
+   const issuer=assertReadyForTax(await getFiscalSettings());
+   if(typeof provider?.saveTaxProfile!=='function')
+     fail('Cadastro tributário exige emissor ACBr local',503);
+   return provider.saveTaxProfile({issuer,profile:input.profile});
+ }
+ async function getFiscalTaxReview(documentId){
+   const document=await getFiscalDocument(documentId);
+   if(!['NFE','NFCE'].includes(document.kind))
+     fail('NFS-e exige revisão municipal específica',409);
+   const issuer=assertReadyForTax(await getFiscalSettings());
+   if(typeof provider?.getTaxReview!=='function')
+     fail('Revisão tributária exige emissor ACBr local',503);
+   return provider.getTaxReview({document,issuer});
  }
  async function saveFiscalTaxReview(documentId,input={}){
    const document=await getFiscalDocument(documentId);
-   if(!['NFE','NFCE','NFSE'].includes(document.kind)||document.status!=='RASCUNHO')
-     fail('Somente rascunho fiscal permite revisar tributação',409);
-   const settings=await getFiscalSettings();
-   if(!settings.enabled||document.environment!==settings.environment)
-     fail('Cadastro fiscal/ambiente divergente do documento',409);
-   if(!provider||typeof provider.saveTaxReview!=='function')
-     fail('Revisão tributária exige ACBr local configurado',503);
-   const result=await provider.saveTaxReview({
-     document,issuer:issuerFrom(settings),sections:input.sections,
-     municipalityIbge:input.municipalityIbge,providerCode:input.providerCode,
-     reviewerConfirmed:input.reviewerConfirmed
-   });
-   await port.run(`INSERT INTO fiscal_events(
-     id,document_id,event_type,details_json,created_at
-   ) VALUES(?,?,?, ?,?)`,[
-     nextId(),document.id,'REVISAO_TRIBUTARIA',
-     JSON.stringify({reviewHash:result.reviewHash,environment:document.environment}),now()
-   ]);
-   return {reviewed:true,reviewHash:result.reviewHash};
+   if(document.status!=='RASCUNHO')fail('Somente rascunho pode ser revisado',409);
+   const issuer=assertReady(await getFiscalSettings(),document);
+   if(typeof provider?.saveTaxReview!=='function')
+     fail('Revisão tributária exige emissor ACBr local',503);
+   return provider.saveTaxReview({document,issuer,
+     company:input.company,customer:input.customer,
+     issuance:input.issuance,items:input.items});
  }
  async function getFiscalDocument(documentId){
    const row=await port.first('SELECT * FROM fiscal_documents WHERE id=?',[id(documentId)]);
    if(!row)fail('Documento fiscal não encontrado',404);
    return row;
+ }
+ async function reviseNfseDraftRoute(documentId,{competenceDate}={}){
+   const doc=await getFiscalDocument(documentId);
+   if(doc.kind!=='NFSE'||doc.status!=='RASCUNHO')
+     fail('Somente rascunho NFS-e pode ter competência revisada',409);
+   const settings=await getFiscalSettings();
+   if(!settings.enabled)fail('Complete a configuração fiscal antes de revisar NFS-e',409);
+   const route=resolveNfseRoute({municipalityIbge:settings.municipality_ibge,
+     taxRegime:settings.tax_regime,competenceDate});
+   if(route.channel==='PENDENTE')fail('Regra municipal NFS-e pendente: revise o canal antes de alterar o rascunho',409);
+   if(sha(doc.snapshot_json)!==doc.snapshot_hash)
+     fail('Snapshot fiscal canônico divergiu do hash; revisão manual necessária',409);
+   let original;
+   try{original=JSON.parse(doc.snapshot_json)}catch{fail('Snapshot fiscal legado inválido',409)}
+   const json=JSON.stringify({...original,nfseRoute:route});
+   const hash=sha(json);
+   if(hash===doc.snapshot_hash&&doc.environment===settings.environment)return doc;
+   const at=now();
+   const update={sql:`UPDATE fiscal_documents SET snapshot_json=?,snapshot_hash=?,environment=?,updated_at=?
+     WHERE id=? AND kind='NFSE' AND status='RASCUNHO' AND snapshot_hash=?`,
+     params:[json,hash,settings.environment,at,doc.id,doc.snapshot_hash]};
+   const event={sql:`INSERT INTO fiscal_events(id,document_id,event_type,details_json,created_at)
+     VALUES(?,?,?,?,?)`,params:[nextId(),doc.id,'COMPETENCIA_REVISADA',JSON.stringify({
+       fromHash:doc.snapshot_hash,toHash:hash,competenceDate:route.competenceDate,
+       channel:route.channel,municipalityIbge:route.municipalityIbge
+     }),at]};
+   if(port.engine==='d1'){
+     const res=await port.batch([update,{
+       sql:event.sql.replace('VALUES(?,?,?,?,?)','SELECT ?,?,?,?,? WHERE changes()=1'),params:event.params
+     }]);
+     if(changed(res[0])!==1)fail('Rascunho alterado por outra sessão: abra novamente',409);
+   }else await port.transaction(async tx=>{
+     if(changed(await tx.run(update.sql,update.params))!==1)
+       fail('Rascunho alterado por outra sessão: abra novamente',409);
+     await tx.run(event.sql,event.params);
+   });
+   return getFiscalDocument(doc.id);
  }
  async function getFiscalEvents(documentId){
    await getFiscalDocument(documentId);
@@ -215,6 +275,9 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
    if(!provider||typeof provider.transmit!=='function')
      fail('Emissor fiscal não configurado; nenhuma nota enviada',503);
    const issuer=assertReady(await getFiscalSettings(),doc);
+   // O canal NFS-e deve ser declarado pelo emissor local antes da tentativa;
+   // falha de pré-validação mantém o rascunho intacto, sem transmissão.
+   assertNfseRouteForTransmission(doc,issuer,provider);
    if(typeof provider.prepare==='function')await provider.prepare({document:doc,issuer});
    const attemptId=randomUUID(),providerName=clean(provider.name)||'local',at=now();
    const update={sql:`UPDATE fiscal_documents SET
@@ -362,8 +425,9 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
      ?finishFiscalCancellation(doc.id,doc.attempt_id,result,clean(provider.name)||'local')
      :applyResult(doc.id,doc.attempt_id,result,clean(provider.name)||'local');
  }
- return Object.freeze({getFiscalSettings,setFiscalSettings,getFiscalOnboardingStatus,
-   installFiscalCertificate,installFiscalCsc,diagnoseFiscal,saveFiscalTaxReview,getFiscalDocument,
-   getFiscalEvents,listFiscalDocuments,submitFiscalDocument,reconcileFiscalDocument,
+ return Object.freeze({getFiscalSettings,setFiscalSettings,getFiscalTaxProfiles,
+   saveFiscalTaxProfile,getFiscalTaxReview,saveFiscalTaxReview,getFiscalOnboardingStatus,
+   installFiscalCertificate,listFiscalCertificates,selectFiscalA3Certificate,diagnoseFiscal,getFiscalDocument,
+   reviseNfseDraftRoute,getFiscalEvents,listFiscalDocuments,submitFiscalDocument,reconcileFiscalDocument,
    cancelFiscalDocument,getFiscalPdf});
 }
