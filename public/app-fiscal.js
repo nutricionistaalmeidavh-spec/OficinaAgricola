@@ -80,7 +80,7 @@ async function fiscalTaxProfilesModal(){
     '<p class="muted">O responsável fiscal ou contador deve confirmar classificação e alíquotas. Não há determinação automática de impostos.</p>'+
     '<label>Tipo de regra<select id="taxKind" name="kind">'+
     '<option value="GOODS">Mercadorias — NF-e / NFC-e</option>'+
-    '<option value="SERVICE">Serviços — NFS-e municipal</option></select></label>'+
+    '<option value="SERVICE">Serviços — NFS-e nacional/municipal</option></select></label>'+
     '<label>Nome do perfil<input name="name" maxlength="80" required placeholder="Ex.: Peças de manutenção"></label>'+
     '<div id="taxGoods" class="form-stack">'+
     '<div class="field-row"><label>NCM (8 dígitos)<input name="ncm" inputmode="numeric" maxlength="8"></label>'+
@@ -98,6 +98,8 @@ async function fiscalTaxProfilesModal(){
     '<label>Município IBGE<input name="municipalityIbge" inputmode="numeric" maxlength="7" value="'+esc(settings.municipality_ibge||'')+'"></label>'+
     '<div class="field-row"><label>Item da lista LC 116 (ex.: 14.01)<input name="serviceListCode" maxlength="5"></label>'+
     '<label>Código de serviço municipal<input name="municipalServiceCode" maxlength="25"></label></div>'+
+    '<div class="field-row"><label>Código nacional cTribNac (6 dígitos)<input name="nationalServiceCode" inputmode="numeric" maxlength="6" placeholder="Confirmar com contador"></label>'+
+    '<label>NBS (9 dígitos, se aplicável)<input name="nbsCode" inputmode="numeric" maxlength="9"></label></div>'+
     '<div class="field-row"><label>CNAE (7 dígitos)<input name="cnae" maxlength="7"></label>'+
     '<label>Alíquota ISS (%)<input name="issRate" placeholder="3.00" maxlength="7"></label></div>'+
     '<label><input type="checkbox" name="withheld"> ISS retido pelo tomador</label></div>'+
@@ -111,6 +113,7 @@ async function fiscalTaxProfilesModal(){
       }:{
         municipalityIbge:x.municipalityIbge,serviceListCode:x.serviceListCode,
         municipalServiceCode:x.municipalServiceCode,cnae:x.cnae,
+        nationalServiceCode:x.nationalServiceCode,nbsCode:x.nbsCode,
         issRate:x.issRate,withheld:x.withheld==='on'
       })};
       await api('/api/fiscal/tax/profiles',{method:'POST',body:{profile}});
