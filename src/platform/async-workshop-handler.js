@@ -238,6 +238,12 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
    const checklist=path.match(/^\/v1\/checklists\/([1-9]\d*)$/);
    if(checklist&&method==='GET')
      return json(await services.getWorkOrderChecklist(Number(checklist[1])));
+   if(path==='/v1/fiscal/onboarding'&&method==='GET')
+     return json(await services.getFiscalOnboardingStatus());
+   if(path==='/v1/fiscal/certificate'&&method==='POST')
+     return json(await services.installFiscalCertificate(await dataFrom(request,5*1024*1024)));
+   if(path==='/v1/fiscal/diagnose'&&method==='POST')
+     return json(await services.diagnoseFiscal());
    if(path==='/v1/fiscal/settings'&&method==='GET')
      return json(await services.getFiscalSettings());
    if(path==='/v1/fiscal/settings'&&method==='PATCH')
