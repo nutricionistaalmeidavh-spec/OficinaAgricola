@@ -76,7 +76,7 @@ test('PDF and cancellation fail closed without provider or authorization',async(
  try{
   await assert.rejects(ws.getFiscalPdf(doc.id),/autorizad/i);
   await ws.submitFiscalDocument(doc.id);
-  await assert.rejects(ws.cancelFiscalDocument(doc.id,{reason:'motivo inadequado'}),/justificativa|caracteres/i);
+  await assert.rejects(ws.cancelFiscalDocument(doc.id,{reason:'curto'}),/justificativa|caracteres/i);
   await assert.rejects(ws.cancelFiscalDocument(doc.id,{reason:'Devolução dos produtos ao cliente'}),/cancelamento|emissor|disponível/i);
   await assert.rejects(ws.getFiscalPdf(doc.id),/PDF|emissor|disponível/i);
  }finally{db.close();}
