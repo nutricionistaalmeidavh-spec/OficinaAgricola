@@ -44,6 +44,21 @@
 
 As evidências acima não equivalem a homologação técnica do aplicativo: para cada combinação de município/regime é preciso validar manual/API, certificado, retorno autorizado, cancelamento e PDFs.
 
+## Implementação da decisão fiscal no Oficina (PR DDD 44)
+- O catálogo contém 124 municípios e geocódigos IBGE, sem filtrar o resto de PR.
+- Na tela **Preparar documento > NFS-e**, a data de competência é informada pelo operador; o sistema consulta a rota no servidor antes de habilitar o rascunho.
+- Decisão canônica em `src/platform/nfse-routing.js`, independente do DDD e sempre baseada no município IBGE do emitente, regime fiscal e data da competência.
+- MEI desde 01/09/2023: Nacional (https://www.gov.br/nfse/pt-br/mei-prestadores-de-servico-de-todo-o-pais-estao-obrigados-a-emitir-nfs-e).
+- ME/EPP Simples com competência a partir de 01/11/2026: Nacional, **inclusive município com emissor próprio**, conforme o comunicado de 29/10/2026. Competências anteriores não podem ser implicitamente enviadas ao Nacional em municípios que mantinham o sistema municipal.
+- Maringá: ME/EPP Simples a partir de 01/05/2026 e demais prestadores a partir de 01/07/2026 usam Nacional; cronograma por tipo de prestador exige revisão profissional para datas anteriores. Fonte: https://nfse.ecity.maringa.pr.gov.br/
+- Cianorte: Nacional para todos os prestadores a partir de 01/01/2026. Fonte: https://cianorte.pr.gov.br/noticiasView/10581_Prestadores-de-servicos-devem-migrar-a-NFS-e-Nacional-ate-31-de-dezembro.html
+- Umuarama, Campo Mourão e Sarandi: rota Municipal para regimes e competências comprovados; em competências do Simples desde 01/11/2026 vale Nacional. Adaptadores municipais precisam declarar o IBGE correspondente.
+- Outras combinações desconhecidas ficam **PENDENTE** e bloqueiam rascunho/transmissão; nenhuma prefeitura, ISS ou adaptação é inferida do telefone/DDD.
+- O snapshot guarda `nfseRoute` e seu hash canônico. Reaproveitamento idempotente com competência diferente é recusado. Antes da transmissão, confronta-se a rota com a configuração atual, sem mudar o documento silenciosamente.
+- Um emissor local ACBr/sidecar da empresa declara, em sua configuração confiável, `nfseChannel:"NACIONAL"` ou `nfseChannel:"MUNICIPAL"`; para Municipal exige `nfseMunicipalityIbge:"NNNNNNN"`. É proibido configurar isso a partir do navegador, e o modo de produção não substitui autorização fiscal.
+- **Limitação expressa:** roteamento, prévia, validação e integração ao adaptador local implementados **não equivalem** ao envio de DPS/XML homologado no sistema nacional ou nos municípios. Antes de distribuição fiscal efetiva, são necessárias configuração do ACBrNFSe/API nacional, certificado, revisão tributária/códigos de serviço, ensaios com autorização, consulta, cancelamento, XML/DANFSe, e integrações municipais para os casos aplicáveis.
+- UX: motivo de bloqueio exibido ao operador, sem limpar dados válidos; seleção de cidade autopreenche IBGE; rascunho indica competência e emissor escolhido; falha de canal ocorre antes de tentativa de transmissão.
+
 ## Matriz de homologação a manter por município
 `municipio_ibge`, `municipio_nome`, `provedor_nfse_confirmado`, `emissor_nacional_disponivel`, `parametros_iss_validados`, `ambiente_homologado`, `credenciais_estabelecimento_configuradas`, `ultima_validacao`, `evidencias_xml_pdf`. Nenhum campo dessa matriz presume homologação.
 
