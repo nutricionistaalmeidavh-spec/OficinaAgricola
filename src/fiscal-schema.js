@@ -4,7 +4,7 @@ export function migrateFiscal(db){
   db.exec(
     "CREATE TABLE IF NOT EXISTS fiscal_documents ("+
     "id INTEGER PRIMARY KEY AUTOINCREMENT,"+
-    "kind TEXT NOT NULL CHECK(kind IN ('NFE','NFSE')),"+
+    "kind TEXT NOT NULL CHECK(kind IN ('NFE','NFCE','NFSE')),"+
     "origin_type TEXT NOT NULL CHECK(origin_type IN ('OS','SALE')),"+
     "origin_id INTEGER NOT NULL CHECK(origin_id>0),"+
     "status TEXT NOT NULL DEFAULT 'RASCUNHO' CHECK(status IN ('RASCUNHO','INDETERMINADO','REJEITADA','AUTORIZADA','AUTORIZADA_HOMOLOGACAO','CANCELADA')),"+
