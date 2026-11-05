@@ -5,6 +5,7 @@ import {createAsyncWorkshopCatalog} from './async-workshop-catalog.js';
 import {createAsyncWorkshopSales} from './async-workshop-sales.js';
 import {createAsyncWorkshopOperations} from './async-workshop-operations.js';
 import {createAsyncWorkshopFiscal} from './async-workshop-fiscal.js';
+import {resolveNfseRoute} from './nfse-routing.js';
 import {createAsyncWorkshopFinance} from './async-workshop-finance.js';
 import {createAsyncWorkshopOrders} from './async-workshop-orders.js';
 import {createAsyncWorkshopInventory} from './async-workshop-inventory.js';
@@ -417,21 +418,40 @@ export function createAsyncWorkshopServices(port,{fiscalProvider=null,objectStor
      totalCents:item.total_cents-shares[index].discount
    }));
  }
- async function createFiscalDraft({originType='OS',originId,kind,requestId}={}){
+ async function getNfseRoute({competenceDate}={}){
+   const settings=await port.first('SELECT * FROM fiscal_settings WHERE id=1');
+   if(!settings?.enabled)fail('Configure CNPJ, UF, município e regime tributário antes de emitir NFS-e',409);
+   return resolveNfseRoute({municipalityIbge:settings.municipality_ibge,
+     taxRegime:settings.tax_regime,competenceDate});
+ }
+ async function createFiscalDraft({originType='OS',originId,kind,competenceDate,requestId}={}){
    const origin=text(originType).toUpperCase(),type=text(kind).toUpperCase();
    if(!['OS','SALE'].includes(origin)||!['NFE','NFCE','NFSE'].includes(type))
      fail('Tipo ou origem fiscal não suportados',409);
    const orderId=numericId(originId),request=text(requestId);
    if(!request||request.length>128)fail('Identificador fiscal obrigatório');
+   const nfseRoute=type==='NFSE'?await getNfseRoute({competenceDate}):null;
+   if(nfseRoute?.channel==='PENDENTE')fail('Regra municipal NFS-e pendente: revise a competência e a prefeitura antes de criar rascunho',409);
+   const matchesCompetence=row=>type!=='NFSE'||(()=>{
+     let snapshot;try{snapshot=JSON.parse(row.snapshot_json)}catch{return false}
+     return snapshot?.nfseRoute?.competenceDate===nfseRoute.competenceDate&&
+       snapshot.nfseRoute.channel===nfseRoute.channel&&
+       snapshot.nfseRoute.municipalityIbge===nfseRoute.municipalityIbge&&
+       snapshot.nfseRoute.taxRegime===nfseRoute.taxRegime;
+   })();
    const byRequest=await port.first('SELECT * FROM fiscal_documents WHERE request_id=?',[request]);
    if(byRequest){
      if(byRequest.origin_type!==origin||Number(byRequest.origin_id)!==orderId||byRequest.kind!==type)
        fail('Identificador fiscal já usado em outra operação',409);
+     if(!matchesCompetence(byRequest))fail('Já existe rascunho NFS-e com outra competência ou configuração fiscal',409);
      return byRequest;
    }
    const existing=await port.first(`SELECT * FROM fiscal_documents
      WHERE origin_type=? AND origin_id=? AND kind=?`,[origin,orderId,type]);
-   if(existing)return existing;
+   if(existing){
+     if(!matchesCompetence(existing))fail('Já existe NFS-e para esta operação com outra competência ou configuração fiscal',409);
+     return existing;
+   }
    if(['NFE','NFCE'].includes(type)){
      const conflict=await port.first(`SELECT id FROM fiscal_documents
        WHERE origin_type=? AND origin_id=? AND kind=?`,
@@ -465,19 +485,20 @@ export function createAsyncWorkshopServices(port,{fiscalProvider=null,objectStor
    const amount=lines.reduce((sum,l)=>sum+Number(l.totalCents),0);
    if(!Number.isSafeInteger(amount)||amount<=0)fail('Valor fiscal inválido');
    const snapshot=JSON.stringify({originType:origin,originId:orderId,
-     ...snapshotFields,kind:type,lines});
+     ...snapshotFields,kind:type,lines,...(nfseRoute?{nfseRoute}:{})});
    const hash=createHash('sha256').update(snapshot).digest('hex');
    const documentId=id(),eventId=id(),at=iso();
+   const fiscalSettings=await port.first('SELECT environment FROM fiscal_settings WHERE id=1');
    const insert=select(`INSERT INTO fiscal_documents(
      id,kind,origin_type,origin_id,status,amount_cents,snapshot_json,
-     snapshot_hash,request_id,created_at,updated_at
-   ) VALUES(?,?,?,?,'RASCUNHO',?,?,?,?,?,?)`,[
-     documentId,type,origin,orderId,amount,snapshot,hash,request,at,at
+     snapshot_hash,request_id,environment,created_at,updated_at
+   ) VALUES(?,?,?,?,'RASCUNHO',?,?,?,?,?,?,?)`,[
+     documentId,type,origin,orderId,amount,snapshot,hash,request,fiscalSettings.environment,at,at
    ]);
    const event=select(`INSERT INTO fiscal_events(
      id,document_id,event_type,details_json,created_at
    ) VALUES(?,?,'CRIADO',?,?)`,[
-     eventId,documentId,JSON.stringify({snapshotHash:hash}),at
+     eventId,documentId,JSON.stringify({snapshotHash:hash,...(nfseRoute?{nfseRoute}:{})}),at
    ]);
    await atomic(port,[insert,event]);
    return port.first('SELECT * FROM fiscal_documents WHERE id=?',[documentId]);
@@ -485,7 +506,7 @@ export function createAsyncWorkshopServices(port,{fiscalProvider=null,objectStor
  const services={
    createCustomer,createMachine,createWorkOrder,getWorkOrder,
    createPart,postStockMovement,receivePayment,financeSummary,
-   transitionWorkOrder,saveQuote,approveQuote,createFiscalDraft,
+   transitionWorkOrder,saveQuote,approveQuote,createFiscalDraft,getNfseRoute,
    ...createAsyncWorkshopCatalog(port),
    ...createAsyncWorkshopSales(port),
    ...createAsyncWorkshopOperations(port),
