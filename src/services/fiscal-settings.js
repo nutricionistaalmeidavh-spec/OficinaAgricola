@@ -1,4 +1,5 @@
 import {transaction,nowIso} from '../db.js';
+import {assertFiscalIssuerUf} from '../platform/fiscal-uf.js';
 
 const STATES=new Set(['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']);
 const REGIMES=new Set(['MEI','SIMPLES','NORMAL']);
@@ -36,6 +37,7 @@ export function setFiscalSettings(db,input={}){
     if(!['HOMOLOGACAO','PRODUCAO'].includes(environment))throw new Error('Ambiente fiscal inválido');
     if(enabled&&(!validCnpj(issuerCnpj)||!STATES.has(issuerUf)||!/^\d{7}$/.test(municipalityIbge)||!REGIMES.has(taxRegime)))
       throw new Error('Complete CNPJ, UF, município IBGE e regime tributário antes de habilitar o fiscal');
+    if(enabled)assertFiscalIssuerUf({uf:issuerUf,municipalityIbge});
     if(enabled&&environment==='PRODUCAO'&&!productionConfirmed)
       throw new Error('Produção exige confirmação administrativa explícita');
     db.prepare('UPDATE fiscal_settings SET enabled=?,environment=?,issuer_cnpj=?,issuer_uf=?,municipality_ibge=?,tax_regime=?,state_registration=?,municipal_registration=?,production_confirmed=?,updated_at=? WHERE id=1')
@@ -51,5 +53,6 @@ export function assertFiscalReady(db,document){
     throw new Error('Produção fiscal não confirmada');
   if(!validCnpj(settings.issuer_cnpj)||!STATES.has(settings.issuer_uf)||!/^\d{7}$/.test(settings.municipality_ibge))
     throw new Error('Configuração fiscal incompleta');
+  assertFiscalIssuerUf({uf:settings.issuer_uf,municipalityIbge:settings.municipality_ibge});
   return settings;
 }
