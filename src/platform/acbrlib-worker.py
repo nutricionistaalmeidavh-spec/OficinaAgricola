@@ -177,7 +177,7 @@ UF_CODES = {"SP": "35", "PR": "41", "MG": "31", "RJ": "33", "SC": "42", "RS": "4
 
 def assert_nfe_model(xml, req):
     key, _, _, _, cnpj = nfe_identity(xml)
-    model = "65" if req["kind"] == "NFCE" else "55"
+    model = "65" if req.get("kind") == "NFCE" else "55"
     if key[20:22] != model:
         raise ACBrError("Modelo da chave fiscal diverge do tipo de documento")
     if key[6:20] != str(req["issuerCnpj"]) or re.sub(r"\\D", "", cnpj) != str(req["issuerCnpj"]):
@@ -477,6 +477,27 @@ def execute(req):
         do(lib, prefix + "_Inicializar", encoded(req["configPath"]), encoded(""),
            types=[ct.c_char_p, ct.c_char_p])
         initialized = True
+        if req["kind"] in ("NFE", "NFCE"):
+            issuer_uf = str(req.get("issuerUf") or "")
+            if issuer_uf not in UF_CODES:
+                raise ACBrError("UF fiscal não configurada para as seis UFs iniciais")
+            # Esses valores são aplicados apenas à instância isolada do processo.
+            # NÃO persistir o arquivo INI nem alterar certificado/CSC existente.
+            do(lib, "NFE_ConfigGravarValor", encoded("DFe"), encoded("UF"), encoded(issuer_uf),
+               types=[ct.c_char_p] * 3)
+            do(lib, "NFE_ConfigGravarValor", encoded("NFe"), encoded("Ambiente"),
+               encoded("1" if req["environment"] == "HOMOLOGACAO" else "0"),
+               types=[ct.c_char_p] * 3)
+            if req["kind"] == "NFCE":
+                config = configparser.ConfigParser(interpolation=None)
+                config.read(req["configPath"], encoding="utf-8-sig")
+                if (not config.has_option("NFe", "CSC") or
+                        not config.get("NFe", "CSC").strip() or
+                        not config.has_option("NFe", "IdCSC") or
+                        not config.get("NFe", "IdCSC").strip()):
+                    raise ACBrError("NFC-e exige CSC/IdCSC no arquivo ACBr privado do emitente")
+                do(lib, "NFE_ConfigGravarValor", encoded("NFe"), encoded("FormaEmissao"),
+                   encoded("0"), types=[ct.c_char_p] * 3)
         if req["operation"] == "pdf":
             return document_pdf(lib, req)
         if req["kind"] in ("NFE", "NFCE"):
