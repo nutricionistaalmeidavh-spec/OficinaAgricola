@@ -1,5 +1,5 @@
 import { nowIso, transaction } from '../db.js';
-import { assertTransition } from '../domain.js';
+import { assertTransition,nextWorkOrderStatuses } from '../domain.js';
 
 const text=(v)=>v==null?'':String(v).trim();
 const PRIORITIES=new Set(['BAIXA','NORMAL','ALTA','URGENTE']);
@@ -37,7 +37,7 @@ export function createWorkOrder(db,input){
 export function getWorkOrder(db,id){
   const row=db.prepare(`SELECT wo.*, c.name customer_name, m.type machine_type, m.brand machine_brand, m.model machine_model, t.name technician_name
     FROM work_orders wo JOIN customers c ON c.id=wo.customer_id JOIN machines m ON m.id=wo.machine_id LEFT JOIN technicians t ON t.id=wo.technician_id WHERE wo.id=?`).get(id);
-  if(!row) throw new Error('Ordem de serviço não encontrada'); return row;
+  if(!row) throw new Error('Ordem de serviço não encontrada'); return {...row,availableTransitions:nextWorkOrderStatuses(row.status)};
 }
 export function listWorkOrders(db,{status,scope,search='',limit=200,offset=0}={}){
   const clauses=[]; const params=[];

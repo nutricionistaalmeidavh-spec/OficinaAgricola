@@ -127,6 +127,7 @@ export function createAsyncWorkshopSales(port){
      const part=await port.first('SELECT * FROM parts WHERE id=? AND active=1',[partId]);
      if(!part)fail('Peça da venda não encontrada',404);
      const price=cents(input.unitPriceCents===undefined?part.sale_price_cents:input.unitPriceCents);
+     if(input.expectedUnitPriceCents!==undefined&&cents(input.expectedUnitPriceCents)!==price)fail('Preço da peça alterado. Revise a prévia antes de concluir.',409);
      return {id:id(),kind:'PECA',partId,serviceId:null,description:clean(input.description)||part.description,
        quantity,price,total:Math.round(price*quantity)};
    }
@@ -134,6 +135,7 @@ export function createAsyncWorkshopSales(port){
      const s=await port.first('SELECT * FROM service_catalog WHERE id=? AND active=1',[serviceId]);
      if(!s)fail('Serviço da venda não encontrado',404);
      const price=cents(input.unitPriceCents===undefined?s.price_cents:input.unitPriceCents);
+     if(input.expectedUnitPriceCents!==undefined&&cents(input.expectedUnitPriceCents)!==price)fail('Preço do serviço alterado. Revise a prévia antes de concluir.',409);
      return {id:id(),kind:'SERVICO',partId:null,serviceId,description:clean(input.description)||s.name,
        quantity,price,total:Math.round(price*quantity)};
    }
@@ -161,6 +163,7 @@ export function createAsyncWorkshopSales(port){
    const items=[];for(const item of input.items)items.push(await resolveItem(item));
    const subtotal=items.reduce((sum,x)=>sum+x.total,0),discount=cents(input.discountCents??0);
    if(discount>subtotal)fail('Desconto maior que o subtotal');
+   if(input.expectedTotalCents!==undefined&&cents(input.expectedTotalCents)!==subtotal-discount)fail('Total da prévia alterado. Revise os valores antes de concluir.',409);
    const customerId=input.customerId==null?null:key(input.customerId);
    if(customerId&&!await port.first('SELECT id FROM customers WHERE id=?',[customerId]))
      fail('Cliente não encontrado',404);

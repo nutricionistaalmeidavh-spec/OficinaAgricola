@@ -138,9 +138,19 @@ try{
    const submitted=await call('/api/work-orders/'+os.id+'/quote/submit',{method:'POST',token,body:{}});
    assert.equal(submitted.status,200,JSON.stringify(submitted.data));
    const link=await call('/api/work-orders/'+os.id+'/quote/approval-link',{method:'POST',token,
-     body:{expiresInHours:48}});
+     body:{expiresInHours:48,clientToken:'a'.repeat(64)}});
    assert.equal(link.status,200,JSON.stringify(link.data));
    assert.match(link.data.path,/^\/approval\.html\?token=[a-f0-9]{64}&unit=1$/);
+   const repeatLink=await call('/api/work-orders/'+os.id+'/quote/approval-link',{method:'POST',token,
+     body:{expiresInHours:48,clientToken:'a'.repeat(64)}});
+   assert.equal(repeatLink.status,200,JSON.stringify(repeatLink.data));
+   assert.equal(repeatLink.data.token,link.data.token);
+   assert.equal(repeatLink.data.expiresAt,link.data.expiresAt,'retry does not extend validity');
+   assert.equal(link.data.externalAccess,false);
+   const nativeTenant=await factory.handlerForUnit({id:1,companyId:1});
+   const hashes=await nativeTenant.port.all('SELECT token_hash FROM quote_approval_links WHERE work_order_id=?',[os.id]);
+   assert.equal(hashes.length,1);
+   assert.notEqual(hashes[0].token_hash,link.data.token,'only token digest is persisted');
    const publicPath='/api/public/approval/'+link.data.token+'?unit=1';
    const proposed=await call(publicPath);
    assert.equal(proposed.status,200,JSON.stringify(proposed.data));
@@ -203,6 +213,34 @@ try{
    assert.notEqual(bindingA.schemaName,bindingB.schemaName);
    assert.equal(bindingA.schemaName,tenantSchemaName({id:1,companyId:1},{prefix}));
    assert.equal(bindingB.schemaName,tenantSchemaName({id:newUnitId,companyId:company.id},{prefix}));
+ });
+ await test('PostgreSQL journey search, canonical stages and stale sale previews use real persisted state',async()=>{
+   const login=await registry.login({username:'admin-p4',password:'TestPass2026!'}),token=login.token;
+   const runtime=await factory.handlerForUnit({id:1,companyId:1}),s=runtime.services;
+   const c=await s.createCustomer({name:'Zelia jornada antiga'});
+   for(let n=0;n<205;n++)await s.createCustomer({name:'A QA '+String(n).padStart(3,'0')});
+   const vehicle=await s.createMachine({customerId:c.id,type:'Carro',model:'Uno',plate:'ABC1D23',vin:'9BWZZZ377VT004251'});
+   let os=await s.createWorkOrder({customerId:c.id,machineId:vehicle.id,problemReported:'Revisão'});
+   const found=await call('/api/customers/page?search=zelia',{token,unit:1});
+   assert.equal(found.status,200);assert.equal(found.data.items[0].id,c.id);
+   const byPlate=await call('/api/work-orders/page?search=abc-1d23',{token,unit:1});
+   assert.equal(byPlate.status,200);assert.equal(byPlate.data.items[0].id,os.id);
+   os=await s.updateWorkOrder(os.id,{diagnosis:'Primeiro',expectedVersion:os.version});
+   os=await s.updateWorkOrder(os.id,{diagnosis:'Revisado',expectedVersion:os.version});
+   assert.equal(os.diagnosis,'Revisado');
+   const panel=await s.getDashboard();
+   assert.equal(panel.flow.length,7);assert.equal(panel.board.aprovacao.count,0);
+   const part=await s.createPart({sku:'QA-PREVIEW',description:'Filtro',salePriceCents:2500});
+   await s.postStockMovement({partId:part.id,type:'ENTRADA',quantity:5});
+   await s.openCashSession({requestId:'qa-preview-cash'});
+   const body={requestId:'qa-price-preview',paymentMethod:'PIX',expectedTotalCents:4000,items:[{partId:part.id,quantity:2,expectedUnitPriceCents:2000}]};
+   const rejected=await call('/api/sales',{method:'POST',token,unit:1,body});
+   assert.equal(rejected.status,409);assert.equal((await s.getPart(part.id)).quantity,5);
+   body.expectedTotalCents=5000;body.items[0].expectedUnitPriceCents=2500;
+   const sale=await call('/api/sales',{method:'POST',token,unit:1,body});
+   const retry=await call('/api/sales',{method:'POST',token,unit:1,body});
+   assert.equal(sale.status,200,JSON.stringify(sale.data));assert.equal(retry.data.id,sale.data.id);
+   assert.equal((await s.getPart(part.id)).quantity,3);
  });
  await test('bound PostgreSQL tenant fails closed if physical schema is missing',async()=>{
    const adminId=(await registry.login({username:'admin-p4',password:'TestPass2026!'})).user.id;
