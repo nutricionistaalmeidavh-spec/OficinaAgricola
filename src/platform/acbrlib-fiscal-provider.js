@@ -33,7 +33,7 @@ function loadManifest(file,expected){
 function resolveInputs(inputDir,document,issuer){
   const hash=document?.snapshot_hash;
   if(!/^[0-9a-f]{64}$/.test(hash||'')||!Number.isSafeInteger(Number(document?.id))||
-      !['NFE','NFSE'].includes(document?.kind))
+      !['NFE','NFCE','NFSE'].includes(document?.kind))
     throw new Error('Documento fiscal canônico inválido');
   const stem=document.kind+'-'+document.id+'-'+hash;
   const base=resolve(inputDir,stem);
@@ -117,7 +117,8 @@ export function createAcbrLibFiscalProvider(opts={}){
   const runner=opts.runner??(args=>executeWorker(args,{python,workerExe:validatedWorker}));
   const preflight=({document,issuer})=>{
     const kind=document?.kind;
-    if(!libraries[kind])throw new Error('Biblioteca ACBrLib para '+kind+' não configurada');
+    const libraryKind=kind==='NFCE'?'NFE':kind;
+    if(!libraries[libraryKind])throw new Error('Biblioteca ACBrLib para '+kind+' não configurada');
     const safeIssuer=issuer||(document.issuer_snapshot_json?JSON.parse(document.issuer_snapshot_json):null);
     if(!safeIssuer?.cnpj||!safeIssuer?.environment)
       throw new Error('Emitente fiscal ausente; configure antes do envio ACBr');
@@ -128,7 +129,7 @@ export function createAcbrLibFiscalProvider(opts={}){
     return {kind,documentId:Number(document.id),iniPath,
       snapshotHash:document.snapshot_hash,amountCents:Number(document.amount_cents),environment:safeIssuer.environment,
       issuerCnpj:safeIssuer.cnpj,
-      ...libraries[kind]};
+      ...libraries[libraryKind],issuerUf:safeIssuer.uf};
   };
   return {
     name:'acbrlib-local',
