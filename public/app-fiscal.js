@@ -35,7 +35,7 @@ async function renderFiscal({cursor=null,loaded=[]}={}){
       '<br><small>NFS-e antiga: rota e competência precisam de revisão antes de emitir</small>'):'';
     return '<div class="list-item"><div><strong>'+esc(fiscalDisplayTitle(d))+'</strong> · '+esc(fiscalOriginTitle(d))+
       '<br><small>'+esc(d.status)+' · '+money(d.amount_cents)+'</small>'+routeText+'</div><div class="action-row">'+
-      '<button class="btn sm soft" data-fiscal-details="'+d.id+'">Histórico</button>'+revise+(d.status==='RASCUNHO'&&d.kind!=='NFSE'?'<button class="btn sm soft" data-fiscal-tax-review="'+d.id+'">Revisar tributos</button>':'')+pdf+cancel+actions+'</div></div>';
+      '<button class="btn sm soft" data-fiscal-details="'+d.id+'">Histórico</button>'+revise+(d.status==='RASCUNHO'&&d.kind==='NFSE'&&fiscalSnapshot(d).nfseRoute?.channel==='NACIONAL'&&state.user.role==='ADMIN'?'<button class="btn sm soft" data-nfse-national-dps="'+d.id+'">DPS Nacional</button>':'')+(d.status==='RASCUNHO'&&d.kind!=='NFSE'?'<button class="btn sm soft" data-fiscal-tax-review="'+d.id+'">Revisar tributos</button>':'')+pdf+cancel+actions+'</div></div>';
   }).join('');
   setContent('<div class="section-head fiscal-head"><div><h2>Documentos fiscais</h2>'+
     '<span class="muted">Rascunhos, notas e protocolos das ordens de serviço e vendas</span></div>'+
@@ -53,7 +53,8 @@ async function renderFiscal({cursor=null,loaded=[]}={}){
   if($('#fiscalCertA1'))$('#fiscalCertA1').onclick=()=>fiscalCertificateA1Modal();
   if($('#fiscalCertA3'))$('#fiscalCertA3').onclick=()=>fiscalCertificateA3Modal();
   if($('#fiscalDiagnose'))$('#fiscalDiagnose').onclick=()=>fiscalRunDiagnosis();
-  $$('[data-nfse-competence]').forEach(b=>b.onclick=()=>fiscalReviseCompetence(Number(b.dataset.nfseCompetence)).catch(e=>toast(e.message,true)));
+  $('[data-nfse-national-dps]').forEach(b=>b.onclick=()=>fiscalNationalDpsModal(Number(b.dataset.nfseNationalDps)).catch(e=>toast(e.message,true)));
+  $('[data-nfse-competence]').forEach(b=>b.onclick=()=>fiscalReviseCompetence(Number(b.dataset.nfseCompetence)).catch(e=>toast(e.message,true)));
   $$('[data-fiscal-details]').forEach(b=>b.onclick=()=>showFiscalHistory(Number(b.dataset.fiscalDetails)).catch(e=>toast(e.message,true)));
   $$('[data-fiscal-submit]').forEach(b=>b.onclick=()=>fiscalAction(Number(b.dataset.fiscalSubmit),'submit'));
   $$('[data-fiscal-check]').forEach(b=>b.onclick=()=>fiscalAction(Number(b.dataset.fiscalCheck),'reconcile'));
@@ -200,6 +201,35 @@ async function fiscalTaxReviewModal(id){
           icms:taxes(i,'Icms'),pis:taxes(i,'Pis'),cofins:taxes(i,'Cofins')}))};
       await api('/api/fiscal/'+id+'/tax-review',{method:'POST',body});
       toast('Revisão salva e validada contra o documento fiscal. A nota ainda não foi transmitida.');
+      await refreshCurrentPage();
+    });
+}
+async function fiscalNationalDpsModal(documentId){
+  const state=await api('/api/fiscal/'+documentId+'/nfse/dps');
+  if(!state.enabled){
+    showModal('DPS Nacional — preparação',
+      '<p class="muted">Esta empresa ainda usa o emissor ACBr. Para transmitir diretamente pela API oficial, o administrador da instalação precisa ativar o canal nacional direto, mantendo a emissão municipal separada.</p>'+
+      '<p>Não é necessário contratar uma API de terceiros.</p>');
+    return;
+  }
+  showModal('Preparar DPS assinada · NFS-e Nacional',
+    '<form class="form-stack">'+
+    '<p class="muted">'+(state.prepared
+      ?'DPS já vinculada a este rascunho: '+esc(state.idDps||'')+'. Ela não pode ser substituída.'
+      :'Selecione uma DPS em XML já assinada digitalmente pelo contribuinte e validada conforme o leiaute nacional. O Oficina verificará CNPJ, município, competência, número e valor antes da transmissão.')+'</p>'+
+    '<p class="muted">O arquivo é armazenado somente na pasta privada da unidade. Não envie PFX, senha ou PIN nesta etapa.</p>'+
+    (state.prepared?'':'<label>XML da DPS assinada<input type="file" name="signedDps" accept=".xml,text/xml,application/xml" required></label>'+
+      '<button type="submit" class="btn primary">Validar e anexar DPS</button>')+'</form>',
+    async form=>{
+      if(state.prepared)return;
+      const file=form.querySelector('[name="signedDps"]')?.files?.[0];
+      if(!file||!file.size||file.size>512*1024)throw Error('Selecione XML assinado de até 512 KB');
+      const signedDpsXml=await file.text();
+      if(!signedDpsXml.includes('<DPS')&&!signedDpsXml.includes(':DPS'))
+        throw Error('Arquivo não contém DPS no padrão nacional');
+      await api('/api/fiscal/'+documentId+'/nfse/dps',{
+        method:'POST',body:{signedDpsXml,requestId:newCommandId()}});
+      toast('DPS Nacional preparada. A nota ainda não foi transmitida.');
       await refreshCurrentPage();
     });
 }
