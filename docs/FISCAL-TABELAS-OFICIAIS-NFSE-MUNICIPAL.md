@@ -55,3 +55,13 @@ Produção exige arquivo privado OFICINA_NFSE_MUNICIPAL_PROFILE_PATH, em JSON co
 6. PAF-NFC-e de SC fora do escopo atual: não declarar suporte até cumprir credenciamento da desenvolvedora e regras específicas.
 
 Core aberto, local e self-hosted, R$ 0; sem API fiscal paga obrigatória.
+
+## Compatibilização com a main (05/11/2026)
+
+A PR #45 recebeu um commit de merge da `main` atual, com execução completa de lint,
+testes Node/Python/ACBr, build, validação offline dos três catálogos e jornadas E2E.
+A revisão de NF-e/NFC-e usa a API segura de perfis tributários já presente na
+`main`, sem aceitar seções INI arbitrárias enviadas pelo navegador; os campos
+opcionais de IBS/CBS foram integrados nesse fluxo tipado. O conteúdo do catálogo
+fiscal e os dados de cada empresa permanecem isolados. A homologação real,
+certificados de clientes e liberação para emissão em produção são processos distintos.
