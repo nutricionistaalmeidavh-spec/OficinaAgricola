@@ -3,6 +3,7 @@
 import {DOMParser} from '@xmldom/xmldom';
 import qrcode from 'qrcode-generator';
 import {nationalDanfseLogo,decodeNationalLogoPng} from './nfse-national-danfse-assets.js';
+import {loadDanfseFonts} from './nfse-national-danfse-fonts.js';
 
 const WIDTH=595.28,HEIGHT=841.89;
 const KEY=/^\d{50}$/;
@@ -140,36 +141,47 @@ function pdfWriter(){
  return {ops,line,rectangle,text,group,header,block};
 }
 function toPdf(commands,url,logo){
+ const fonts=loadDanfseFonts();
  const out=[];let position=0;const offsets=[0];
  const put=b=>{const bytes=Buffer.isBuffer(b)?b:Buffer.from(b,'latin1');out.push(bytes);position+=bytes.length;};
  const obj=(n,body)=>{offsets[n]=position;put(n+' 0 obj\n'+body+'\nendobj\n');};
+ const streamObject=(n,dict,data)=>{
+   offsets[n]=position;
+   put(n+' 0 obj\n<< '+dict+' /Length '+data.length+' >>\nstream\n');
+   put(data);put('\nendstream\nendobj\n');
+ };
+ function embedFont(fontNumber,descNumber,fileNumber,baseFont,font){
+   const fontName=baseFont.replace(/[^A-Za-z0-9-]/g,'');
+   obj(fontNumber,'<< /Type /Font /Subtype /TrueType /BaseFont /'+fontName+
+    ' /FirstChar 32 /LastChar 255 /Widths ['+font.widths.join(' ')+']'+
+    ' /FontDescriptor '+descNumber+' 0 R /Encoding /WinAnsiEncoding >>');
+   obj(descNumber,'<< /Type /FontDescriptor /FontName /'+fontName+
+    ' /Flags 32 /FontBBox ['+font.bbox.join(' ')+'] /ItalicAngle 0'+
+    ' /Ascent '+font.ascender+' /Descent '+font.descender+
+    ' /CapHeight '+font.capHeight+' /StemV 80 /FontFile2 '+fileNumber+' 0 R >>');
+   streamObject(fileNumber,'/Length1 '+font.data.length+' /Filter /FlateDecode',font.compressed);
+ }
  put('%PDF-1.4\n%\xe2\xe3\xcf\xd3\n');
  obj(1,'<< /Type /Catalog /Pages 2 0 R >>');
  obj(2,'<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
  obj(3,'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] '+
    '/Resources << /Font << /F1 4 0 R /F2 5 0 R /F3 8 0 R >> '+
    '/XObject << /ImLogo 9 0 R >> >> /Contents 7 0 R /Annots [6 0 R] >>');
- // Arial para labels e Microsoft Sans Serif para conteúdo são as famílias previstas
- // pela NT 008 v1.02. Nunca distribuir arquivos proprietários de fontes.
- obj(4,'<< /Type /Font /Subtype /TrueType /BaseFont /MicrosoftSansSerif /Encoding /WinAnsiEncoding >>');
- obj(5,'<< /Type /Font /Subtype /TrueType /BaseFont /Arial-BoldMT /Encoding /WinAnsiEncoding >>');
+ // Fontes realmente embutidas a partir do sistema local; nunca distribuí-las separadamente.
+ embedFont(4,10,11,'MicrosoftSansSerif',fonts.content);
+ embedFont(5,12,13,'Arial-BoldMT',fonts.label);
  const annotation='<< /Type /Annot /Subtype /Link /Rect [495 731 559 795] /Border [0 0 0] '+
   '/A << /S /URI /URI ('+pdfString(url)+') >> >>';
  obj(6,annotation);
  const bytes=Buffer.from(commands.join('\n')+'\n','latin1');
- offsets[7]=position;put('7 0 obj\n<< /Length '+bytes.length+' >>\nstream\n');
- put(bytes);put('endstream\nendobj\n');
- obj(8,'<< /Type /Font /Subtype /TrueType /BaseFont /ArialMT /Encoding /WinAnsiEncoding >>');
- offsets[9]=position;
- put('9 0 obj\n<< /Type /XObject /Subtype /Image /Width '+logo.width+' /Height '+logo.height+
-   ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length '+
-   logo.stream.length+' >>\nstream\n');
- put(logo.stream);
- put('\nendstream\nendobj\n');
+ streamObject(7,'',bytes);
+ embedFont(8,14,15,'ArialMT',fonts.arial);
+ streamObject(9,'/Type /XObject /Subtype /Image /Width '+logo.width+' /Height '+
+  logo.height+' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode',logo.stream);
  const xref=position;
- put('xref\n0 10\n0000000000 65535 f \n');
- for(let i=1;i<=9;i++)put(String(offsets[i]).padStart(10,'0')+' 00000 n \n');
- put('trailer\n<< /Size 10 /Root 1 0 R >>\nstartxref\n'+xref+'\n%%EOF\n');
+ put('xref\n0 16\n0000000000 65535 f \n');
+ for(let i=1;i<=15;i++)put(String(offsets[i]).padStart(10,'0')+' 00000 n \n');
+ put('trailer\n<< /Size 16 /Root 1 0 R >>\nstartxref\n'+xref+'\n%%EOF\n');
  return Buffer.concat(out);
 }
 function drawQr(ops,key){
