@@ -146,3 +146,14 @@ test('troca de contexto conserva rascunho quando cancelada e bloqueia operação
   ctx.modalSession.busy=false;assert.equal(ctx.allowLeaveWorkshop(),true);
   assert.equal(ctx.state.pageDirty,false);assert.equal(ctx.modalSession,null);
 });
+
+test('busca global distingue ausência de resultados de indisponibilidade',async()=>{
+  const views=[];
+  const ctx=vm.createContext({$:()=>null,esc:String,api:async()=>({items:[],total:0,nextCursor:null}),showModal:(title,html)=>views.push(html)});
+  vm.runInContext(readFileSync('public/app-stage7.js','utf8'),ctx);
+  await ctx.runGlobalSearch('inexistente');
+  assert.match(views[0],/Nenhum cliente, máquina ou OS encontrado/);
+  ctx.api=async()=>{throw new Error('Consulta indisponível');};
+  await assert.rejects(ctx.runGlobalSearch('outro'),/Consulta indisponível/);
+  assert.equal(views.length,1,'falha não pode virar uma nova tela de resultado vazio');
+});

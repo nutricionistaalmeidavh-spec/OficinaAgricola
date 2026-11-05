@@ -154,7 +154,10 @@ try{
     throw new Error('Fila não persistiu chave única sem token');
   await page.screenshot({path:path.join(outputDir,'07-operacao-pendente.png'),fullPage:true});
   await page.unroute('**/api/customers',lostReply);
+  const acceptReload=dialog=>dialog.accept();
+  page.on('dialog',acceptReload);
   await page.reload({waitUntil:'domcontentloaded'});
+  page.off('dialog',acceptReload);
   await page.locator('#appView').waitFor({state:'visible'});
   await page.waitForFunction(async()=>{
     if(!state.user)return false;
@@ -181,6 +184,11 @@ try{
   await page.locator('#modalBody button[type="submit"]').click();
   await page.locator('#pendingCommands').waitFor({state:'visible'});
   await page.unroute('**/api/customers',noNetwork);
+  // O rascunho fica aberto após falha; o comando já está preservado na fila.
+  await page.locator('#modalBody input[name="name"]').waitFor({state:'visible'});
+  await page.locator('#modalClose').click();
+  await page.getByRole('button',{name:'Descartar alterações',exact:true}).click();
+  await page.locator('#modal').waitFor({state:'hidden'});
   await page.locator('#pendingCommands').click();
   // A fila de risco exige confirmação no diálogo, antes de retornar à navegação.
   const retry=page.locator('[data-queue-retry]').first();
@@ -213,6 +221,11 @@ try{
   if(!settingsStable.same||!settingsStable.focused||settingsStable.draft!=='Rascunho QA não salvo')
     throw new Error('Atualização parcial descartou campo, foco ou nó de formulário não salvo');
 
+  // Cancelar a saída conserva o rascunho; confirmar permite navegar.
+  page.once('dialog',dialog=>dialog.dismiss());
+  await navigateQa(page,'machines');
+  if(await companyName.inputValue()!=='Rascunho QA não salvo')throw new Error('Saída cancelada perdeu o rascunho');
+  page.once('dialog',dialog=>dialog.accept());
   // Automotivo: criação e leitura real de placa/VIN/km, revisão e garantia.
   await navigateQa(page,'machines');
   await page.locator('#newMachine').click();

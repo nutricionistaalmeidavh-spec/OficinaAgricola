@@ -104,7 +104,9 @@ async function runGlobalSearch(query){
       render:item=>`<strong>${esc([item.brand,item.model].filter(Boolean).join(' ')||item.type)}</strong><small>${esc(item.license_plate||item.vin||item.serial_number||item.internal_id||'')}</small>`,
       open:item=>machineHistoryModal(item.id)}
   ];
-  showModal(`Busca — ${q}`,groups.map(g=>`<section id="search-${g.key}"></section>`).join(''));
+  const total=customers.total+machines.total+orders.total;
+  showModal(`Busca — ${q}`,total?groups.map(g=>`<section id="search-${g.key}"></section>`).join(''):'<div class="empty">Nenhum cliente, máquina ou OS encontrado.</div>');
+  if(!total)return;
   const modalToken=state.modalToken;
   for(const group of groups){
     let rows=[...group.page.items],cursor=group.page.nextCursor;
