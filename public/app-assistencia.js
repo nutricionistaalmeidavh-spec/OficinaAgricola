@@ -209,8 +209,8 @@ async function saleModal() {
   window.OficinaBarcode?.attach($('#modalBody [data-barcode-panel]'),async code=>{
     const part=await window.OficinaBarcode.findPartBySku(code,api);
     if(!part)return {state:'error',message:'Código '+code+' não localizado entre os SKUs ativos. Pesquise a peça ou cadastre-a no estoque.'};
-    let row=$('.sale-item-row').find(item=>$('[data-sale-kind]',item).value==='P'&&!$('[data-sale-part]',item).value);
-    if(!row){addRow();row=$('.sale-item-row').at(-1);}
+    let row=Array.from(document.querySelectorAll('.sale-item-row')).find(item=>$('[data-sale-kind]',item).value==='P'&&!$('[data-sale-part]',item).value);
+    if(!row){addRow();row=Array.from(document.querySelectorAll('.sale-item-row')).at(-1);}
     const kind=$('[data-sale-kind]',row);
     kind.value='P';kind.dispatchEvent(new Event('change',{bubbles:true}));
     const select=$('[data-sale-part]',row);
