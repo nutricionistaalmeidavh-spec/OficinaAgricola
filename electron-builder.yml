@@ -16,6 +16,10 @@ extraResources:
     to: fiscal
     filter:
       - '**/*'
+  - from: build/nfse-national
+    to: nfse-national
+    filter:
+      - '**/*'
   - from: build/diagnostics/ArtiSys-Diagnostic-Bridge
     to: diagnostics/ArtiSys-Diagnostic-Bridge
     filter:

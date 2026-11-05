@@ -151,6 +151,44 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
      company:input.company,customer:input.customer,
      issuance:input.issuance,items:input.items});
  }
+ async function getNationalDpsStatus(documentId){
+   const document=await getFiscalDocument(documentId);
+   const issuer=assertReady(await getFiscalSettings(),document);
+   if(document.kind!=='NFSE')fail('DPS nacional somente para NFS-e',409);
+   assertNfseRouteForTransmission(document,issuer,provider);
+   if(typeof provider?.nationalDpsStatus!=='function')
+     return {prepared:false,enabled:false,reason:'API Nacional direta não ativada nesta empresa'};
+   return {enabled:true,...provider.nationalDpsStatus({document,issuer})};
+ }
+ async function prepareAutomaticNationalDps(documentId,input={}){
+   const document=await getFiscalDocument(documentId);
+   if(document.kind!=='NFSE'||document.status!=='RASCUNHO')
+     fail('Somente rascunho NFS-e pode gerar DPS',409);
+   const issuer=assertReady(await getFiscalSettings(),document);
+   assertNfseRouteForTransmission(document,issuer,provider);
+   if(typeof provider?.prepareAutomaticNationalDps!=='function')
+     fail('Gerador automático nacional opcional não habilitado para esta unidade',503);
+   // Campos fiscais vêm do responsável fiscal; data de emissão usa hora real de São Paulo.
+   const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',
+      year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',
+      second:'2-digit',hourCycle:'h23'}).formatToParts(new Date());
+   const value=key=>parts.find(x=>x.type===key)?.value||'';
+   const issuedAt=value('year')+'-'+value('month')+'-'+value('day')+'T'+
+     value('hour')+':'+value('minute')+':'+value('second')+'-03:00';
+   return provider.prepareAutomaticNationalDps({document,issuer,
+     profileId:input.profileId,customer:input.customer,
+     issuance:{...input.issuance,issuedAt}});
+ }
+ async function saveNationalDps(documentId,input={}){
+   const document=await getFiscalDocument(documentId);
+   if(document.status!=='RASCUNHO'||document.kind!=='NFSE')
+     fail('Somente rascunho NFS-e permite anexar DPS assinada',409);
+   const issuer=assertReady(await getFiscalSettings(),document);
+   assertNfseRouteForTransmission(document,issuer,provider);
+   if(typeof provider?.saveNationalDps!=='function')
+     fail('Ative expressamente o emissor Nacional direto desta empresa',503);
+   return provider.saveNationalDps({document,issuer,signedDpsXml:input.signedDpsXml});
+ }
  async function getFiscalDocument(documentId){
    const row=await port.first('SELECT * FROM fiscal_documents WHERE id=?',[id(documentId)]);
    if(!row)fail('Documento fiscal não encontrado',404);
@@ -454,7 +492,7 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
      ?finishFiscalCancellation(doc.id,doc.attempt_id,result,clean(provider.name)||'local')
      :applyResult(doc.id,doc.attempt_id,result,clean(provider.name)||'local');
  }
- return Object.freeze({getFiscalSettings,setFiscalSettings,getFiscalTaxProfiles,
+ return Object.freeze({getFiscalSettings,getNationalDpsStatus,saveNationalDps,prepareAutomaticNationalDps,setFiscalSettings,getFiscalTaxProfiles,
    saveFiscalTaxProfile,getFiscalTaxReview,saveFiscalTaxReview,getFiscalOnboardingStatus,
    installFiscalCertificate,listFiscalCertificates,selectFiscalA3Certificate,diagnoseFiscal,getFiscalDocument,
    reviseNfseDraftRoute,getFiscalEvents,listFiscalDocuments,submitFiscalDocument,reconcileFiscalDocument,

@@ -16,6 +16,7 @@ import {loadTenantPaymentConfigs,resolveTenantPaymentOptions} from './platform/t
 import {loadTenantReminderSenders} from './platform/tenant-reminder-smtp.js';
 import {loadTenantFiscalConfigs,resolveTenantFiscalProvider} from './platform/tenant-fiscal.js';
 import {createAcbrLibFiscalProvider} from './platform/acbrlib-fiscal-provider.js';
+import {createNationalNfseProvider} from './platform/nfse-national-provider.js';
 import {createLocalFiscalCertificateStore} from './platform/fiscal-certificate-store.js';
 
 const registryUrl=process.env.OFICINA_POSTGRES_REGISTRY_URL;
@@ -103,14 +104,34 @@ function fiscalProviderForUnit(unit){
   const nfeLib=process.env.FISCAL_ACBR_NFE_LIB||null;
   const nfseLib=process.env.FISCAL_ACBR_NFSE_LIB||null;
   if(!nfeLib&&!nfseLib)return null;
-  return createAcbrLibFiscalProvider({
+  const certificateStore=createLocalFiscalCertificateStore({directory:join(privateRoot,'segredos')});
+  const acbr=createAcbrLibFiscalProvider({
     nfeLib,nfseLib,workerExe:process.env.FISCAL_ACBR_WORKER_EXE,inputDir,
-    certificateStore:createLocalFiscalCertificateStore({directory:join(privateRoot,'segredos')}),
+    certificateStore,
     // A biblioteca NFSe integrada usa o canal nacional; rotas municipais exigem
     // configuração isolada específica da empresa, nunca fallback silencioso.
     ...(nfseLib?{nfseChannel:'NACIONAL'}:{}),
     ...(nfeLib?{nfeConfig:privateIni('ACBrLibNFe.ini')}:{}),
     ...(nfseLib?{nfseConfig:privateIni('ACBrLibNFSe.ini')}:{})
+  });
+  // Opt-in explícito: não alterar instalações ACBr/A3 existentes.
+  if(process.env.OFICINA_NFSE_NACIONAL_DIRETA!=='true')return acbr;
+  const national=createNationalNfseProvider({certificateStore,inputDir});
+  const service=method=>async args=>{
+    const target=args?.document?.kind==='NFSE'?national:acbr;
+    if(typeof target?.[method]!=='function')
+      throw Error('Operação fiscal não habilitada para este emissor');
+    return target[method](args);
+  };
+  return Object.freeze({...acbr,
+    nfseChannel:'NACIONAL',
+    prepare:service('prepare'),transmit:service('transmit'),
+    consult:service('consult'),printPdf:service('printPdf'),
+    cancel:service('cancel'),consultCancellation:service('consultCancellation'),
+    prepareCancellation:service('prepareCancellation'),
+    saveNationalDps:args=>national.saveNationalDps(args),
+    prepareAutomaticNationalDps:args=>national.prepareAutomaticNationalDps(args),
+    nationalDpsStatus:args=>national.nationalDpsStatus(args)
   });
 }
 

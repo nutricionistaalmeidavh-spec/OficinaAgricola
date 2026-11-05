@@ -23,6 +23,8 @@ export function validateTaxProfile(input,{issuer}={}){
    return {kind,name,...(profileId?{id:profileId}:{}),
      municipalityIbge,serviceListCode:match(input.serviceListCode,/^\d{2}\.\d{2}$/,'Item da lista de serviço'),
      municipalServiceCode:match(input.municipalServiceCode,/^[A-Za-z0-9._/-]{1,25}$/,'Código municipal do serviço'),
+     ...(input.nationalServiceCode?{nationalServiceCode:match(input.nationalServiceCode,/^\d{6}$/,'Código nacional de serviço')}:{}),
+     ...(input.nbsCode?{nbsCode:match(input.nbsCode,/^\d{9}$/,'Código NBS')}:{}),
      cnae:match(input.cnae,/^\d{7}$/,'CNAE'),issRate:rate,
      withheld:input.withheld===true};
  }
