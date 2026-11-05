@@ -40,9 +40,13 @@ export function assertReviewedFiscalUf({kind,issuer,sections}={}){
     if(payments.some(([,p])=>!/^\d{2}$/.test(String(p.tPag||''))||
        !/^(?:0|[1-9]\d*)\.\d{2}$/.test(String(p.vPag||''))))
       throw new Error('NFC-e exige código e valor de pagamento revisados');
-    if(issuer.uf==='RS'&&payments.some(([,p])=>['03','04','17'].includes(String(p.tPag))&&
-      (String(p.tpIntegra)!=='1'||!String(p.cAut||'').trim())))
-      throw new Error('RS: pagamento eletrônico NFC-e exige integração e autorização da transação');
+    if(issuer.uf==='RS'&&payments.some(([name,p])=>{
+      if(!['03','04','17'].includes(String(p.tPag)))return false;
+      const number=name.slice(3);
+      const card=sections['card'+number];
+      return String(card?.tpIntegra)!=='1'||!String(card?.cAut||'').trim()||
+        (['03','04'].includes(String(p.tPag))&&(!/^\\d{14}$/.test(String(card?.CNPJ||''))||!String(card?.tBand||'').trim()));
+    }))throw new Error('RS: pagamento eletrônico exige grupo cardNNN com autorização e integração');
   }
   return profile;
 }
