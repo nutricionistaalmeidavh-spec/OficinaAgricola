@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, lstatSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 
 function hashFile(filePath) {
@@ -13,9 +13,11 @@ function listFiles(root) {
   const walk = current => {
     for (const name of readdirSync(current)) {
       const path = join(current, name);
-      const stat = statSync(path);
+      const stat = lstatSync(path);
+      if (stat.isSymbolicLink()) throw new Error('Backup contém link simbólico');
       if (stat.isDirectory()) walk(path);
       else if (stat.isFile()) files.push(path);
+      else throw new Error('Backup contém tipo de arquivo não suportado');
     }
   };
   walk(root);
@@ -28,21 +30,43 @@ function manifestEntry(root, filePath) {
 }
 
 function safePath(root, relPath) {
-  const base = resolve(root);
-  const target = resolve(root, relPath);
-  if (target !== base && !target.startsWith(`${base}${sep}`)) throw new Error('Manifesto de backup inválido');
+  if (typeof relPath !== 'string' || relPath.includes('\\') ||
+      relPath.includes('\0')) throw new Error('Manifesto de backup inválido');
+  const segments=relPath.split('/');
+  if (segments.some(x=>!x || x==='.' || x==='..') ||
+      !(relPath==='database.sqlite' || (segments[0]==='uploads' && segments.length>1)))
+    throw new Error('Manifesto de backup inválido');
+  const base=resolve(root), target=resolve(base,relPath);
+  if (!target.startsWith(base+sep)) throw new Error('Manifesto de backup inválido');
+  let current=base;
+  for (const segment of segments) {
+    current=join(current,segment);
+    if (existsSync(current) && lstatSync(current).isSymbolicLink())
+      throw new Error('Backup contém link simbólico');
+  }
   return target;
 }
 
 export function verifyBackup(backupDir) {
   const manifestPath = join(backupDir, 'manifest.json');
-  if (!existsSync(manifestPath)) throw new Error('Manifesto de backup ausente');
+  if (!existsSync(manifestPath) || lstatSync(manifestPath).isSymbolicLink()) throw new Error('Manifesto de backup ausente ou inválido');
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
   if (manifest.version !== 1 || !Array.isArray(manifest.files)) throw new Error('Manifesto de backup inválido');
+  const listed=new Set();
   for (const entry of manifest.files) {
-    const filePath = safePath(backupDir, entry.path);
-    if (!existsSync(filePath) || hashFile(filePath) !== entry.sha256 || statSync(filePath).size !== entry.size) throw new Error(`Falha de integridade no backup: ${entry.path}`);
+    if (!entry || !Number.isSafeInteger(entry.size) || entry.size<0 ||
+        typeof entry.sha256!=='string' || !/^[a-f0-9]{64}$/i.test(entry.sha256) ||
+        listed.has(entry.path)) throw new Error('Manifesto de backup inválido');
+    const filePath=safePath(backupDir,entry.path);
+    listed.add(entry.path);
+    if (!existsSync(filePath) || !lstatSync(filePath).isFile() ||
+        statSync(filePath).size!==entry.size || hashFile(filePath)!==entry.sha256)
+      throw new Error(`Falha de integridade no backup: ${entry.path}`);
   }
+  if (!listed.has('database.sqlite')) throw new Error('Backup sem banco de dados');
+  const onDisk=listFiles(backupDir).map(p=>relative(backupDir,p).split(sep).join('/')).filter(p=>p!=='manifest.json');
+  if (onDisk.length!==listed.size || onDisk.some(p=>!listed.has(p)))
+    throw new Error('Backup contém arquivos não verificados');
   return manifest;
 }
 
@@ -87,6 +111,14 @@ export function createBackup({ databasePath, uploadsPath, backupRoot, now = new 
 
 export function restoreBackup({ backupDir, databasePath, uploadsPath }) {
   verifyBackup(backupDir);
+  // Integridade SQLite ANTES de mover qualquer arquivo da instalação existente.
+  const source=new DatabaseSync(join(backupDir,'database.sqlite'),{readOnly:true});
+  try {
+    const integrity=source.prepare('PRAGMA integrity_check').all();
+    if (integrity.length!==1 || integrity[0].integrity_check!=='ok' ||
+        source.prepare('PRAGMA foreign_key_check').all().length)
+      throw new Error('Banco do backup não passou na verificação SQLite');
+  } finally {source.close();}
   const token = randomUUID().slice(0, 8);
   const dbStage = `${databasePath}.restore-${token}`;
   const dbPrevious = `${databasePath}.previous-${token}`;

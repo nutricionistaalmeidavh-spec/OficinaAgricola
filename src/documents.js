@@ -25,7 +25,18 @@ export function renderDocument(db,workOrderId,kind='work-order'){
     : `${kind!=='quote'?`<h2>Serviço</h2><p><strong>Problema relatado:</strong> ${esc(os.problem_reported)}</p><p><strong>Diagnóstico:</strong> ${esc(os.diagnosis)||'—'}</p>`:''}
       ${quote?`<h2>Itens</h2><table><thead><tr><th>Descrição</th><th>Tipo</th><th>Qtd.</th><th>Unitário</th><th>Total</th></tr></thead><tbody>${rows}</tbody></table><div class="totals"><p>Subtotal: ${money(quote.subtotal_cents)}</p><p>Desconto: ${money(quote.discount_cents)}</p><strong>Total: ${money(quote.total_cents)}</strong></div>`:''}`;
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${titles[kind]} OS ${os.os_number}</title><style>
-    body{font-family:Arial,sans-serif;color:#1b2a22;max-width:900px;margin:32px auto;padding:0 24px} header{border-bottom:3px solid #075b3a;padding-bottom:16px;margin-bottom:24px} h1{color:#075b3a;margin:0} h2{margin-top:28px} .meta{display:grid;grid-template-columns:1fr 1fr;gap:10px} table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border-bottom:1px solid #ddd;padding:9px;text-align:left}.totals{text-align:right;margin-top:16px}small{color:#667}</style></head><body>
+    body{font-family:Arial,sans-serif;color:#1b2a22;max-width:900px;margin:32px auto;padding:0 24px} header{border-bottom:3px solid #075b3a;padding-bottom:16px;margin-bottom:24px} h1{color:#075b3a;margin:0} h2{margin-top:28px} .meta{display:grid;grid-template-columns:1fr 1fr;gap:10px} table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border-bottom:1px solid #ddd;padding:9px;text-align:left}.totals{text-align:right;margin-top:16px}small{color:#667}
+    @page {size:A4;margin:14mm;}
+    @media print {
+      html,body{width:auto;max-width:none;margin:0;padding:0;color:#111;font-size:10pt}
+      header{break-after:avoid;page-break-after:avoid}
+      table{width:100%;table-layout:fixed;word-break:break-word}
+      tr{break-inside:avoid;page-break-inside:avoid}
+      h2{break-after:avoid;page-break-after:avoid}
+      .meta{break-inside:avoid;page-break-inside:avoid}
+      th,td{padding:6px}
+      footer{break-inside:avoid}
+    }</style></head><body>
     <header><h1>${esc(company.name)}</h1><div>${esc(company.document)} ${esc(company.phone)}</div><h2>${titles[kind]} — OS #${os.os_number}</h2></header>
     <section class="meta"><div><strong>Cliente</strong><br>${esc(customer.name)}<br>${esc(customer.document)}</div><div><strong>Equipamento</strong><br>${esc(machine.type)} ${esc(machine.brand)} ${esc(machine.model)}<br>Série: ${esc(machine.serialNumber)||'—'}</div><div><strong>Entrada</strong><br>${date(os.entered_at)}</div><div><strong>Status</strong><br>${esc(os.status)}</div></section>
     ${body}<footer><p><small>Documento gerado localmente pelo ArtiSys Oficina.</small></p></footer></body></html>`;
