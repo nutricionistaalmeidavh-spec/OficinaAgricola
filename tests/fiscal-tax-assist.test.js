@@ -2,6 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {validateReviewedTaxItems} from '../src/platform/fiscal-tax-assist.js';
 
+const catalog={tables:{ncm:['84212300'],cfop:['5102','6102'],ibscbs:[
+ {cst:'000',cClassTrib:'000001',regime:'REGULAR',reduction:false,deferral:false}
+]}};
+
 const base=()=>({
  issuer:{taxRegime:'SIMPLES',uf:'SP',environment:'HOMOLOGACAO'},
  sections:{
@@ -47,7 +51,7 @@ test('valida base, alíquota e valor de PIS/COFINS sem inventar números',()=>{
 });
 
 test('IBS/CBS informado exige classificação coerente e cálculo por item',()=>{
- const data=base();
+ const data=base();data.catalog=catalog;
  Object.assign(data.sections,{
   IBSCBS001:{CST:'000',cClassTrib:'000001'},
   gIBSCBS001:{vBC:'80.00',vIBS:'0.08'},
@@ -64,7 +68,7 @@ test('IBS/CBS informado exige classificação coerente e cálculo por item',()=>
 });
 
 test('grupos IBS/CBS incompletos e múltiplos regimes são rejeitados',()=>{
- const data=base();data.sections.IBSCBS001={CST:'000',cClassTrib:'000001'};
+ const data=base();data.catalog=catalog;data.sections.IBSCBS001={CST:'000',cClassTrib:'000001'};
  assert.throws(()=>validateReviewedTaxItems(data),/IBS.CBS.*complet/i);
  delete data.sections.IBSCBS001;
  data.sections.gCBS001={pCBS:'0.90',vCBS:'0.72'};
