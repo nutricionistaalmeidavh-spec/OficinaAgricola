@@ -11,7 +11,7 @@ const xml='<NFSe xmlns="http://www.sped.fazenda.gov.br/nfse"><infNFSe Id="NFS'+k
 const store={withTlsIdentity:async(_issuer,action)=>action({pfx:Buffer.from('private-pfx'),passphrase:'local-only'})};
 const gzip=value=>gzipSync(value).toString('base64');
 test('endereços da SEFIN são oficiais e imutáveis entre homologação e produção',()=>{
- assert.equal(nationalNfseEndpoint('HOMOLOGACAO'), 'https://sefin.producaorestrita.nfse.gov.br/SefinNacional');
+ assert.equal(nationalNfseEndpoint('HOMOLOGACAO'), 'https://sefin.producaorestrita.nfse.gov.br/API/SefinNacional');
  assert.equal(nationalNfseEndpoint('PRODUCAO'), 'https://sefin.nfse.gov.br/SefinNacional');
  assert.throws(()=>nationalNfseEndpoint('TESTE'),/ambiente/i);
  assert.equal(idDps.length,45);
@@ -28,7 +28,7 @@ test('envio usa apenas certificado A1 local, GZIP/Base64 e reconhece retorno ofi
  assert.equal(result.accessKey,key);
  assert.equal(result.environment,'HOMOLOGACAO');
  assert.match(result.xml,/infNFSe/);
- assert.equal(calls[0].url,'https://sefin.producaorestrita.nfse.gov.br/SefinNacional/nfse');
+ assert.equal(calls[0].url,'https://sefin.producaorestrita.nfse.gov.br/API/SefinNacional/nfse');
  assert.equal(calls[0].method,'POST');
  assert.equal(JSON.parse(calls[0].body).dpsXmlGZipB64,gzip(signedXml));
  assert.equal(calls[0].identity.passphrase,'local-only');
