@@ -104,7 +104,7 @@ const ROUTES=[
  'PATCH /api/expenses/:id /v1/expenses/:id FIN',
  'GET /api/finance/summary /v1/reports/finance FIN',
  'GET /api/fiscal /v1/fiscal FIN',
- 'GET /api/fiscal/onboarding /v1/fiscal/onboarding ADMIN',
+ 'GET /api/fiscal/onboarding /v1/fiscal/onboarding FIN',
  'POST /api/fiscal/certificate /v1/fiscal/certificate ADMIN',
  'GET /api/fiscal/certificates /v1/fiscal/certificates ADMIN',
  'POST /api/fiscal/certificate/a3 /v1/fiscal/certificate/a3 ADMIN',
