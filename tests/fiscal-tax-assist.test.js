@@ -23,7 +23,7 @@ test('regime do emitente exige CSOSN para Simples e CST para Normal',()=>{
  assert.throws(()=>validateReviewedTaxItems(simple),/CSOSN/i);
  const normal=base();normal.issuer.taxRegime='NORMAL';
  assert.throws(()=>validateReviewedTaxItems(normal),/CST.*ICMS/i);
- normal.sections.ICMS001={orig:'0',CST:'00'};
+ normal.sections.ICMS001={orig:'0',CST:'00',vBC:'80.00',pICMS:'18.00',vICMS:'14.40'};
  assert.equal(validateReviewedTaxItems(normal),true);
 });
 
