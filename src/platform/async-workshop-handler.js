@@ -265,6 +265,15 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
        'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}
      });
    }
+   const fiscalPdf=path.match(/^\\/v1\\/fiscal\\/([1-9]\\d*)\\/pdf$/);
+   if(fiscalPdf&&method==='GET'){
+     const pdf=await services.getFiscalPdf(Number(fiscalPdf[1]));
+     return new Response(pdf,{status:200,headers:{
+       'Content-Type':'application/pdf',
+       'Content-Disposition':'attachment; filename="artisys-documento-fiscal.pdf"',
+       'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'
+     }});
+   }
    const fiscalEvents=path.match(/^\/v1\/fiscal\/([1-9]\d*)\/events$/);
    if(fiscalEvents&&method==='GET')
      return json(await services.getFiscalEvents(Number(fiscalEvents[1])));
@@ -274,6 +283,9 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
    const fiscalReconcile=path.match(/^\/v1\/fiscal\/([1-9]\d*)\/reconcile$/);
    if(fiscalReconcile&&method==='POST')
      return json(await services.reconcileFiscalDocument(Number(fiscalReconcile[1])));
+   const fiscalCancel=path.match(/^\\/v1\\/fiscal\\/([1-9]\\d*)\\/cancel$/);
+   if(fiscalCancel&&method==='POST')
+     return json(await services.cancelFiscalDocument(Number(fiscalCancel[1]),await dataFrom(request)));
    if(path==='/v1/services'&&method==='GET')
      return json(await services.listServices({
        search:u.searchParams.get('search')||'',
