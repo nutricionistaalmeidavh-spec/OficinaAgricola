@@ -103,7 +103,7 @@ export function createAcbrLibFiscalProvider(opts={}){
   const nfseLib=opts.nfseLib??process.env.FISCAL_ACBR_NFSE_LIB;
   if(!nfeLib&&!nfseLib)return null;
   const inputDir=localDirectory(opts.inputDir??process.env.FISCAL_ACBR_INPUT_DIR,'diretório INI fiscal');
-  const taxStore=createLocalFiscalTaxStore({directory:join(inputDir,'..','tributario'),inputDir});
+  const taxStore=()=>createLocalFiscalTaxStore({directory:join(inputDir,'..','tributario'),inputDir});
   const libraries={};
   if(nfeLib)libraries.NFE={
     libraryPath:localFile(nfeLib,'ACBrLibNFe'),
@@ -177,11 +177,11 @@ export function createAcbrLibFiscalProvider(opts={}){
   };
   return {
     name:'acbrlib-local',
-    listTaxProfiles:({issuer})=>taxStore.listProfiles({issuer}),
-    saveTaxProfile:({issuer,profile})=>taxStore.saveProfile({issuer,profile}),
-    getTaxReview:({document,issuer})=>taxStore.getDocumentReview({document,issuer}),
+    listTaxProfiles:({issuer})=>taxStore().listProfiles({issuer}),
+    saveTaxProfile:({issuer,profile})=>taxStore().saveProfile({issuer,profile}),
+    getTaxReview:({document,issuer})=>taxStore().getDocumentReview({document,issuer}),
     saveTaxReview:({document,issuer,company,customer,issuance,items})=>
-      taxStore.saveDocumentReview({document,issuer,company,customer,issuance,items}),
+      taxStore().saveDocumentReview({document,issuer,company,customer,issuance,items}),
     certificateStatus:()=>certificateStore?certificateStore.status():{configured:false},
     installCertificate:input=>{
       if(!certificateStore)throw Error('Instalação de A1 requer ACBr local embarcado');
