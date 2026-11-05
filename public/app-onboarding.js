@@ -8,7 +8,7 @@
   const available=value=>value&&typeof value==='object'&&!value.error;
   const unitKey=()=>String(window.OficinaTenant?.getUnitId?.()||'default');
   const preferenceKey=()=>KEY+String(window.OficinaTenant?.getUnitId?.()||'default')+
-    ':'+String(window.state?.user?.id||'admin');
+    ':'+String(state.user?.id||'admin');
   const readDismissed=()=>{try{return localStorage.getItem(preferenceKey())==='yes';}catch{return false;}};
   const setDismissed=flag=>{try{
     if(flag)localStorage.setItem(preferenceKey(),'yes');
