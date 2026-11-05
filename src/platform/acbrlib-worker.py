@@ -439,13 +439,13 @@ def probe_library(path):
 
 
 def execute(req):
-    if req.get("operation") not in ("transmit", "consult", "cancel", "consultCancellation", "pdf", "status") or req.get("kind") not in ("NFE", "NFSE"):
+    if req.get("operation") not in ("transmit", "consult", "cancel", "consultCancellation", "pdf", "status", "certificate") or req.get("kind") not in ("NFE", "NFSE"):
         raise ACBrError("Operação fiscal inválida")
     if req.get("environment") not in ("HOMOLOGACAO", "PRODUCAO"):
         raise ACBrError("Ambiente fiscal não identificado")
     if not re.fullmatch(r"\d{14}", str(req.get("issuerCnpj", ""))):
         raise ACBrError("CNPJ de emitente ausente")
-    required = ("libraryPath", "configPath") if req["operation"] == "status" else ("libraryPath", "configPath", "iniPath")
+    required = ("libraryPath", "configPath") if req["operation"] in ("status", "certificate") else ("libraryPath", "configPath", "iniPath")
     for field in required:
         if not Path(req.get(field, "")).is_file():
             raise ACBrError("Arquivo local obrigatório não encontrado: " + field)
@@ -456,6 +456,15 @@ def execute(req):
         do(lib, prefix + "_Inicializar", encoded(req["configPath"]), encoded(""),
            types=[ct.c_char_p, ct.c_char_p])
         initialized = True
+        if req["operation"] == "certificate":
+            if req["kind"] != "NFE":
+                raise ACBrError("Certificado NFS-e depende de provedor municipal")
+            detail = response(lib, "NFE_ObterCertificados", limit=128 * 1024)
+            # A ACBr retorna um ou mais registros Serial|Razao|CNPJ|Vencimento|CA.
+            # Não retornar lista de terceiros ou nomes ao backend.
+            issuer = req["issuerCnpj"]
+            matched = re.search(r"\\|"+re.escape(issuer)+r"\\|", detail) is not None
+            return {"status": "CERTIFICATE_MATCH" if matched else "CERTIFICATE_MISMATCH"}
         if req["operation"] == "status":
             if req["kind"] != "NFE":
                 raise ACBrError("Diagnóstico de NFS-e requer provedor municipal")
