@@ -41,6 +41,7 @@ export function migrateFiscal(db){
     "updated_at TEXT NOT NULL)"
   );
   db.exec("INSERT OR IGNORE INTO fiscal_settings(id,updated_at) VALUES(1,datetime('now'))");
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_fiscal_goods_model_unique ON fiscal_documents(origin_type,origin_id) WHERE kind IN ('NFE','NFCE')");
   db.exec("CREATE INDEX IF NOT EXISTS idx_fiscal_documents_status ON fiscal_documents(status,created_at)");
   db.exec("CREATE INDEX IF NOT EXISTS idx_fiscal_events_document ON fiscal_events(document_id,id)");
 }
