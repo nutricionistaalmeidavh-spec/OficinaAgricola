@@ -1,5 +1,5 @@
 import { nowIso, transaction } from '../db.js';
-import { createUser } from '../auth.js';
+import { createUser, hashPassword } from '../auth.js';
 
 const ROLES = new Set(['ADMIN', 'ATENDIMENTO', 'TECNICO', 'FINANCEIRO']);
 const SLUG = /^[a-z][a-z0-9-]{1,39}$/;
@@ -124,10 +124,21 @@ export function createTenantUnit(db,userId,{companyId,code,name}={}) {
     return {id,companyId:cid,code:unitCode,name:unitName};
   });
 }
-export function listUnitMembers(db,userId,unitId) {
+export function listUnitMembers(db,userId,unitId){
   const unit=requireUnitMembership(db,userId,unitId);
-  if(unit.role!=='ADMIN') fail('Permissão: administração da unidade necessária');
-  return db.prepare("SELECT x.id,x.username,x.name,x.active,m.role,m.active AS membershipActive FROM tenant_memberships m JOIN users x ON x.id=m.user_id WHERE m.unit_id=? ORDER BY x.name").all(unit.id);
+  if(unit.role!=='ADMIN')fail('Permissão: administração da unidade necessária');
+  const platform=isPlatformAdmin(db,userId);
+  const rows=db.prepare(`SELECT x.id,x.username,x.name,x.active,m.role,m.active AS membershipActive,
+    (SELECT COUNT(*) FROM tenant_memberships t WHERE t.user_id=x.id) AS membershipCount,
+    EXISTS(SELECT 1 FROM tenant_platform_admins p WHERE p.user_id=x.id) AS platformAdmin
+    FROM tenant_memberships m JOIN users x ON x.id=m.user_id
+    WHERE m.unit_id=? ORDER BY x.name`).all(unit.id);
+  return rows.map(row=>({
+    id:row.id,username:row.username,name:row.name,active:row.active,role:row.role,
+    membershipActive:row.membershipActive,
+    identityEditable:(Number(row.membershipCount)===1||platform)&&
+      (!row.platformAdmin||Number(row.id)===Number(userId))
+  }));
 }
 export function grantUnitMembership(db,adminId,{unitId,username,name,password,role}={}) {
   const unit=requireUnitMembership(db,adminId,unitId);
@@ -149,21 +160,43 @@ export function grantUnitMembership(db,adminId,{unitId,username,name,password,ro
     return {id:user.id,unitId:unit.id,role};
   });
 }
-export function changeUnitMembership(db,adminId,{unitId,userId,role,active}={}) {
+export function changeUnitMembership(db,adminId,{unitId,userId,role,active,name,password}={}){
   const unit=requireUnitMembership(db,adminId,unitId);
   if(unit.role!=='ADMIN')fail('Permissão: administração da unidade necessária');
   if(!ROLES.has(role))fail('Perfil inválido',400);
+  if(active!==undefined&&typeof active!=='boolean')fail('Estado inválido',400);
   const id=Number(userId);
+  if(!Number.isSafeInteger(id)||id<1)fail('Usuário inválido',400);
   return transaction(db,()=>{
     const current=db.prepare('SELECT * FROM tenant_memberships WHERE user_id=? AND unit_id=?').get(id,unit.id);
     if(!current)fail('Vínculo não encontrado',404);
-    if(current.role==='ADMIN' && (role!=='ADMIN'||active===false)){
-      const others=db.prepare("SELECT COUNT(*) n FROM tenant_memberships WHERE unit_id=? AND role='ADMIN' AND active=1").get(unit.id).n;
-      if(others<2)fail('Último administrador da unidade não pode ser removido',409);
+    const nextActive=active===undefined?Number(current.active)===1:active;
+    if(current.role==='ADMIN'&&Number(current.active)===1&&(role!=='ADMIN'||!nextActive)){
+      const count=db.prepare("SELECT COUNT(*) n FROM tenant_memberships WHERE unit_id=? AND role='ADMIN' AND active=1").get(unit.id).n;
+      if(count<2)fail('Último administrador da unidade não pode ser removido',409);
+    }
+    const changeName=name!==undefined,reset=password!==undefined;
+    if(changeName||reset){
+      const count=db.prepare('SELECT COUNT(*) n FROM tenant_memberships WHERE user_id=?').get(id).n;
+      if(count>1&&!isPlatformAdmin(db,adminId))
+        fail('Conta compartilhada com outras unidades: alteração de nome e senha exige administração da plataforma',403);
+      if(isPlatformAdmin(db,id)&&Number(adminId)!==id)
+        fail('A identidade de administrador da plataforma somente pode ser alterada pelo próprio titular',403);
+      const cleanName=changeName?String(name).trim():null;
+      if(changeName&&(cleanName.length<2||cleanName.length>100))fail('Nome inválido',400);
+      if(reset&&(typeof password!=='string'||password.length<12||password.length>256))
+        fail('Nova senha deve ter entre 12 e 256 caracteres',400);
+      const encoded=reset?hashPassword(password):null;
+      if(changeName)db.prepare('UPDATE users SET name=?,updated_at=? WHERE id=?').run(cleanName,nowIso(),id);
+      if(reset){
+        db.prepare('UPDATE users SET password_hash=?,updated_at=? WHERE id=?').run(encoded,nowIso(),id);
+        db.prepare('DELETE FROM sessions WHERE user_id=?').run(id);
+      }
+      audit(db,adminId,'USER_IDENTITY_CHANGED',unit.companyId,unit.id,id,{nameChanged:changeName,passwordReset:reset});
     }
     db.prepare('UPDATE tenant_memberships SET role=?,active=? WHERE user_id=? AND unit_id=?')
-      .run(role,active===false?0:1,id,unit.id);
-    audit(db,adminId,'MEMBERSHIP_CHANGED',unit.companyId,unit.id,id,{role,active:active!==false});
-    return {id,unitId:unit.id,role,active:active!==false};
+      .run(role,nextActive?1:0,id,unit.id);
+    audit(db,adminId,'MEMBERSHIP_CHANGED',unit.companyId,unit.id,id,{role,active:nextActive});
+    return {id,unitId:unit.id,role,active:nextActive};
   });
 }

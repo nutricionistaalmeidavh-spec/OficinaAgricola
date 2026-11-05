@@ -1,3 +1,12 @@
 
 /* Configurações: navegação clara e controles mobile-first. */
 .settings-page{display:grid;gap:16px;max-width:1080px;margin:0 auto}.settings-links{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.settings-jump{display:grid;gap:5px;text-align:left;white-space:normal;min-height:76px}.settings-jump small{font-weight:400;color:var(--muted);line-height:1.4}.settings-page section{scroll-margin-top:120px}.settings-page section h2{font-size:18px}.settings-page section>.muted{margin:8px 0 16px}@media(max-width:650px){.settings-links{grid-template-columns:1fr}.settings-page{gap:12px}.settings-page .card{padding:16px}}
+
+/* Gestão de usuários: ações acessíveis em desktop e celular. */
+.settings-user-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+.settings-user-info{display:grid;gap:5px;min-width:180px;overflow-wrap:anywhere}
+.settings-user-info>small{color:var(--muted)}
+.settings-user-badges,.settings-user-actions{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.settings-user-actions .btn{min-height:40px;white-space:normal}
+.settings-user-actions .btn:disabled{opacity:.55;cursor:not-allowed}
+@media(max-width:650px){.settings-user-row{align-items:stretch}.settings-user-actions{width:100%;display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.settings-user-actions .btn:first-child{grid-column:1/-1}}
