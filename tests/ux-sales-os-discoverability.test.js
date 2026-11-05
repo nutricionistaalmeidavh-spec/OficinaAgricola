@@ -35,3 +35,12 @@ test('P2: estados e acessibilidade mobile com botões descobríveis',()=>{
   assert.match(css,/\.fiscal-quick-path/);
   assert.match(css,/@media\(max-width:840px\)/);
 });
+
+test('regressão: markup da OS e seleção de vários itens não escondem funções nem quebram envio',()=>{
+  assert.match(orders,/<div class="detail-grid">/);
+  assert.doesNotMatch(orders,/<div class="detail-grid'>/);
+  assert.match(sales,/const items = \\\$\\\$\\\('\.sale-item-row'\\\)\.map/);
+  assert.match(orders,/\\\$\\\$\\\('\[data-reverse-part\]'\\\)\.forEach/);
+  assert.match(orders,/\\\$\\\$\\\('\[data-reverse-receipt\]'\\\)\.forEach/);
+  assert.match(fiscal,/\\\$\\\$\\\('\[data-tax-edit\]'\\\)\.forEach/);
+});
