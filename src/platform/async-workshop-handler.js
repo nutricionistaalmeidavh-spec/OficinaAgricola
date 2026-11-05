@@ -202,6 +202,8 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
    const approve=path.match(/^\/v1\/orders\/([1-9]\d*)\/quote\/approve$/);
    if(approve&&method==='POST')
      return json(await services.approveQuote({workOrderId:Number(approve[1])}));
+   if(path==='/v1/fiscal/nfse/route'&&method==='POST')
+     return json(await services.getNfseRoute(await dataFrom(request)));
    if(path==='/v1/fiscal/drafts'&&method==='POST')
      return json(await services.createFiscalDraft(await dataFrom(request)),201);
 
@@ -274,6 +276,9 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
    const fiscal=path.match(/^\/v1\/fiscal\/([1-9]\d*)$/);
    if(fiscal&&method==='GET')
      return json(await services.getFiscalDocument(Number(fiscal[1])));
+   const nfseCompetence=path.match(/^\/v1\/fiscal\/([1-9]\d*)\/nfse\/competence$/);
+   if(nfseCompetence&&method==='POST')
+     return json(await services.reviseNfseDraftRoute(Number(nfseCompetence[1]),await dataFrom(request)));
    const fiscalXml=path.match(/^\/v1\/fiscal\/([1-9][0-9]*)\/xml$/);
    if(fiscalXml&&method==='GET'){
      const doc=await services.getFiscalDocument(Number(fiscalXml[1]));

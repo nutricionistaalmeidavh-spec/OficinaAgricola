@@ -115,6 +115,8 @@ const ROUTES=[
  'POST /api/fiscal/:id/tax-review /v1/fiscal/:id/tax-review FIN',
  'GET /api/fiscal/settings /v1/fiscal/settings FIN',
  'PATCH /api/fiscal/settings /v1/fiscal/settings ADMIN',
+ 'POST /api/fiscal/nfse/route /v1/fiscal/nfse/route FIN',
+ 'POST /api/fiscal/:id/nfse/competence /v1/fiscal/:id/nfse/competence FIN',
  'POST /api/fiscal/drafts /v1/fiscal/drafts FIN',
  'GET /api/fiscal/:id /v1/fiscal/:id FIN',
  'GET /api/fiscal/:id/events /v1/fiscal/:id/events FIN',

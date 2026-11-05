@@ -182,6 +182,8 @@ export function createAcbrLibFiscalProvider(opts={}){
     getTaxReview:({document,issuer})=>taxStore().getDocumentReview({document,issuer}),
     saveTaxReview:({document,issuer,company,customer,issuance,items})=>
       taxStore().saveDocumentReview({document,issuer,company,customer,issuance,items}),
+    nfseChannel:opts.nfseChannel||null,
+    nfseMunicipalityIbge:opts.nfseMunicipalityIbge||null,
     certificateStatus:()=>certificateStore?certificateStore.status():{configured:false},
     installCertificate:input=>{
       if(!certificateStore)throw Error('Instalação de A1 requer ACBr local embarcado');
