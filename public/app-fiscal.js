@@ -7,7 +7,7 @@ function fiscalOriginTitle(doc){
  return number!=null?name+' #'+String(number):name+' vinculada';
 }
 function fiscalDisplayTitle(doc){
- const kind=doc.kind==='NFE'?'NF-e':'NFS-e';
+ const kind=doc.kind==='NFE'?'NF-e':doc.kind==='NFCE'?'NFC-e':'NFS-e';
  if(doc.fiscal_number)return kind+' nº '+doc.fiscal_number+(doc.fiscal_series?' · série '+doc.fiscal_series:'');
  return kind+' · '+(doc.status==='RASCUNHO'?'Rascunho':String(doc.status||'Em processamento').replaceAll('_',' '));
 }
@@ -34,9 +34,9 @@ async function renderFiscal({cursor=null,loaded=[]}={}){
     '<span class="muted">Rascunhos, notas e protocolos das ordens de serviço e vendas</span></div>'+
     '<div class="action-row">'+(state.user.role==='ADMIN'?'<button id="fiscalSettings" class="btn">Configuração fiscal</button>':'')+
     '<button id="fiscalNew" class="btn primary">+ Preparar documento</button></div></div>'+
-    '<div class="card"><p><strong>Cadastro fiscal:</strong> '+(settings.enabled?'Habilitado':'Desabilitado')+' · '+esc(settings.environment)+
+    '<div class="card"><p><strong>Cadastro fiscal:</strong> '+(settings.enabled?'Cadastro concluído':'Aguardando cadastro fiscal')+' · '+esc(settings.environment)+
     ' · CNPJ '+esc(settings.issuer_cnpj||'não informado')+'</p><p><strong>Emissão efetiva:</strong> exige certificado/credenciamento, classificação tributária e um emissor local validado. '+
-    'Um rascunho ou um envio sem confirmação não substitui NF-e ou NFS-e autorizada.</p></div>'+
+    'Um rascunho ou um envio sem confirmação não substitui NF-e, NFC-e ou NFS-e autorizada.</p></div>'+
     '<div class="card"><div class="card-head"><h2>Registro fiscal</h2><small>'+docs.length+' documento(s) recente(s)</small></div>'+
     '<div class="list">'+(cards||'<div class="empty">Nenhum documento fiscal preparado.</div>')+'</div></div>');
   $('#fiscalNew').onclick=()=>fiscalDraftModal();
@@ -56,7 +56,7 @@ function fiscalSettingsModal(current){
     '<form class="form-stack">'+
     '<p class="muted">Somente dados cadastrais. Nunca informe certificado digital, senha ou chave privada nesta tela.</p>'+
     '<label>CNPJ emissor<input name="issuerCnpj" value="'+safe(current.issuer_cnpj)+'" inputmode="numeric" maxlength="18"></label>'+
-    '<div class="field-row"><label>UF<input name="issuerUf" maxlength="2" value="'+safe(current.issuer_uf)+'"></label>'+
+    '<div class="field-row"><label>UF<select name="issuerUf"><option value="">Selecione</option>'+['SP','PR','MG','RJ','SC','RS'].map(uf=>'<option value="'+uf+'"'+selected(current.issuer_uf,uf)+'>'+uf+'</option>').join('')+'</select></label>'+
     '<label>Município IBGE<input name="municipalityIbge" inputmode="numeric" maxlength="7" value="'+safe(current.municipality_ibge)+'"></label></div>'+
     '<div class="field-row"><label>Inscrição estadual<input name="stateRegistration" value="'+safe(current.state_registration)+'"></label>'+
     '<label>Inscrição municipal<input name="municipalRegistration" value="'+safe(current.municipal_registration)+'"></label></div>'+
@@ -67,7 +67,7 @@ function fiscalSettingsModal(current){
     '<label>Ambiente<select name="environment">'+
     '<option value="HOMOLOGACAO"'+selected(current.environment,'HOMOLOGACAO')+'>Homologação (sem valor fiscal)</option>'+
     '<option value="PRODUCAO"'+selected(current.environment,'PRODUCAO')+'>Produção</option></select></label>'+
-    '<label><input type="checkbox" name="enabled"'+(current.enabled?' checked':'')+'> Habilitar transmissão após configurar emissor local</label>'+
+    '<p class="muted">A preparação e a homologação ficam disponíveis após o cadastro. Para NFC-e, configure CSC no ACBr local e credenciamento estadual. SC exige autorização e requisitos PAF-NFC-e; RS exige vinculação aos meios de pagamento quando aplicável.</p>'+
     '<label><input type="checkbox" name="productionConfirmed"'+(current.production_confirmed?' checked':'')+'> Confirmo a configuração de produção (não equivale a credenciamento)</label>'+
     '<button class="btn primary" type="submit">Salvar configuração</button></form>',
     async form=>{
@@ -76,7 +76,7 @@ function fiscalSettingsModal(current){
         issuerCnpj:o.issuerCnpj,issuerUf:o.issuerUf,municipalityIbge:o.municipalityIbge,
         stateRegistration:o.stateRegistration,municipalRegistration:o.municipalRegistration,
         taxRegime:o.taxRegime,environment:o.environment,
-        enabled:o.enabled==='on',productionConfirmed:o.productionConfirmed==='on',
+        enabled:true,productionConfirmed:o.productionConfirmed==='on',
         requestId:newCommandId()
       }});
       toast('Configuração fiscal salva. Documentos de homologação não têm validade fiscal.');
@@ -94,7 +94,7 @@ function fiscalDraftModal(){
     '<div id="fiscalOriginOptions" class="fiscal-origin-options" role="group" aria-label="Resultados da busca"></div>'+
     '<input type="hidden" name="originId" id="fiscalOriginId">'+
     '<div id="fiscalOriginSelection" class="fiscal-origin-selection" role="status" aria-live="polite">Nenhuma operação selecionada.</div>'+
-    '<label>Documento<select id="fiscalKind" name="kind"><option value="NFE">NF-e — peças</option><option value="NFSE">NFS-e — mão de obra</option></select></label>'+
+    '<label>Documento<select id="fiscalKind" name="kind"><option value="NFE">NF-e — peças</option><option value="NFCE">NFC-e — venda ao consumidor</option><option value="NFSE">NFS-e — mão de obra</option></select></label>'+
     '<div class="fiscal-draft-preview"><strong>Prévia do documento</strong><p id="fiscalDraftPreview" class="muted">Selecione uma operação para conferir a origem. Os itens e valores fiscais serão validados pelo servidor.</p></div>'+
     '<button id="fiscalDraftSubmit" class="btn primary" type="submit" disabled>Criar rascunho</button></form>',
     async form=>{
@@ -115,7 +115,7 @@ function fiscalDraftModal(){
 
   const updatePreview=()=>{
     if(!origin){preview.textContent='Selecione uma operação para conferir a origem. Os itens e valores fiscais serão validados pelo servidor.';return}
-    preview.textContent=(kind.value==='NFE'?'NF-e para peças':'NFS-e para mão de obra')+
+    preview.textContent=(kind.value==='NFE'?'NF-e para peças':kind.value==='NFCE'?'NFC-e para consumidor final':'NFS-e para mão de obra')+
       ' · '+origin.label+'. O valor fiscal será calculado pelo servidor somente com itens compatíveis.';
   };
   const clearSelection=()=>{

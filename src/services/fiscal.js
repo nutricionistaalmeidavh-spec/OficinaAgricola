@@ -4,7 +4,7 @@ import {nowIso,transaction} from '../db.js';
 import {getFiscalSettings,assertFiscalReady} from './fiscal-settings.js';
 export {migrateFiscal} from '../fiscal-schema.js';
 
-const TYPES=new Set(['NFE','NFSE']);
+const TYPES=new Set(['NFE','NFCE','NFSE']);
 const SOURCES=new Set(['OS','SALE']);
 const sha=value=>createHash('sha256').update(value).digest('hex');
 const text=value=>String(value??'').trim();
@@ -84,9 +84,15 @@ export function createFiscalDraft(db,input){
       return keyed;
     }
     const previous=db.prepare('SELECT * FROM fiscal_documents WHERE origin_type=? AND origin_id=? AND kind=?').get(originType,originId,kind);
-    if(previous)return previous; // Uma emissão por espécie e operação, inclusive após perda de resposta.
+    if(previous)return previous;
+    // NF-e e NFC-e não podem documentar duas vezes os mesmos itens da operação.
+    if(kind==='NFE'||kind==='NFCE'){
+      const other=kind==='NFE'?'NFCE':'NFE';
+      if(db.prepare('SELECT id FROM fiscal_documents WHERE origin_type=? AND origin_id=? AND kind=?').get(originType,originId,other))
+        throw new Error('Operação já possui documento de mercadorias no outro modelo (NF-e/NFC-e)');
+    } // Uma emissão por espécie e operação, inclusive após perda de resposta.
     const origin=originSnapshot(db,originType,originId);
-    const selected=origin.lines.filter(line=>kind==='NFE'?line.kind==='PECA':line.kind==='MAO_DE_OBRA');
+    const selected=origin.lines.filter(line=>kind==='NFSE'?['MAO_DE_OBRA','SERVICO'].includes(line.kind):line.kind==='PECA');
     if(!selected.length)throw new Error('Nenhum item compatível com o documento solicitado');
     const amount=selected.reduce((sum,item)=>sum+item.totalCents,0);
     if(!positive(amount))throw new Error('Valor fiscal líquido deve ser positivo');

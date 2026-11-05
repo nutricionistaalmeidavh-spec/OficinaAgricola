@@ -1,4 +1,5 @@
 import {createHash,randomUUID,randomBytes} from 'node:crypto';
+import {assertFiscalIssuerUf} from './fiscal-uf.js';
 
 const validStates=new Set(['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']);
 const validRegimes=new Set(['MEI','SIMPLES','NORMAL']);
@@ -46,6 +47,7 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
    if(!['HOMOLOGACAO','PRODUCAO'].includes(environment))fail('Ambiente fiscal inválido');
    if(enabled&&(!validCnpj(cnpj)||!validStates.has(uf)||!/^\d{7}$/.test(ibge)||!validRegimes.has(regime)))
      fail('Complete CNPJ, UF, município IBGE e regime tributário');
+   if(enabled)assertFiscalIssuerUf({uf,municipalityIbge:ibge});
    if(enabled&&environment==='PRODUCAO'&&!production)
      fail('Produção exige confirmação administrativa explícita');
    await port.run(`UPDATE fiscal_settings SET enabled=?,environment=?,issuer_cnpj=?,
@@ -85,6 +87,7 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
    if(!validCnpj(settings.issuer_cnpj)||!validStates.has(settings.issuer_uf)||
      !/^\d{7}$/.test(settings.municipality_ibge)||!validRegimes.has(settings.tax_regime))
      fail('Configuração fiscal incompleta',409);
+   assertFiscalIssuerUf({uf:settings.issuer_uf,municipalityIbge:settings.municipality_ibge});
    return issuerFrom(settings);
  }
  async function applyResult(documentId,attemptId,result,providerName){

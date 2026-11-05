@@ -58,6 +58,10 @@ test('P0 fiscal: OS gera snapshots independentes para peças e mão de obra, sem
     assert.equal(JSON.parse(nfe.snapshot_json).originId,os.id);
     assert.equal(createFiscalDraft(db,{originType:'OS',originId:os.id,kind:'NFE',requestId:'os-1-nfe'}).id,nfe.id);
     assert.equal(createFiscalDraft(db,{originType:'OS',originId:os.id,kind:'NFE',requestId:'os-1-another'}).id,nfe.id);
+    assert.throws(()=>createFiscalDraft(db,{originType:'OS',originId:os.id,kind:'NFCE',requestId:'os-1-nfce'}),/outro modelo/);
+    assert.throws(()=>db.prepare(`INSERT INTO fiscal_documents(kind,origin_type,origin_id,status,amount_cents,snapshot_json,snapshot_hash,request_id,created_at,updated_at)
+       SELECT 'NFCE',origin_type,origin_id,status,amount_cents,snapshot_json,snapshot_hash,'os-1-bypass',created_at,updated_at
+       FROM fiscal_documents WHERE id=?`).run(nfe.id),/UNIQUE|constraint/i);
     assert.equal(listFiscalDocuments(db).length,2);
     assert.equal(db.prepare('SELECT COUNT(*) n FROM payment_events').get().n,0);
   } finally { db.close(); }

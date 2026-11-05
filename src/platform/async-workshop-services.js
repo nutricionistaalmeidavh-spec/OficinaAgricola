@@ -419,8 +419,8 @@ export function createAsyncWorkshopServices(port,{fiscalProvider=null,objectStor
  }
  async function createFiscalDraft({originType='OS',originId,kind,requestId}={}){
    const origin=text(originType).toUpperCase(),type=text(kind).toUpperCase();
-   if(origin!=='OS'||!['NFE','NFSE'].includes(type))
-     fail('O backend async inicial permite somente rascunho fiscal da OS',409);
+   if(!['OS','SALE'].includes(origin)||!['NFE','NFCE','NFSE'].includes(type))
+     fail('Tipo ou origem fiscal não suportados',409);
    const orderId=numericId(originId),request=text(requestId);
    if(!request||request.length>128)fail('Identificador fiscal obrigatório');
    const byRequest=await port.first('SELECT * FROM fiscal_documents WHERE request_id=?',[request]);
@@ -432,24 +432,40 @@ export function createAsyncWorkshopServices(port,{fiscalProvider=null,objectStor
    const existing=await port.first(`SELECT * FROM fiscal_documents
      WHERE origin_type=? AND origin_id=? AND kind=?`,[origin,orderId,type]);
    if(existing)return existing;
-   const os=await getWorkOrder(orderId);
-   const quote=await port.first(`SELECT * FROM quotes
-     WHERE work_order_id=? AND approval_status='APROVADO'`,[orderId]);
-   if(!quote||Number(os.quote_total_cents)!==Number(quote.total_cents))
-     fail('Orçamento fiscal da OS não aprovado ou divergente',409);
-   const items=await port.all('SELECT * FROM quote_items WHERE quote_id=? ORDER BY id',[quote.id]);
-   if(items.some(i=>i.kind==='TERCEIRO'))fail('Serviço de terceiro requer classificação tributária',409);
-   const lines=fiscalNetLines(items,Number(quote.discount_cents))
-     .filter(i=>type==='NFE'?i.kind==='PECA':i.kind==='MAO_DE_OBRA');
+   if(['NFE','NFCE'].includes(type)){
+     const conflict=await port.first(`SELECT id FROM fiscal_documents
+       WHERE origin_type=? AND origin_id=? AND kind=?`,
+       [origin,orderId,type==='NFE'?'NFCE':'NFE']);
+     if(conflict)fail('Operação já possui documento no outro modelo de mercadorias',409);
+   }
+   let items,discount,snapshotFields;
+   if(origin==='OS'){
+     const os=await getWorkOrder(orderId);
+     const quote=await port.first(`SELECT * FROM quotes
+       WHERE work_order_id=? AND approval_status='APROVADO'`,[orderId]);
+     if(!quote||Number(os.quote_total_cents)!==Number(quote.total_cents))
+       fail('Orçamento fiscal da OS não aprovado ou divergente',409);
+     items=await port.all('SELECT * FROM quote_items WHERE quote_id=? ORDER BY id',[quote.id]);
+     if(items.some(i=>i.kind==='TERCEIRO'))fail('Serviço de terceiro requer classificação tributária',409);
+     discount=Number(quote.discount_cents);
+     snapshotFields={originNumber:os.os_number,approvedAt:quote.approved_at,
+       customer:JSON.parse(os.snapshot_customer),machine:JSON.parse(os.snapshot_machine)};
+   }else{
+     const sale=await port.first(`SELECT * FROM sales WHERE id=? AND status='CONCLUIDA'`,[orderId]);
+     if(!sale)fail('Venda concluída não encontrada',409);
+     items=await port.all('SELECT * FROM sale_items WHERE sale_id=? ORDER BY id',[orderId]);
+     if(items.some(i=>i.kind==='OUTRO'))fail('Item não classificado exige revisão tributária',409);
+     discount=Number(sale.discount_cents);
+     snapshotFields={originNumber:sale.sale_number,approvedAt:sale.created_at,
+       customer:sale.customer_id?await port.first('SELECT * FROM customers WHERE id=?',[sale.customer_id]):null};
+   }
+   const lines=fiscalNetLines(items,discount)
+     .filter(i=>type==='NFSE'?['MAO_DE_OBRA','SERVICO'].includes(i.kind):i.kind==='PECA');
    if(!lines.length)fail('Nenhum item correspondente ao tipo fiscal');
    const amount=lines.reduce((sum,l)=>sum+Number(l.totalCents),0);
    if(!Number.isSafeInteger(amount)||amount<=0)fail('Valor fiscal inválido');
-   const snapshot=JSON.stringify({
-     originType:origin,originId:orderId,originNumber:os.os_number,
-     approvedAt:quote.approved_at,
-     kind:type,lines,customer:JSON.parse(os.snapshot_customer),
-     machine:JSON.parse(os.snapshot_machine)
-   });
+   const snapshot=JSON.stringify({originType:origin,originId:orderId,
+     ...snapshotFields,kind:type,lines});
    const hash=createHash('sha256').update(snapshot).digest('hex');
    const documentId=id(),eventId=id(),at=iso();
    const insert=select(`INSERT INTO fiscal_documents(

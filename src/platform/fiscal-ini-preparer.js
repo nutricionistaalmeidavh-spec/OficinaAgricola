@@ -4,6 +4,7 @@
 import {createHash} from 'node:crypto';
 import {readFileSync,statSync,writeFileSync,existsSync} from 'node:fs';
 import {join} from 'node:path';
+import {assertReviewedFiscalUf} from './fiscal-uf.js';
 
 const fail=message=>{throw new Error(message)};
 const money=value=>{
@@ -27,7 +28,7 @@ const block=(key,value)=>{
  return key+'='+String(value);
 };
 export function compileReviewedFiscalIni({document,issuer,review}={}){
- if(!document||document.kind!=='NFE'||!issuer||!review)
+ if(!document||!['NFE','NFCE'].includes(document.kind)||!issuer||!review)
    fail('Nota fiscal, emitente e revisão tributária obrigatórios');
  const original=String(document.snapshot_json||'');
  const hash=createHash('sha256').update(original).digest('hex');
@@ -45,16 +46,18 @@ export function compileReviewedFiscalIni({document,issuer,review}={}){
  const sections=structuredClone(review.sections);
  if(!sections||typeof sections!=='object'||Array.isArray(sections))
    fail('Seções fiscais revisadas inválidas');
- const necessary=['infNFe','Identificacao','Emitente','Destinatario','Total'];
+ const necessary=document.kind==='NFCE'
+   ?['infNFe','Identificacao','Emitente','Total']
+   :['infNFe','Identificacao','Emitente','Destinatario','Total'];
  if(necessary.some(k=>!sections[k]||typeof sections[k]!=='object'||Array.isArray(sections[k])))
    fail('INI revisado sem seções estruturais obrigatórias');
- if(sections.Identificacao.mod!=='55'||String(sections.Identificacao.tpAmb)!==
-     (issuer.environment==='HOMOLOGACAO'?'2':'1'))
-   fail('Modelo ou ambiente fiscal divergente');
+ // cUF e cMunFG não são inferidos: a revisão tributária deve coincidir
+ // exatamente com o município e a UF da empresa.
+ assertReviewedFiscalUf({kind:document.kind,issuer,sections});
  if(String(sections.Emitente.CNPJCPF||'').replace(/\D/g,'')!==issuer.cnpj)
    fail('CNPJ revisado diverge do emitente');
  const customer=String(snapshot.customer?.document||'').replace(/\D/g,'');
- if(customer&&customer!==String(sections.Destinatario.CNPJCPF||'').replace(/\D/g,''))
+ if(customer&&customer!==String(sections.Destinatario?.CNPJCPF||'').replace(/\D/g,''))
    fail('Destinatário diverge do snapshot');
  let gross=0,discount=0,net=0;
  snapshot.lines.forEach((line,index)=>{
@@ -96,7 +99,7 @@ export function compileReviewedFiscalIni({document,issuer,review}={}){
      fail('Seção fiscal INI inválida');
  }
  const ordered=[
-   ...necessary.slice(0,4),
+   ...necessary.filter(k=>k!=='Total'),
    ...Object.keys(sections).filter(k=>!necessary.includes(k)&&k!=='Total'),
    'Total'
  ];
@@ -106,7 +109,7 @@ export function compileReviewedFiscalIni({document,issuer,review}={}){
  return {ini,manifest:required};
 }
 export function prepareReviewedFiscalIni({inputDir,document,issuer}={}){
- if(document?.kind!=='NFE')return false; // NFS-e exige revisão municipal do INI.
+ if(!['NFE','NFCE'].includes(document?.kind))return false; // NFS-e exige revisão municipal do INI.
  const stem=document.kind+'-'+document.id+'-'+document.snapshot_hash;
  const iniFile=join(inputDir,stem+'.ini');
  const manifestFile=join(inputDir,stem+'.json');
