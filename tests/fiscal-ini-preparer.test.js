@@ -72,3 +72,16 @@ test('official ACBr NFe fields come from immutable item snapshot',()=>{
  assert.match(ini,/vProd=90\.00/);
  assert.doesNotMatch(ini,/Produto indevido/);
 });
+
+test('NFC-e pode omitir destinatário sem divergência de cliente da venda',()=>{
+ const doc={...document,kind:'NFCE'};
+ const review=reviewed();
+ review.kind='NFCE';
+ review.sections.Identificacao={...review.sections.Identificacao,mod:'65',idDest:'1',
+   indFinal:'1',indPres:'1',tpEmis:'1'};
+ delete review.sections.Destinatario;
+ review.sections.pag001={tPag:'01',vPag:'80.00'};
+ const result=compileReviewedFiscalIni({document:doc,issuer,review});
+ assert.match(result.ini,/\\[pag001\\]/);
+ assert.doesNotMatch(result.ini,/\\[Destinatario\\]/);
+});
