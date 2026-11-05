@@ -172,12 +172,31 @@ def stash_signed_xml(ini_path, xml):
     return key
 
 
+UF_CODES = {"SP": "35", "PR": "41", "MG": "31", "RJ": "33", "SC": "42", "RS": "43"}
+
+
+def assert_nfe_model(xml, req):
+    key, _, _, _, cnpj = nfe_identity(xml)
+    model = "65" if req["kind"] == "NFCE" else "55"
+    if key[20:22] != model:
+        raise ACBrError("Modelo da chave fiscal diverge do tipo de documento")
+    if key[6:20] != str(req["issuerCnpj"]) or re.sub(r"\\D", "", cnpj) != str(req["issuerCnpj"]):
+        raise ACBrError("CNPJ da chave/XML não corresponde ao emitente")
+    uf = req.get("issuerUf")
+    if uf and (uf not in UF_CODES or key[:2] != UF_CODES[uf]):
+        raise ACBrError("UF da chave fiscal diverge do emitente")
+    if req["kind"] == "NFCE" and not uf:
+        raise ACBrError("NFC-e exige UF da empresa configurada")
+    return key
+
+
 def nfe_transmit(lib, req):
     do(lib, "NFE_LimparLista")
     do(lib, "NFE_CarregarINI", encoded(req["iniPath"]), types=[ct.c_char_p])
     do(lib, "NFE_Assinar")
     do(lib, "NFE_Validar")
     signed = response(lib, "NFE_ObterXml", (0,), [ct.c_int])
+    assert_nfe_model(signed, req)
     key = stash_signed_xml(req["iniPath"], signed)
     _, number, series, ambiente, cnpj = nfe_identity(signed)
     if nfe_total_cents(signed) != int(req["amountCents"]):
@@ -202,6 +221,7 @@ def nfe_transmit(lib, req):
         received = candidate_xml(parts)
     if not authorized_nfe_xml(received, protocol):
         return {"status": "INDETERMINADO", "message": "Protocolo recebido, mas XML processado ainda não disponível"}
+    assert_nfe_model(received, req)
     return {"status": "AUTORIZADA", "environment": req["environment"],
             "accessKey": key, "protocol": protocol, "number": number, "series": series,
             "xml": received}
@@ -213,6 +233,7 @@ def nfe_consult(lib, req):
         return {"status": "INDETERMINADO", "message": "XML assinado para consulta não localizado"}
     signed = path.read_text(encoding="utf-8-sig")
     key, number, series, environment, cnpj = nfe_identity(signed)
+    assert_nfe_model(signed, req)
     expect_amb = "2" if req["environment"] == "HOMOLOGACAO" else "1"
     if environment != expect_amb or re.sub(r"\D", "", cnpj) != req["issuerCnpj"]:
         raise ACBrError("XML de consulta com CNPJ ou ambiente divergente")
@@ -226,6 +247,7 @@ def nfe_consult(lib, req):
     xml = candidate_xml(parse_sections(result))
     if not authorized_nfe_xml(xml, fields["NPROT"]):
         return {"status": "INDETERMINADO", "message": "Consulta confirmou protocolo, mas falta XML processado"}
+    assert_nfe_model(xml, req)
     return {"status": "AUTORIZADA", "environment": req["environment"],
             "accessKey": key, "protocol": fields["NPROT"], "number": number,
             "series": series, "xml": xml}
@@ -311,7 +333,7 @@ def nfe_cancel(lib, req):
     authorized = req.get("authorizedXml", "")
     if not authorized_nfe_xml(authorized, str(req.get("originalProtocol") or "")):
         raise ACBrError("Cancelamento requer XML da NF-e com protocolo original")
-    if nfe_identity(authorized)[0] != key:
+    if assert_nfe_model(authorized, req) != key:
         raise ACBrError("Chave de cancelamento diverge do XML autorizado")
     result = response(lib, "NFE_Cancelar",
                       (encoded(key), encoded(reason), encoded(req["issuerCnpj"]), int(req["lot"])),
@@ -343,7 +365,7 @@ def nfe_consult_cancellation(lib, req):
     signed_path = Path(req["iniPath"]).with_suffix(".signed.xml")
     if not signed_path.is_file():
         return {"status": "INDETERMINADO", "message": "XML assinado de recuperação não disponível"}
-    if nfe_identity(signed_path.read_text(encoding="utf-8-sig"))[0] != key:
+    if assert_nfe_model(signed_path.read_text(encoding="utf-8-sig"), req) != key:
         raise ACBrError("XML assinado diverge da chave consultada")
     result = response(lib, "NFE_Consultar", (encoded(str(signed_path)), True),
                       [ct.c_char_p, ct.c_bool])
@@ -370,16 +392,16 @@ def document_pdf(lib, req):
     root = root_or_none(xml)
     if root is None or not req.get("accessKey"):
         raise ACBrError("PDF fiscal exige XML autorizado")
-    if req["kind"] == "NFE":
+    if req["kind"] in ("NFE", "NFCE"):
         if not authorized_nfe_xml(xml, str(req.get("originalProtocol") or "")):
             raise ACBrError("DANFE sem protocolo de autorização válido")
-        if nfe_identity(xml)[0] != req["accessKey"]:
+        if assert_nfe_model(xml, req) != req["accessKey"]:
             raise ACBrError("DANFE diverge da chave autorizada")
     else:
         details = nfse_details(xml)
         if not details or details[2] != req["accessKey"]:
             raise ACBrError("DANFSe diverge da nota autorizada")
-    prefix = req["kind"]
+    prefix = "NFE" if req["kind"] == "NFCE" else req["kind"]
     do(lib, prefix + "_LimparLista")
     do(lib, prefix + "_CarregarXML", encoded(xml), types=[ct.c_char_p])
     raw = response(lib, prefix + "_SalvarPDF", limit=9 * 1024 * 1024).strip()
@@ -439,7 +461,7 @@ def probe_library(path):
 
 
 def execute(req):
-    if req.get("operation") not in ("transmit", "consult", "cancel", "consultCancellation", "pdf") or req.get("kind") not in ("NFE", "NFSE"):
+    if req.get("operation") not in ("transmit", "consult", "cancel", "consultCancellation", "pdf") or req.get("kind") not in ("NFE", "NFCE", "NFSE"):
         raise ACBrError("Operação fiscal inválida")
     if req.get("environment") not in ("HOMOLOGACAO", "PRODUCAO"):
         raise ACBrError("Ambiente fiscal não identificado")
@@ -449,7 +471,7 @@ def execute(req):
         if not Path(req.get(field, "")).is_file():
             raise ACBrError("Arquivo local obrigatório não encontrado: " + field)
     lib = native_library(req["libraryPath"])
-    prefix = req["kind"]
+    prefix = "NFE" if req["kind"] == "NFCE" else req["kind"]
     initialized = False
     try:
         do(lib, prefix + "_Inicializar", encoded(req["configPath"]), encoded(""),
@@ -457,7 +479,7 @@ def execute(req):
         initialized = True
         if req["operation"] == "pdf":
             return document_pdf(lib, req)
-        if req["kind"] == "NFE":
+        if req["kind"] in ("NFE", "NFCE"):
             if req["operation"] == "transmit":
                 return nfe_transmit(lib, req)
             if req["operation"] == "consult":
