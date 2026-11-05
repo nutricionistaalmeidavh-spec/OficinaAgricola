@@ -34,7 +34,7 @@ async function renderFiscal({cursor=null,loaded=[]}={}){
     '<span class="muted">Rascunhos, notas e protocolos das ordens de serviço e vendas</span></div>'+
     '<div class="action-row">'+(state.user.role==='ADMIN'?'<button id="fiscalSettings" class="btn">Configuração fiscal</button>':'')+
     '<button id="fiscalNew" class="btn primary">+ Preparar documento</button></div></div>'+
-    '<div class="card"><p><strong>Cadastro fiscal:</strong> '+(settings.enabled?'Habilitado':'Desabilitado')+' · '+esc(settings.environment)+
+    '<div class="card"><p><strong>Cadastro fiscal:</strong> '+(settings.enabled?'Cadastro completo':'Cadastro incompleto')+' · '+esc(settings.environment)+
     ' · CNPJ '+esc(settings.issuer_cnpj||'não informado')+'</p><p><strong>Emissão efetiva:</strong> exige certificado/credenciamento, classificação tributária e um emissor local validado. '+
     'Um rascunho ou um envio sem confirmação não substitui NF-e ou NFS-e autorizada.</p></div>'+
     '<div class="card"><div class="card-head"><h2>Registro fiscal</h2><small>'+docs.length+' documento(s) recente(s)</small></div>'+
@@ -67,7 +67,7 @@ function fiscalSettingsModal(current){
     '<label>Ambiente<select name="environment">'+
     '<option value="HOMOLOGACAO"'+selected(current.environment,'HOMOLOGACAO')+'>Homologação (sem valor fiscal)</option>'+
     '<option value="PRODUCAO"'+selected(current.environment,'PRODUCAO')+'>Produção</option></select></label>'+
-    '<label><input type="checkbox" name="enabled"'+(current.enabled?' checked':'')+'> Habilitar transmissão após configurar emissor local</label>'+
+    '<p class="muted">Ao concluir o cadastro, o ambiente de homologação é habilitado automaticamente. A transmissão exige certificado e ACBr configurados para esta empresa.</p>'+
     '<label><input type="checkbox" name="productionConfirmed"'+(current.production_confirmed?' checked':'')+'> Confirmo a configuração de produção (não equivale a credenciamento)</label>'+
     '<button class="btn primary" type="submit">Salvar configuração</button></form>',
     async form=>{
@@ -76,7 +76,7 @@ function fiscalSettingsModal(current){
         issuerCnpj:o.issuerCnpj,issuerUf:o.issuerUf,municipalityIbge:o.municipalityIbge,
         stateRegistration:o.stateRegistration,municipalRegistration:o.municipalRegistration,
         taxRegime:o.taxRegime,environment:o.environment,
-        enabled:o.enabled==='on',productionConfirmed:o.productionConfirmed==='on',
+        productionConfirmed:o.productionConfirmed==='on',
         requestId:newCommandId()
       }});
       toast('Configuração fiscal salva. Documentos de homologação não têm validade fiscal.');
