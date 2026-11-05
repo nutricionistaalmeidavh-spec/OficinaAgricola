@@ -276,7 +276,7 @@ async function fiscalNationalDpsAutoModal(documentId){
   const available=profiles.filter(p=>p.kind==='SERVICE'&&p.nationalServiceCode&&p.municipalityIbge===settings.municipality_ibge);
   const snap=fiscalSnapshot(document),client=snap.customer||{},v=x=>esc(String(x||''));
   showModal('Gerar DPS automaticamente',
-    '<form class="form-stack"><p class="muted">Use o perfil confirmado pelo contador. O Oficina assina a DPS com o A1 cadastrado, sem XML manual. Somente homologação até a conclusão fiscal.</p>'+
+    '<form class="form-stack"><p class="muted">Use o perfil confirmado pelo contador. O Oficina assina a DPS com o A1 cadastrado. Para produção, primeiro autorize uma nota real em homologação e informe IBS/CBS; o sistema liberará somente a empresa e o modelo validados.</p>'+
     '<label>Perfil de serviço<select name="profileId" required><option value="">Selecione</option>'+available.map(p=>'<option value="'+esc(p.id)+'">'+esc(p.name)+' / '+esc(p.nationalServiceCode)+'</option>').join('')+'</select></label>'+
     '<div class="field-row"><label>Série da DPS<input name="series" inputmode="numeric" maxlength="5" required></label><label>Número sequencial<input name="number" inputmode="numeric" value="'+v(document.id)+'" maxlength="15" required></label></div>'+
     '<label>Tomador<input name="customerName" value="'+v(client.name)+'" required maxlength="120"></label>'+
@@ -292,6 +292,16 @@ async function fiscalNationalDpsAutoModal(documentId){
     '<label>Carga tributária Simples (%)<input name="percentSimples"></label>'+
     '<div class="field-row"><label>Carga federal (%)<input name="percentFederal"></label><label>Carga estadual (%)<input name="percentState"></label></div>'+
     '<label>Carga municipal (%)<input name="percentMunicipal"></label>'+
+
+    '<fieldset class="form-stack"><legend>IBS/CBS · Reforma Tributária (2026)</legend>'+
+    '<p class="muted">Preencha conforme classificação aprovada pelo contador. Campos em branco impedem a DPS no leiaute 2026. Operações especiais exigem revisão tributária.</p>'+
+    '<div class="field-row"><label>Finalidade<select name="finNFSe" required><option value="">Selecione</option><option value="0">NFS-e regular</option></select></label>'+
+    '<label>Destinatário<select name="indDest" required><option value="">Selecione</option><option value="0">Mesmo tomador</option></select></label></div>'+
+    '<label>Indicador de operação (cIndOp, 6 dígitos)<input name="cIndOp" inputmode="numeric" maxlength="6" required placeholder="Conforme anexo oficial"></label>'+
+    '<div class="field-row"><label>CST IBS/CBS (3 dígitos)<input name="rtcCst" inputmode="numeric" maxlength="3" required></label>'+
+    '<label>Classificação cClassTrib (6 dígitos)<input name="rtcClass" inputmode="numeric" maxlength="6" required></label></div>'+
+    '<label>Consumo pessoal<select name="indFinal"><option value="">Não declarado</option><option value="0">Não</option><option value="1">Sim</option></select></label></fieldset>'+
+
     '<button class="btn primary" type="submit" '+(!available.length?'disabled':'')+'>Gerar e assinar DPS</button></form>',
     async form=>{
       const x=formObj(form);
