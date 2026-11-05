@@ -1,6 +1,7 @@
 // Catálogos fiscais versionados, preparados a partir de fontes oficiais fora do
 // runtime. O checksum verifica integridade local, NÃO atesta autenticidade do fornecedor.
-import {readFileSync,statSync} from 'node:fs';
+import {readFileSync,statSync,existsSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 
 const fail=message=>{throw new Error(message);};
@@ -81,7 +82,16 @@ export function validateFiscalClassification({catalog,ncm,cfop,cst,cClassTrib}={
  if(!row)fail('cClassTrib/CST não encontrado na tabela fiscal vigente');
  return Object.freeze({...row});
 }
-export function loadConfiguredFiscalCatalog({now=new Date().toISOString().slice(0,10)}={}){
- const path=process.env.OFICINA_FISCAL_CATALOG_PATH;
- return path?loadFiscalCatalog({path,now}):null;
+// O instalador já inclui o snapshot oficial no ASAR (dist/src/platform/fiscal-data).
+// Nenhum diretório de tabela precisa ser escolhido pelo cliente final.
+export function bundledFiscalCatalogPath(){
+ return fileURLToPath(new URL('./fiscal-data/catalog.json',import.meta.url));
+}
+export function loadConfiguredFiscalCatalog({
+ now=new Date().toISOString().slice(0,10),
+ bundledPath=bundledFiscalCatalogPath()
+}={}){
+ const external=process.env.OFICINA_FISCAL_CATALOG_PATH;
+ if(external)return loadFiscalCatalog({path:external,now});
+ return existsSync(bundledPath)?loadFiscalCatalog({path:bundledPath,now}):null;
 }
