@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createFiscalEvidence} from '../src/platform/fiscal-release-gate.js';
+import {createFiscalEvidence,buildFiscalReleaseStatus} from '../src/platform/fiscal-release-gate.js';
 const key='31062002211222333000181000000000012326111234567890';
 const issuer={cnpj:'11222333000181',uf:'MG',municipalityIbge:'3106200',taxRegime:'SIMPLES',environment:'HOMOLOGACAO'};
 const doc={id:1,kind:'NFSE',environment:'HOMOLOGACAO',issuer_snapshot_json:JSON.stringify(issuer)};
@@ -21,5 +21,17 @@ test('o mesmo A1 e cadastro, após prova real, habilita somente NFS-e',()=>{
  environment:'HOMOLOGACAO',accessKey:key,protocol:key,number:'123',series:'1',xml},
  providerName:'sefin-nacional-direta',certificateIdentity:'a'.repeat(64)});
  assert.ok(proof);
- // A autorização somente nasce do recibo da SEFIN; o arquivo isolado não basta.
+ const valid={...proof,status:'AUTORIZADA_HOMOLOGACAO',environment:'HOMOLOGACAO',
+ access_key:key,protocol:key,authorized_xml:xml};
+ const check=extra=>buildFiscalReleaseStatus({settings:issuerSettings,
+ certificate:{configured:true,certificateType:'A1'},certificateIdentity:'a'.repeat(64),
+ providerName:'sefin-nacional-direta',providerReady:true,proofs:[valid],...extra});
+ assert.equal(check().models.NFSE.productionReady,true);
+ assert.equal(check().models.NFE.productionReady,false);
+ assert.equal(check().models.NFCE.productionReady,false);
+ assert.equal(check({proofs:[]}).models.NFSE.productionReady,false);
+ assert.equal(check({certificate:{configured:true,certificateType:'A3'}}).models.NFSE.productionReady,false);
+ assert.equal(check({certificateIdentity:'b'.repeat(64)}).models.NFSE.productionReady,false);
+ assert.equal(check({proofs:[{...valid,authorized_xml:'<outro/>'}]}).models.NFSE.productionReady,false);
+ assert.equal(check({settings:{...issuerSettings,production_confirmed:0}}).models.NFSE.productionReady,false);
 });
