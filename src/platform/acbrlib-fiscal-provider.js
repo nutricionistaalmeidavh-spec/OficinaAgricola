@@ -8,6 +8,7 @@ import {readFileSync,realpathSync,statSync,writeFileSync,existsSync,renameSync,r
 import {isAbsolute,join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {prepareReviewedFiscalIni,compileReviewedFiscalIni} from './fiscal-ini-preparer.js';
+import {compileReviewedNfseIni,prepareReviewedNfseIni} from './fiscal-nfse-preparer.js';
 
 function localFile(path,label){
   if(typeof path!=='string'||!isAbsolute(path))
@@ -133,7 +134,8 @@ export function createAcbrLibFiscalProvider(opts={}){
     // ao snapshot. Nunca inferir impostos, NCM, CFOP ou condições de produção.
     // Sem A1 do cofre, a configuração ACBr privada preexistente pode representar A3.
     // A biblioteca nativa valida presença/uso do certificado antes de qualquer emissão.
-    prepareReviewedFiscalIni({inputDir,document,issuer:safeIssuer});
+    if(kind==='NFSE')prepareReviewedNfseIni({inputDir,document,issuer:safeIssuer});
+    else prepareReviewedFiscalIni({inputDir,document,issuer:safeIssuer});
     const iniPath=resolveInputs(inputDir,document,safeIssuer);
     return {kind,documentId:Number(document.id),iniPath,
       snapshotHash:document.snapshot_hash,amountCents:Number(document.amount_cents),environment:safeIssuer.environment,
@@ -142,20 +144,25 @@ export function createAcbrLibFiscalProvider(opts={}){
   };
   return {
     name:'acbrlib-local',
-    saveTaxReview:({document,issuer,sections}={})=>{
-      if(!document||!['NFE','NFCE'].includes(document.kind)||document.status!=='RASCUNHO')
-        throw new Error('Revisão tributária permitida apenas para rascunho NF-e/NFC-e');
-      if(!sections||typeof sections!=='object'||Array.isArray(sections)||
-         !sections.Identificacao||typeof sections.Identificacao!=='object')
+    saveTaxReview:({document,issuer,sections,municipalityIbge,providerCode,reviewerConfirmed}={})=>{
+      if(!document||!['NFE','NFCE','NFSE'].includes(document.kind)||document.status!=='RASCUNHO')
+        throw new Error('Revisão permitida apenas para rascunho fiscal');
+      if(!sections||typeof sections!=='object'||Array.isArray(sections))
+        throw new Error('Seções fiscais ausentes');
+      const nfse=document.kind==='NFSE';
+      if(!nfse&&(!sections.Identificacao||typeof sections.Identificacao!=='object'))
         throw new Error('Identificação tributária NF-e inválida');
+      if(nfse&&!libraries.NFSE)throw new Error('ACBrLib NFS-e não configurada nesta unidade');
       const scopedSections=structuredClone(sections);
-      if(!scopedSections.Identificacao.cNF)
+      if(!nfse&&!scopedSections.Identificacao.cNF)
         scopedSections.Identificacao.cNF=String(randomInt(0,100000000)).padStart(8,'0');
       const review={kind:document.kind,documentId:Number(document.id),
         snapshotHash:document.snapshot_hash,amountCents:Number(document.amount_cents),
-        issuerCnpj:issuer?.cnpj,environment:issuer?.environment,sections:scopedSections};
-      // Validação detalhada antes de persistir. Nenhum XML é assinado ou enviado aqui.
-      compileReviewedFiscalIni({document,issuer,review});
+        issuerCnpj:issuer?.cnpj,environment:issuer?.environment,sections:scopedSections,
+        ...(nfse?{municipalityIbge,provider:providerCode,reviewerConfirmed}: {})};
+      // INI fiscal é validado localmente; revisão não transmite nem autoriza nota.
+      if(nfse)compileReviewedNfseIni({document,issuer,review});
+      else compileReviewedFiscalIni({document,issuer,review});
       const filename=document.kind+'-'+document.id+'-'+document.snapshot_hash;
       const target=join(inputDir,filename+'.review.json');
       if(existsSync(join(inputDir,filename+'.ini'))||
