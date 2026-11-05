@@ -88,6 +88,7 @@ export const ADDITIONAL_TENANT_INDEXES = Object.freeze([
   "CREATE INDEX IF NOT EXISTS idx_sale_items_sale ON sale_items(sale_id,id)",
   "CREATE INDEX IF NOT EXISTS idx_cash_sessions_status_id ON cash_sessions(status,id DESC)",
   "CREATE INDEX IF NOT EXISTS idx_cash_movements_created ON cash_movements(created_at)",
+  "CREATE INDEX IF NOT EXISTS idx_fiscal_homologation_issuer_cert ON fiscal_homologation_evidence(issuer_digest,certificate_digest,kind)",
   "CREATE INDEX IF NOT EXISTS idx_fiscal_documents_status ON fiscal_documents(status,created_at)",
   "CREATE INDEX IF NOT EXISTS idx_fiscal_events_document ON fiscal_events(document_id,id)",
   "CREATE INDEX IF NOT EXISTS idx_crm_due ON crm_tasks(status,due_at)",
