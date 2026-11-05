@@ -3,7 +3,7 @@
 // manifesto vinculado ao snapshot canônico e ACBrLib compilada/instalada pelo operador.
 // Segredos do certificado permanecem na configuração externa da própria ACBrLib.
 import {spawn} from 'node:child_process';
-import {createHash,randomBytes} from 'node:crypto';
+import {createHash,randomBytes,randomInt} from 'node:crypto';
 import {readFileSync,realpathSync,statSync,writeFileSync,existsSync,renameSync,rmSync} from 'node:fs';
 import {isAbsolute,join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -144,9 +144,15 @@ export function createAcbrLibFiscalProvider(opts={}){
     saveTaxReview:({document,issuer,sections}={})=>{
       if(!document||document.kind!=='NFE'||document.status!=='RASCUNHO')
         throw new Error('Revisão tributária permitida apenas para rascunho NF-e');
+      if(!sections||typeof sections!=='object'||Array.isArray(sections)||
+         !sections.Identificacao||typeof sections.Identificacao!=='object')
+        throw new Error('Identificação tributária NF-e inválida');
+      const scopedSections=structuredClone(sections);
+      if(!scopedSections.Identificacao.cNF)
+        scopedSections.Identificacao.cNF=String(randomInt(0,100000000)).padStart(8,'0');
       const review={kind:'NFE',documentId:Number(document.id),
         snapshotHash:document.snapshot_hash,amountCents:Number(document.amount_cents),
-        issuerCnpj:issuer?.cnpj,environment:issuer?.environment,sections};
+        issuerCnpj:issuer?.cnpj,environment:issuer?.environment,sections:scopedSections};
       // Validação detalhada antes de persistir. Nenhum XML é assinado ou enviado aqui.
       compileReviewedFiscalIni({document,issuer,review});
       const filename='NFE-'+document.id+'-'+document.snapshot_hash;
