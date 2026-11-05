@@ -54,3 +54,25 @@ test('shared fiscal adapter authorizes exactly one sidecar submission with froze
   assert.equal(sent,1);
  }finally{db.close();}
 });
+
+test('produção recusa transmissão sem homologação ACBr vinculada, mesmo com confirmação administrativa',async()=>{
+ const db=openDatabase(':memory:');
+ let sent=0;
+ try{
+  const provider={name:'acbrlib-local',
+   certificateStatus:()=>({configured:true,certificateType:'A1'}),
+   certificateIdentity:()=> 'a'.repeat(64),
+   async transmit(){sent++;throw Error('Transmissão sem gate fiscal');}};
+  const {ws,draft}=await ready(db,provider);
+  await ws.setFiscalSettings({issuerCnpj:'11222333000181',issuerUf:'SP',
+   municipalityIbge:'3550308',taxRegime:'SIMPLES',enabled:true,
+   environment:'PRODUCAO',productionConfirmed:true});
+  // O rascunho anterior é do ambiente de homologação; testamos também
+  // o gate explicitamente com rascunho de produção, sem afetar sua origem.
+  await assert.rejects(ws.submitFiscalDocument(draft.id),/outro ambiente/);
+  await db.prepare('UPDATE fiscal_documents SET environment=? WHERE id=?').run('PRODUCAO',draft.id);
+  await assert.rejects(ws.submitFiscalDocument(draft.id),/produção não liberada/i);
+  assert.equal(sent,0);
+  assert.equal((await ws.getFiscalDocument(draft.id)).status,'RASCUNHO');
+ }finally{db.close();}
+});
