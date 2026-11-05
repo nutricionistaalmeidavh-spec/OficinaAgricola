@@ -30,6 +30,6 @@ test('QR tem origem oficial 17,48 x 1,67 cm e nota de homologação vermelha',()
  assert.match(content,/0 1 1 0 k/);
  assert.match(content,/ConsultaPublica/);
 });
-test('logomarca oficial é requisito de distribuição, sem substituição silenciosa por texto',()=>{
- assert.throws(()=>renderNationalDanfse({xml,accessKey:KEY,environment:'HOMOLOGACAO'}),/logomarca|Logo|PNG/i);
+test('logomarca PNG íntegra é requisito de distribuição, sem substituição silenciosa por texto',()=>{
+ assert.throws(()=>renderNationalDanfse({xml,accessKey:KEY,environment:'HOMOLOGACAO',logoPng:Buffer.from('nao-e-png')}),/logomarca|Logo|PNG/i);
 });
