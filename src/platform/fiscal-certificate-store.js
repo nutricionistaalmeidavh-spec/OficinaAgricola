@@ -80,7 +80,7 @@ export function createLocalFiscalCertificateStore({directory}={}){
    }finally{pfx.fill(0);}
  }
  async function withConfig({kind,environment,uf},action){
-   if(!['NFE','NFSE'].includes(kind)||!['HOMOLOGACAO','PRODUCAO'].includes(environment)||
+   if(!['NFE','NFCE','NFSE'].includes(kind)||!['HOMOLOGACAO','PRODUCAO'].includes(environment)||
       !/^[A-Z]{2}$/.test(uf||'')||typeof action!=='function')
      throw Error('Identidade fiscal da emissão inválida');
    const saved=envelope();
@@ -98,12 +98,12 @@ export function createLocalFiscalCertificateStore({directory}={}){
    const run=mkdtempSync(join(directory,'run-'));
    try{
      const pfx=Buffer.from(content.pfx,'base64');
-     const cert=join(run,'certificado.pfx'),config=join(run,kind==='NFE'?'ACBrLibNFe.ini':'ACBrLibNFSe.ini');
+     const cert=join(run,'certificado.pfx'),config=join(run,kind==='NFSE'?'ACBrLibNFSe.ini':'ACBrLibNFe.ini');
      try{writeFileSync(cert,pfx,{flag:'wx',mode:0o600});}finally{pfx.fill(0);}
      const ini='[Principal]\nLogNivel=0\n\n[DFe]\nArquivoPFX='+cert+
        '\nSenha='+content.password+'\nUF='+uf+
        '\nVerificarValidade=1\nSSLCryptLib=1\nSSLHttpLib=3\nSSLXmlSignLib=1\n\n'+
-       (kind==='NFE'?'[NFe]\n':'[NFSe]\n')+
+       (kind==='NFSE'?'[NFSe]\n':'[NFe]\n')+
        'Ambiente='+(environment==='HOMOLOGACAO'?'1':'0')+'\n';
      writeFileSync(config,ini,{flag:'wx',mode:0o600});
      return await action(config);
