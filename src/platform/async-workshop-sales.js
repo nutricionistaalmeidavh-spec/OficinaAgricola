@@ -197,9 +197,15 @@ export function createAsyncWorkshopSales(port){
        item.quantity,item.price,item.total
      ]));
      if(item.partId){
-       changes.push(command(`UPDATE parts SET
-         quantity=CASE WHEN quantity>=? THEN quantity-? ELSE NULL END,updated_at=?
-         WHERE id=?`,[item.quantity,item.quantity,at,item.partId]));
+       // D1 needs an atomic constraint violation to roll back its batch.
+       // PostgreSQL/SQLite use conditional UPDATE, so a concurrent sold-out
+       // race produces a controlled 409 rather than leaking a NOT NULL SQL error.
+       changes.push(isD1
+         ?command(`UPDATE parts SET
+           quantity=CASE WHEN quantity>=? THEN quantity-? ELSE NULL END,updated_at=?
+           WHERE id=?`,[item.quantity,item.quantity,at,item.partId])
+         :command(`UPDATE parts SET quantity=quantity-?,updated_at=?
+           WHERE id=? AND quantity>=?`,[item.quantity,at,item.partId,item.quantity]));
        const movementId=id();
        const ref=isD1?'CASE WHEN changes()=1 THEN ? ELSE -1 END':'?';
        changes.push(command(`INSERT INTO inventory_movements(
