@@ -286,6 +286,10 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
    if(nationalDps&&method==='POST')
      return json(await services.saveNationalDps(Number(nationalDps[1]),
        await dataFrom(request,750000)));
+   const autoDps=path.match(/^\/v1\/fiscal\/([1-9]\d*)\/nfse\/prepare$/);
+   if(autoDps&&method==='POST')
+     return json(await services.prepareAutomaticNationalDps(
+       Number(autoDps[1]),await dataFrom(request,16384)));
    const nfseCompetence=path.match(/^\/v1\/fiscal\/([1-9]\d*)\/nfse\/competence$/);
    if(nfseCompetence&&method==='POST')
      return json(await services.reviseNfseDraftRoute(Number(nfseCompetence[1]),await dataFrom(request)));
