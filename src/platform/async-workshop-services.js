@@ -126,7 +126,7 @@ export function createAsyncWorkshopServices(port,{fiscalProvider=null,objectStor
    ) VALUES(?,?,?,?,?,?,?,0,?,?,?,1,?,?)`,[
      partId,sku,description,text(input.category),text(input.unit)||'UN',
      cents(input.costCents??0),cents(input.salePriceCents??0),
-     Number(input.minStock??0),text(input.location),barcode,at,at
+     Number(input.minStock??0),text(input.location),barcode??null,at,at
    ]);
    return port.first('SELECT * FROM parts WHERE id=?',[partId]);
  }
