@@ -49,10 +49,10 @@ test('NFC-e usa modelo 65 com UF/município e pagamento revisado, sem inferir im
  const review=reviewed();
  review.kind='NFCE';
  review.sections.Identificacao={...review.sections.Identificacao,mod:'65',idDest:'1',indFinal:'1',indPres:'1',tpEmis:'1'};
- review.sections.Pagamento001={tPag:'01',vPag:'80.00'};
+ review.sections.pag001={tPag:'01',vPag:'80.00'};
  const result=compileReviewedFiscalIni({document:nfceDoc,issuer,review});
  assert.match(result.ini,/mod=65/);
- assert.match(result.ini,/\\[Pagamento001\\]/);
+ assert.match(result.ini,/\\[pag001\\]/);
  const wrongUf=structuredClone(review);wrongUf.sections.Identificacao.cUF='35';
  assert.throws(()=>compileReviewedFiscalIni({document:nfceDoc,issuer,review:wrongUf}),/cUF/);
  const wrongModel=structuredClone(review);wrongModel.sections.Identificacao.mod='55';
