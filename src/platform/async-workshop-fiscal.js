@@ -1,6 +1,6 @@
 import {createHash,randomUUID,randomBytes} from 'node:crypto';
 import {assertFiscalIssuerUf} from './fiscal-uf.js';
-import {assertNfseRouteForTransmission} from './nfse-routing.js';
+import {assertNfseRouteForTransmission,resolveNfseRoute} from './nfse-routing.js';
 
 const validStates=new Set(['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']);
 const validRegimes=new Set(['MEI','SIMPLES','NORMAL']);
@@ -62,6 +62,41 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
    const row=await port.first('SELECT * FROM fiscal_documents WHERE id=?',[id(documentId)]);
    if(!row)fail('Documento fiscal não encontrado',404);
    return row;
+ }
+ async function reviseNfseDraftRoute(documentId,{competenceDate}={}){
+   const doc=await getFiscalDocument(documentId);
+   if(doc.kind!=='NFSE'||doc.status!=='RASCUNHO')
+     fail('Somente rascunho NFS-e pode ter competência revisada',409);
+   const settings=await getFiscalSettings();
+   if(!settings.enabled)fail('Complete a configuração fiscal antes de revisar NFS-e',409);
+   const route=resolveNfseRoute({municipalityIbge:settings.municipality_ibge,
+     taxRegime:settings.tax_regime,competenceDate});
+   if(route.channel==='PENDENTE')fail('Regra municipal NFS-e pendente: revise o canal antes de alterar o rascunho',409);
+   let original;
+   try{original=JSON.parse(doc.snapshot_json)}catch{fail('Snapshot fiscal legado inválido',409)}
+   const json=JSON.stringify({...original,nfseRoute:route});
+   const hash=sha(json);
+   if(hash===doc.snapshot_hash&&doc.environment===settings.environment)return doc;
+   const at=now();
+   const update={sql:`UPDATE fiscal_documents SET snapshot_json=?,snapshot_hash=?,environment=?,updated_at=?
+     WHERE id=? AND kind='NFSE' AND status='RASCUNHO' AND snapshot_hash=?`,
+     params:[json,hash,settings.environment,at,doc.id,doc.snapshot_hash]};
+   const event={sql:`INSERT INTO fiscal_events(id,document_id,event_type,details_json,created_at)
+     VALUES(?,?,?,?,?)`,params:[nextId(),doc.id,'COMPETENCIA_REVISADA',JSON.stringify({
+       fromHash:doc.snapshot_hash,toHash:hash,competenceDate:route.competenceDate,
+       channel:route.channel,municipalityIbge:route.municipalityIbge
+     }),at]};
+   if(port.engine==='d1'){
+     const res=await port.batch([update,{
+       sql:event.sql.replace('VALUES(?,?,?,?,?)','SELECT ?,?,?,?,? WHERE changes()=1'),params:event.params
+     }]);
+     if(changed(res[0])!==1)fail('Rascunho alterado por outra sessão: abra novamente',409);
+   }else await port.transaction(async tx=>{
+     if(changed(await tx.run(update.sql,update.params))!==1)
+       fail('Rascunho alterado por outra sessão: abra novamente',409);
+     await tx.run(event.sql,event.params);
+   });
+   return getFiscalDocument(doc.id);
  }
  async function getFiscalEvents(documentId){
    await getFiscalDocument(documentId);
@@ -309,6 +344,6 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
      :applyResult(doc.id,doc.attempt_id,result,clean(provider.name)||'local');
  }
  return Object.freeze({getFiscalSettings,setFiscalSettings,getFiscalDocument,
-   getFiscalEvents,listFiscalDocuments,submitFiscalDocument,reconcileFiscalDocument,
+   reviseNfseDraftRoute,getFiscalEvents,listFiscalDocuments,submitFiscalDocument,reconcileFiscalDocument,
    cancelFiscalDocument,getFiscalPdf});
 }
