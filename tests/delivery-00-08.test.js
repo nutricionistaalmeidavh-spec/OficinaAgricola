@@ -23,7 +23,7 @@ test('entregas 00-08 permanecem isoladas e sem dependência SaaS de runtime', as
   assert.ok(pkg.dependencies && typeof pkg.dependencies.pg==='string' && /^\^8\./.test(pkg.dependencies.pg),
     'PostgreSQL OSS é dependência local empacotada, não SaaS');
   assert.deepEqual(Object.keys(pkg.dependencies),['pg']);
-  assert.equal(pkg.devDependencies, undefined);
+  assert.deepEqual(pkg.devDependencies, {'@useinvio/nfse-sdk':'3.0.0'}, 'Somente o SDK MIT de testes DPS é autorizado em devDependencies; runtime continua só com PostgreSQL OSS');
   assert.match(env, /PORT=3344/);
   assert.match(env, /OFICINA_POSTGRES_REGISTRY_URL=/);
   assert.match(env, /OFICINA_POSTGRES_OPERATIONS_URL=/);
