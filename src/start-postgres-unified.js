@@ -118,11 +118,11 @@ function fiscalProviderForUnit(unit){
   // A1 habilita API nacional direta no modelo NFS-e, sem exigir flag técnica.
   // A3 mantém ACBr; configurações explícitas por empresa têm precedência acima.
   const national=createNationalNfseProvider({certificateStore,inputDir});
-  const select=kind=>selectManagedFiscalEngine({
-    kind,certificateType:certificateStore.status().certificateType
+  const select=(kind,providerName)=>selectManagedFiscalEngine({
+    kind,providerName,certificateType:certificateStore.status().certificateType
   })==='nacional'?national:acbr;
   const service=method=>async args=>{
-    const target=select(args?.document?.kind);
+    const target=select(args?.document?.kind,args?.document?.provider_name);
     if(typeof target?.[method]!=='function')
       throw Error('Operação fiscal não habilitada para este emissor');
     return target[method](args);
@@ -130,6 +130,7 @@ function fiscalProviderForUnit(unit){
   return Object.freeze({...acbr,
     nfseChannel:'NACIONAL',
     nameForKind:kind=>select(kind).name,
+    nameForDocument:document=>select(document?.kind,document?.provider_name).name,
     prepare:service('prepare'),transmit:service('transmit'),
     consult:service('consult'),printPdf:service('printPdf'),
     cancel:service('cancel'),consultCancellation:service('consultCancellation'),
