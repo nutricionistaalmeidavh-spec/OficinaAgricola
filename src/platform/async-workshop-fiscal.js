@@ -58,6 +58,47 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
    ]);
    return getFiscalSettings();
  }
+ async function getFiscalOnboardingStatus(){
+   const settings=await getFiscalSettings();
+   return {environment:settings.environment,
+     companyConfigured:Boolean(settings.enabled),
+     issuerCnpj:settings.issuer_cnpj||'',
+     certificate:typeof provider?.certificateStatus==='function'
+       ?provider.certificateStatus():{configured:false},
+     providerReady:Boolean(provider&&typeof provider.transmit==='function'),
+     authorizationVerified:false,
+     taxProfileVerified:false};
+ }
+ async function installFiscalCertificate(input={}){
+   const settings=await getFiscalSettings();
+   if(!settings.enabled)fail('Cadastre CNPJ, UF, município IBGE e regime tributário antes do certificado',409);
+   if(!provider||typeof provider.installCertificate!=='function')
+     fail('Instalação de certificado requer ACBr local embarcado',503);
+   return provider.installCertificate({
+     pfxBase64:input.pfxBase64,password:input.password
+   });
+ }
+ async function listFiscalCertificates(){
+   const settings=await getFiscalSettings();
+   if(!settings.enabled)fail('Cadastre a empresa antes de selecionar A3',409);
+   if(!provider||typeof provider.listCertificates!=='function')
+     fail('Leitura de token A3 indisponível',503);
+   return provider.listCertificates({settings});
+ }
+ async function selectFiscalA3Certificate(input={}){
+   const settings=await getFiscalSettings();
+   if(!settings.enabled)fail('Cadastre a empresa antes de selecionar A3',409);
+   if(!provider||typeof provider.selectA3Certificate!=='function')
+     fail('Seleção de token A3 indisponível',503);
+   return provider.selectA3Certificate({serial:input.serial,settings});
+ }
+ async function diagnoseFiscal(){
+   const settings=await getFiscalSettings();
+   if(!settings.enabled)fail('Cadastro fiscal incompleto',409);
+   if(!provider||typeof provider.diagnose!=='function')
+     fail('Diagnóstico requer ACBr local configurado',503);
+   return provider.diagnose({settings});
+ }
  async function getFiscalDocument(documentId){
    const row=await port.first('SELECT * FROM fiscal_documents WHERE id=?',[id(documentId)]);
    if(!row)fail('Documento fiscal não encontrado',404);
@@ -345,7 +386,8 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
      ?finishFiscalCancellation(doc.id,doc.attempt_id,result,clean(provider.name)||'local')
      :applyResult(doc.id,doc.attempt_id,result,clean(provider.name)||'local');
  }
- return Object.freeze({getFiscalSettings,setFiscalSettings,getFiscalDocument,
+ return Object.freeze({getFiscalSettings,setFiscalSettings,getFiscalOnboardingStatus,
+   installFiscalCertificate,listFiscalCertificates,selectFiscalA3Certificate,diagnoseFiscal,getFiscalDocument,
    reviseNfseDraftRoute,getFiscalEvents,listFiscalDocuments,submitFiscalDocument,reconcileFiscalDocument,
    cancelFiscalDocument,getFiscalPdf});
 }
