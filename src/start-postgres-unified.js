@@ -4,7 +4,7 @@ import {fileURLToPath} from 'node:url';
 // Self-hosted R$0; PostgreSQL embarcado no instalador Windows.
 import {createServer} from 'node:http';
 import {readFile,stat} from 'node:fs/promises';
-import {mkdirSync,copyFileSync,existsSync,chmodSync,constants} from 'node:fs';
+import {mkdirSync,writeFileSync,existsSync} from 'node:fs';
 import {resolve,extname,sep,join} from 'node:path';
 import {randomBytes} from 'node:crypto';
 import {createCommonDataAdapter} from './platform/common-data-adapter.js';
@@ -75,6 +75,7 @@ function fiscalProviderForUnit(unit){
   // The bundled ACBr is already verified by the Electron bootstrap. For other
   // PostgreSQL deployments no fiscal adapter is enabled implicitly.
   if(process.env.OFICINA_POSTGRES_MANAGED_LOCAL!=='true'||
+      process.env.OFICINA_BUNDLED_FISCAL_VERIFIED!=='true'||
       !process.env.FISCAL_ACBR_WORKER_EXE||
       !process.env.FISCAL_ACBR_INPUT_DIR)return null;
   const companyId=Number(unit.companyId),unitId=Number(unit.id);
@@ -86,14 +87,13 @@ function fiscalProviderForUnit(unit){
   const configDir=join(privateRoot,'config'),inputDir=join(privateRoot,'entrada');
   mkdirSync(configDir,{recursive:true,mode:0o700});
   mkdirSync(inputDir,{recursive:true,mode:0o700});
-  const privateIni=(name,source)=>{
+  const privateIni=name=>{
     const target=join(configDir,name);
     if(!existsSync(target)){
-      if(!source||!existsSync(source))
-        throw Error('Configuração ACBr nativa não está disponível');
-      try{copyFileSync(source,target,constants.COPYFILE_EXCL)}
+      // Criar apenas o modelo vazio da unidade. Nunca copiar um INI com
+      // certificado/senha de outra unidade ou da configuração global.
+      try{writeFileSync(target,'[Principal]\\nLogNivel=0\\n',{flag:'wx',mode:0o600})}
       catch(error){if(error.code!=='EEXIST')throw error}
-      chmodSync(target,0o600);
     }
     return target;
   };
@@ -102,8 +102,8 @@ function fiscalProviderForUnit(unit){
   if(!nfeLib&&!nfseLib)return null;
   return createAcbrLibFiscalProvider({
     nfeLib,nfseLib,workerExe:process.env.FISCAL_ACBR_WORKER_EXE,inputDir,
-    ...(nfeLib?{nfeConfig:privateIni('ACBrLibNFe.ini',process.env.FISCAL_ACBR_NFE_CONFIG)}:{}),
-    ...(nfseLib?{nfseConfig:privateIni('ACBrLibNFSe.ini',process.env.FISCAL_ACBR_NFSE_CONFIG)}:{})
+    ...(nfeLib?{nfeConfig:privateIni('ACBrLibNFe.ini')}:{}),
+    ...(nfseLib?{nfseConfig:privateIni('ACBrLibNFSe.ini')}:{})
   });
 }
 
