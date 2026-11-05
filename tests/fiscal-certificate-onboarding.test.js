@@ -125,7 +125,7 @@ test('A3 provider lists Windows certificates and binds selected serial to issuer
   const certificateStore=createLocalFiscalCertificateStore({directory:join(root,'empresa-2','segredos')});
   const observed=[];
   const provider=createAcbrLibFiscalProvider({inputDir:dir,nfeLib:join(root,'ACBrNFe64.dll'),
-   nfeConfig:join(root,'ACBrLibNFe.ini'),workerExe:join(root,'worker.exe'),certificateStore,
+   nfeConfig:join(root,'ACBrLibNFe.ini'),workerExe:join(root,'worker.exe'),certificateStore,platform:'win32',
    runner:async req=>{
      observed.push(req);
      if(req.operation==='certificates')return {status:'OK',certificates:[
