@@ -17,6 +17,9 @@ async function openInventoryHistory(){
   <div class="list" id="inventoryHistoryRows" aria-live="polite"></div>
   <button type="button" class="btn soft hidden" id="inventoryHistoryMore">Carregar mais movimentações</button>
  </div>`);
+ // Filter controls are read-only; changing them must not trigger an unsaved-form warning.
+ $('#modalBody').oninput=()=>{if(modalSession)modalSession.dirty=false};
+ $('#modalBody').onchange=$('#modalBody').oninput;
  const rowHost=$('#inventoryHistoryRows'),more=$('#inventoryHistoryMore');
  const load=async (append=false)=>{
   if(!append)cursor=null;
