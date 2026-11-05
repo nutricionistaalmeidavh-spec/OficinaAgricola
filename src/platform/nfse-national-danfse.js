@@ -2,6 +2,7 @@
 // Core 100% local: XML autorizado, PDF vetorial e QR MIT, sem consulta à API DANFSe suspensa.
 import {DOMParser} from '@xmldom/xmldom';
 import qrcode from 'qrcode-generator';
+import {nationalDanfseLogo,decodeNationalLogoPng} from './nfse-national-danfse-assets.js';
 
 const WIDTH=595.28,HEIGHT=841.89;
 const KEY=/^\d{50}$/;
@@ -74,7 +75,7 @@ function readXml(xml,accessKey,environment){
   status:field(info,'cStat')==='100'?'Autorizada':field(info,'cStat'),
   purpose:field(chain(dpsInfo,'IBSCBS'),'finNFSe'),
   city:field(info,'xLocEmi'),generator:field(info,'ambGer'),environment,
-  issuer,taker:party(child(dpsInfo,'toma')),recipient:party(child(dpsInfo,'dest')),
+  issuer,taker:party(child(dpsInfo,'toma')),recipient:party(child(child(dpsInfo,'IBSCBS'),'dest')),
   intermediary:party(child(dpsInfo,'interm')),
   taxNational:field(codes,'cTribNac'),taxMunicipal:field(codes,'cTribMun'),
   nbs:field(codes,'cNBS'),description:field(codes,'xDescServ'),
@@ -100,44 +101,45 @@ function pdfWriter(){
   if(shade){fill(.95,.95,.95);ops.push(fmt(x)+' '+fmt(Y(top+h))+' '+fmt(w)+' '+fmt(h)+' re f');}
   if(border){stroke(0,0,0);ops.push('1 w '+fmt(x)+' '+fmt(Y(top+h))+' '+fmt(w)+' '+fmt(h)+' re S');}
  };
- const text=(value,x,top,{size=7,bold=false,max=95,color='black'}={})=>{
+ const text=(value,x,top,{size=7,bold=false,max=95,color='black',arial=false,width=575-x}={})=>{
   if(!value)return;
   let t=safe(value);
-  // Campos textuais podem ser abreviados com reticências, conforme NT 008.
-  const cap=Math.min(max,Math.max(1,Math.floor((WIDTH-x-12)/(size*.53))));
+  const cap=Math.min(max,Math.max(1,Math.floor(width/(size*.53))));
   if(t.length>cap)t=t.slice(0,Math.max(1,cap-3))+'...';
-  const colors=color==='red'?'1 0 0':'0 0 0';
-  ops.push(colors+' rg BT /'+(bold?'F2':'F1')+' '+fmt(size)+' Tf 1 0 0 1 '+
+  const colors=color==='red'?'1 0 0':'0 0 0',font=bold?'F2':arial?'F3':'F1';
+  ops.push(colors+' rg BT /'+font+' '+fmt(size)+' Tf 1 0 0 1 '+
     fmt(x)+' '+fmt(Y(top+size))+' Tm ('+pdfString(t)+') Tj ET');
  };
- const header=(name,y,h=18)=>{
+ const header=(name,y,h=17)=>{
   rectangle(8.5,y,578.3,h,{shade:true});
-  text(name.toUpperCase(),12,y+4,{bold:true,size:7,max:100});
-  line(8.5,y+h,586.8,y+h);
+  text(name.toUpperCase(),12,y+4,{bold:true,size:7,max:97,width:560});
+  line(8.5,y+h,586.8,y+h,.5);
  };
- const group=(title,x,y,value,width=140)=>{
-  text(title,x,y,{size:6,bold:true,max:56});
-  if(value)text(value,x,y+9,{size:7,max:Math.floor(width/3.7)});
+ const group=(title,x,y,value,width=140,{identification=false}={})=>{
+  text(identification?title.toUpperCase():title,x,y,{size:identification?7:6,bold:true,max:95,width:width-4});
+  if(value)text(value,x,y+9,{size:7,max:160,width:width-4});
  };
- const block=(name,y,p,h=65)=>{
-  header(name,y,17);
+ // Blocos conforme Anexo I: nome na primeira coluna cinza; outras colunas na mesma linha.
+ const block=(name,y,p,h=55)=>{
+  rectangle(8.5,y,143,18,{shade:true});
+  text(name.toUpperCase(),12,y+3,{bold:true,size:7,max:29,width:137});
   if(!p?.id&&!p?.name){
-   text(name.toUpperCase()+' NÃO IDENTIFICADO NA NFS-e',12,y+23,{size:7,bold:true,max:80});
+   text(name.toUpperCase()+' NÃO IDENTIFICADO NA NFS-e',12,y+21,{size:7,max:95,width:560});
   }else{
-   group('CNPJ / CPF / NIF',152,y+3,p.id,145);
-   group('Inscrição municipal',303,y+3,p.registration,142);
-   group('Telefone',460,y+3,p.phone,110);
-   group('Nome / Nome empresarial',12,y+20,p.name,285);
-   group('Município / UF',302,y+20,p.city,160);
-   group('Código IBGE / CEP',464,y+20,[p.cityCode,p.cep].filter(Boolean).join(' / '),120);
-   group('Endereço',12,y+38,p.street,355);
-   group('E-mail',374,y+38,p.email,205);
+   group('CNPJ / CPF / NIF',152,y+1,p.id,144);
+   group('Indicador Municipal (Inscrição)',298,y+1,p.registration,148);
+   group('Telefone',449,y+1,p.phone,133);
+   group('Nome / Nome empresarial',12,y+19,p.name,283);
+   group('Município / Sigla UF',298,y+19,p.city,148);
+   group('Código IBGE / CEP',449,y+19,[p.cityCode,p.cep].filter(Boolean).join(' / '),132);
+   group('Endereço',12,y+37,p.street,282);
+   group('E-mail',298,y+37,p.email,283);
   }
-  line(8.5,y+h,586.8,y+h);
+  line(8.5,y+h,586.8,y+h,.5);
  };
  return {ops,line,rectangle,text,group,header,block};
 }
-function toPdf(commands,url){
+function toPdf(commands,url,logo){
  const out=[];let position=0;const offsets=[0];
  const put=b=>{const bytes=Buffer.isBuffer(b)?b:Buffer.from(b,'latin1');out.push(bytes);position+=bytes.length;};
  const obj=(n,body)=>{offsets[n]=position;put(n+' 0 obj\n'+body+'\nendobj\n');};
@@ -145,26 +147,38 @@ function toPdf(commands,url){
  obj(1,'<< /Type /Catalog /Pages 2 0 R >>');
  obj(2,'<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
  obj(3,'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] '+
-   '/Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 7 0 R /Annots [6 0 R] >>');
- obj(4,'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
- obj(5,'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>');
- const annotation='<< /Type /Annot /Subtype /Link /Rect [492 715 562 788] /Border [0 0 0] '+
+   '/Resources << /Font << /F1 4 0 R /F2 5 0 R /F3 8 0 R >> '+
+   '/XObject << /ImLogo 9 0 R >> >> /Contents 7 0 R /Annots [6 0 R] >>');
+ // Arial para labels e Microsoft Sans Serif para conteúdo são as famílias previstas
+ // pela NT 008 v1.02. Nunca distribuir arquivos proprietários de fontes.
+ obj(4,'<< /Type /Font /Subtype /TrueType /BaseFont /MicrosoftSansSerif /Encoding /WinAnsiEncoding >>');
+ obj(5,'<< /Type /Font /Subtype /TrueType /BaseFont /Arial-BoldMT /Encoding /WinAnsiEncoding >>');
+ const annotation='<< /Type /Annot /Subtype /Link /Rect [495 731 559 795] /Border [0 0 0] '+
   '/A << /S /URI /URI ('+pdfString(url)+') >> >>';
  obj(6,annotation);
  const bytes=Buffer.from(commands.join('\n')+'\n','latin1');
  offsets[7]=position;put('7 0 obj\n<< /Length '+bytes.length+' >>\nstream\n');
  put(bytes);put('endstream\nendobj\n');
+ obj(8,'<< /Type /Font /Subtype /TrueType /BaseFont /ArialMT /Encoding /WinAnsiEncoding >>');
+ offsets[9]=position;
+ put('9 0 obj\n<< /Type /XObject /Subtype /Image /Width '+logo.width+' /Height '+logo.height+
+   ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length '+
+   logo.stream.length+' >>\nstream\n');
+ put(logo.stream);
+ put('\nendstream\nendobj\n');
  const xref=position;
- put('xref\n0 8\n0000000000 65535 f \n');
- for(let i=1;i<=7;i++)put(String(offsets[i]).padStart(10,'0')+' 00000 n \n');
- put('trailer\n<< /Size 8 /Root 1 0 R >>\nstartxref\n'+xref+'\n%%EOF\n');
+ put('xref\n0 10\n0000000000 65535 f \n');
+ for(let i=1;i<=9;i++)put(String(offsets[i]).padStart(10,'0')+' 00000 n \n');
+ put('trailer\n<< /Size 10 /Root 1 0 R >>\nstartxref\n'+xref+'\n%%EOF\n');
  return Buffer.concat(out);
 }
 function drawQr(ops,key){
  const url='https://www.nfse.gov.br/ConsultaPublica/?tpc=1&chave='+key;
  const qr=qrcode(0,'M');qr.addData(url,'Byte');qr.make();
- const modules=qr.getModuleCount(),quiet=4, side=66,
-   unit=side/(modules+quiet*2),x=499,top=51;
+ // Coordenadas normativas: 17,48cm x 1,67cm (origem no topo esquerdo),
+ // QR com lado >=1,52cm; usar 2,22cm para leitura confiável em A4.
+ const modules=qr.getModuleCount(),quiet=4,side=63,
+   unit=side/(modules+quiet*2),x=495.50,top=47.34;
  ops.push('1 1 1 rg '+fmt(x)+' '+fmt(HEIGHT-top-side)+' '+fmt(side)+' '+fmt(side)+' re f');
  ops.push('0 0 0 rg');
  for(let y=0;y<modules;y++)for(let col=0;col<modules;col++)if(qr.isDark(y,col)){
@@ -173,14 +187,19 @@ function drawQr(ops,key){
  }
  return url;
 }
-export function renderNationalDanfse({xml,accessKey,environment,issuerCnpj}={}){
+export function renderNationalDanfse({xml,accessKey,environment,issuerCnpj,logoPng}={}){
  const data=readXml(xml,accessKey,environment);
  if(issuerCnpj&&digits(data.issuer.id)!==digits(issuerCnpj))
    error('Prestador no XML NFS-e não corresponde ao CNPJ autorizado');
+ const logo=decodeNationalLogoPng(nationalDanfseLogo({logoPng}));
  const p=pdfWriter();
  p.rectangle(5.1,5.1,585.08,831.69,{border:true});
  p.rectangle(8.5,8.5,578.3,36,{shade:true});
- p.text('NFS-e',14,12,{size:16,bold:true,max:30});
+ // Logomarca horizontal original, área normativa 0,85 x 4,00 cm, x=0,49cm, y=0,44cm.
+ const logoScale=Math.min(113.39/logo.width,24.09/logo.height);
+ const lw=logo.width*logoScale,lh=logo.height*logoScale,lx=13.89+(113.39-lw)/2;
+ const ly=HEIGHT-(12.47+(24.09-lh)/2)-lh;
+ p.ops.push('q '+fmt(lw)+' 0 0 '+fmt(lh)+' '+fmt(lx)+' '+fmt(ly)+' cm /ImLogo Do Q');
  p.text('DANFSe v2.0',218,11,{size:10,bold:true});
  p.text('Documento Auxiliar da NFS-e',199,23,{size:9,bold:true});
  if(environment==='HOMOLOGACAO')
@@ -252,7 +271,7 @@ export function renderNationalDanfse({xml,accessKey,environment,issuerCnpj}={}){
  p.line(8.5,822,586.8,822);
  p.text('Chave de acesso: '+data.key,12,824,{size:6,max:104});
  p.text('DANFSe gerado localmente a partir do XML autorizado',370,824,{size:5.8,max:54});
- const pdf=toPdf(p.ops,url);
+ const pdf=toPdf(p.ops,url,logo);
  if(pdf.length>6*1024*1024)error('DANFSe local excede o limite de 6 MiB');
  return pdf;
 }
