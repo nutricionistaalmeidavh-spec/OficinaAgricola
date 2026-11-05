@@ -24,7 +24,9 @@
     "db:postgres:verify-unified": "node scripts/verify-postgres-unified.mjs"
   },
   "dependencies": {
-    "pg": "^8.23.1",
+    "pg": "^8.23.1"
+  },
+  "optionalDependencies": {
     "@useinvio/nfse-sdk": "3.0.0"
   }
 }
