@@ -6,6 +6,7 @@ import {readFileSync,statSync,writeFileSync,existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {assertReviewedFiscalUf} from './fiscal-uf.js';
 import {validateReviewedTaxItems} from './fiscal-tax-assist.js';
+import {loadConfiguredFiscalCatalog} from './fiscal-official-catalog.js';
 
 const fail=message=>{throw new Error(message)};
 const money=value=>{
@@ -28,7 +29,7 @@ const block=(key,value)=>{
    fail('Valor fiscal INI inválido ou contém outra linha');
  return key+'='+String(value);
 };
-export function compileReviewedFiscalIni({document,issuer,review}={}){
+export function compileReviewedFiscalIni({document,issuer,review,catalog=loadConfiguredFiscalCatalog()}={}){
  if(!document||!['NFE','NFCE'].includes(document.kind)||!issuer||!review)
    fail('Nota fiscal, emitente e revisão tributária obrigatórios');
  const original=String(document.snapshot_json||'');
@@ -78,7 +79,7 @@ export function compileReviewedFiscalIni({document,issuer,review}={}){
     customer!==String(sections.Destinatario?.CNPJCPF||'').replace(/\D/g,''))
    fail('Destinatário diverge do snapshot');
  // Verificação do enquadramento informado antes de gerar XML/INI.
- validateReviewedTaxItems({issuer,sections,lines:snapshot.lines});
+ validateReviewedTaxItems({issuer,sections,lines:snapshot.lines,catalog});
  let gross=0,discount=0,net=0;
  snapshot.lines.forEach((line,index)=>{
    const suffix=String(index+1).padStart(3,'0');
