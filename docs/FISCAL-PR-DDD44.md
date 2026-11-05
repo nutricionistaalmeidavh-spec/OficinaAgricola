@@ -27,6 +27,23 @@
 3. **Sem inferência pelo telefone:** DDD do contato não determina competência tributária, endereço do estabelecimento nem município fiscal do tomador/prestador.
 4. **Outros municípios do PR:** continuam permitidos pelo campo IBGE manual, conforme validação estadual já existente.
 
+## Regra nacional de 01/11/2026 — NFS-e de ME/EPP do Simples
+- Para **competência a partir de 01/11/2026**, ME/EPP optantes pelo Simples Nacional emitem NFS-e pelo **Emissor Nacional (web ou API)**, mesmo que a prefeitura mantenha plataforma municipal. A regra não é baseada só em cidade ou na data de envio. Documentação oficial publicada em 29/10/2026: https://www.gov.br/nfse/pt-br/noticias/nfs-e-informa-diretrizes-sobre-a-obrigatoriedade-da-emissao-da-nfs-e-nacional-para-optantes-do-simples-nacional/
+- Competências anteriores podem obedecer à via municipal conforme a regra temporal e o município. **Nunca converter automaticamente competências ou emitir por um provedor não confirmado.**
+- O contrato da NFS-e deve selecionar a via com base em `municipio_ibge + regime_tributario + data_competencia` e validações cadastrais. A existência deste catálogo **não implementa esse roteamento**.
+
+## Evidências de municípios-polo (05/11/2026)
+| Cidade | Código IBGE | NFS-e — fonte e condição |
+| --- | --- | --- |
+| Maringá | 4115200 | Decreto municipal 2453/2025: cronograma de migração ao Emissor Nacional concluído em julho de 2026; https://nfse.ecity.maringa.pr.gov.br/ |
+| Cianorte | 4105508 | Prefeitura anunciou Emissor Nacional para todos os prestadores desde 01/01/2026; https://cianorte.pr.gov.br/noticiasView/10581_Prestadores-de-servicos-devem-migrar-a-NFS-e-Nacional-ate-31-de-dezembro.html |
+| Umuarama | 4128104 | Prefeitura manteve emissor municipal para casos aplicáveis; ME/EPP Simples segue obrigatoriedade nacional em competências desde 01/11/2026; https://umuarama.pr.gov.br/noticias/fazenda/nfs-e-ganha-novo-modelo-umuarama-mantm-sistema-prprio-de-emisso |
+| Campo Mourão | 4104303 | Município informa webservice próprio; ME/EPP Simples com competência desde 01/11/2026 usa Emissor Nacional; https://www.campomourao.pr.gov.br/autoatendimento/servicos/acesso-ao-sistema-fiscal |
+| Sarandi | 4126256 | Portal municipal Elotech; seu aviso confirma migração de ME/EPP Simples para o Emissor Nacional em 01/11/2026; https://sarandi.oxy.elotech.com.br/iss/home |
+| Paranavaí | 4118402 | Comunicado municipal exige Emissor Nacional para ME/EPP Simples desde 01/11/2026; https://www.paranavai.pr.gov.br/cidadao/pagina/convocacoes |
+
+As evidências acima não equivalem a homologação técnica do aplicativo: para cada combinação de município/regime é preciso validar manual/API, certificado, retorno autorizado, cancelamento e PDFs.
+
 ## Matriz de homologação a manter por município
 `municipio_ibge`, `municipio_nome`, `provedor_nfse_confirmado`, `emissor_nacional_disponivel`, `parametros_iss_validados`, `ambiente_homologado`, `credenciais_estabelecimento_configuradas`, `ultima_validacao`, `evidencias_xml_pdf`. Nenhum campo dessa matriz presume homologação.
 
