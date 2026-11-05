@@ -286,8 +286,19 @@ export function createPostgresTenantRegistry(port){
  async function listUnitMembers(actorId,unitId){
    const unit=await member(port,actorId,unitId);
    if(unit.role!=='ADMIN')fail('Permissão: administração da unidade necessária');
-   return port.all(
-    'SELECT x.id,x.username,x.name,x.active,m.role,m.active AS "membershipActive" FROM tenant_memberships m JOIN users x ON x.id=m.user_id WHERE m.unit_id=? ORDER BY x.name',[unit.id]);
+   const platform=await isPlatformAdmin(actorId);
+   const rows=await port.all(`SELECT x.id,x.username,x.name,x.active,m.role,
+     m.active AS "membershipActive",
+     (SELECT COUNT(*) FROM tenant_memberships t WHERE t.user_id=x.id) AS "membershipCount",
+     EXISTS(SELECT 1 FROM tenant_platform_admins p WHERE p.user_id=x.id) AS "platformAdmin"
+     FROM tenant_memberships m JOIN users x ON x.id=m.user_id
+     WHERE m.unit_id=? ORDER BY x.name`,[unit.id]);
+   return rows.map(row=>({
+     id:id(row.id),username:row.username,name:row.name,active:row.active,role:row.role,
+     membershipActive:row.membershipActive,
+     identityEditable:(Number(row.membershipCount)===1||platform)&&
+       (!row.platformAdmin||id(row.id)===id(actorId))
+   }));
  }
  async function grantMembership(actorId,{unitId,username:handle,name,password,role:access}={}){
    const actor=id(actorId),unitNumber=id(unitId),assignedRole=role(access),account=username(handle);
@@ -309,24 +320,44 @@ export function createPostgresTenantRegistry(port){
      return {id:userId,unitId:unit.id,role:assignedRole};
    });
  }
- async function changeMembership(actorId,{unitId,userId,role:access,active=true}={}){
+ async function changeMembership(actorId,{unitId,userId,role:access,active,name,password}={}){
    const actor=id(actorId),uid=id(unitId),target=id(userId),assignedRole=role(access);
-   if(typeof active!=='boolean')fail('Estado inválido',400);
+   if(active!==undefined&&typeof active!=='boolean')fail('Estado inválido',400);
    return port.transaction(async tx=>{
-     // Serialize admin changes on the unit row to prevent losing the last admin.
+     // A trava na unidade serializa alterações administrativas concorrentes.
      await tx.first('SELECT id FROM tenant_units WHERE id=? FOR UPDATE',[uid]);
      const unit=await member(tx,actor,uid);
      if(unit.role!=='ADMIN')fail('Permissão: administração da unidade necessária');
      const current=await tx.first('SELECT role,active FROM tenant_memberships WHERE user_id=? AND unit_id=?',[target,uid]);
      if(!current)fail('Vínculo não encontrado',404);
-     if(current.role==='ADMIN'&&Number(current.active)===1&&(!active||assignedRole!=='ADMIN')){
+     const nextActive=active===undefined?Number(current.active)===1:active;
+     if(current.role==='ADMIN'&&Number(current.active)===1&&(!nextActive||assignedRole!=='ADMIN')){
        const count=await tx.first("SELECT COUNT(*) AS n FROM tenant_memberships WHERE unit_id=? AND role='ADMIN' AND active=1",[uid]);
        if(Number(count.n)<2)fail('Último administrador da unidade não pode ser removido',409);
      }
+     const changeName=name!==undefined,reset=password!==undefined;
+     if(changeName||reset){
+       await tx.first('SELECT id FROM users WHERE id=? FOR UPDATE',[target]);
+       const other=await tx.first('SELECT COUNT(*) AS n FROM tenant_memberships WHERE user_id=?',[target]);
+       const platform=await tx.first('SELECT 1 AS ok FROM tenant_platform_admins WHERE user_id=?',[actor]);
+       if(Number(other.n)>1&&!platform)
+         fail('Conta compartilhada com outras unidades: alteração de nome e senha exige administração da plataforma',403);
+       const targetPlatform=await tx.first('SELECT 1 AS ok FROM tenant_platform_admins WHERE user_id=?',[target]);
+       if(targetPlatform&&target!==actor)
+         fail('A identidade de administrador da plataforma somente pode ser alterada pelo próprio titular',403);
+       const fullName=changeName?cleanName(name):null;
+       const encoded=reset?passwordHash(password):null;
+       if(changeName)await tx.run('UPDATE users SET name=?,updated_at=? WHERE id=?',[fullName,now(),target]);
+       if(reset){
+         await tx.run('UPDATE users SET password_hash=?,updated_at=? WHERE id=?',[encoded,now(),target]);
+         await tx.run('DELETE FROM sessions WHERE user_id=?',[target]);
+       }
+       await audit(tx,actor,'USER_IDENTITY_CHANGED',unit.companyId,uid,target,{nameChanged:changeName,passwordReset:reset});
+     }
      await tx.run('UPDATE tenant_memberships SET role=?,active=? WHERE user_id=? AND unit_id=?',
-       [assignedRole,active?1:0,target,uid]);
-     await audit(tx,actor,'MEMBERSHIP_CHANGED',unit.companyId,uid,target,{role:assignedRole,active});
-     return {id:target,unitId:uid,role:assignedRole,active};
+       [assignedRole,nextActive?1:0,target,uid]);
+     await audit(tx,actor,'MEMBERSHIP_CHANGED',unit.companyId,uid,target,{role:assignedRole,active:nextActive});
+     return {id:target,unitId:uid,role:assignedRole,active:nextActive};
    });
  }
  async function listAudit(actorId,companyId,{limit=100}={}){
