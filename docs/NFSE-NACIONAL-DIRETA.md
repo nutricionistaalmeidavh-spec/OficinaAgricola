@@ -8,7 +8,7 @@ Esta integração é **R$ 0 de software obrigatório**, sem intermediários come
 2. Geração assistida de DPS a partir do rascunho de serviço, perfil nacional `cTribNac` e parâmetros declarados pelo responsável fiscal.
 3. SDK OSS MIT `@useinvio/nfse-sdk@3.0.0` incluído no runtime/instalador; usuário final não instala dependências.
 4. Assinatura XMLDSig e transmissão `GZip/Base64` por mTLS à SEFIN; conciliação por `GET /dps/{id}` e `GET /nfse/{chave}`.
-5. Consulta de DANFSe em PDF (legada) no ADN para nota autorizada, com checagem de chave e formato. A API foi suspensa em 01/07/2026: não é uma solução operacional de impressão.
+5. Consulta de DANFSe em PDF (legada) no ADN para nota autorizada, com checagem de chave e formato. A API foi suspensa em 03/08/2026: não é uma solução operacional de impressão.
 6. Sem fallback para SaaS nem marcação de nota autorizada a partir de resposta incompleta.
 
 ## Endereços oficiais
