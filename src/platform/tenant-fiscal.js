@@ -22,7 +22,7 @@ export function validateTenantFiscalConfigs(configs){
         !['NACIONAL','MUNICIPAL'].includes(config.nfseChannel))
       fail('Canal NFS-e inválido: use NACIONAL ou MUNICIPAL');
     if(config.nfseChannel==='MUNICIPAL'&&
-        !/^\\d{7}$/.test(String(config.nfseMunicipalityIbge||'')))
+        !/^\d{7}$/.test(String(config.nfseMunicipalityIbge||'')))
       fail('Emissor municipal NFS-e exige município IBGE configurado');
     if(config.type==='sidecar'){
       let url;
