@@ -9,29 +9,46 @@ async function renderInventory({cursor=null,loaded=[]}={}){
  setContent(`<div class="section-head"><div><h2>Estoque</h2><span class="muted">Saldos por peça e movimentações auditáveis</span></div>
   <div class="action-row">
    <button id="stockHistory" type="button" class="btn soft">Histórico de movimentos</button>
+   ${office?'<button id="stocktakeOpen" type="button" class="btn soft">Inventário físico</button>':''}
    ${office?'<button id="suppliersManage" type="button" class="btn soft">Fornecedores</button><button id="purchaseNew" type="button" class="btn soft">+ Pedido de compra</button><button id="newPart" type="button" class="btn primary">+ Nova peça</button>':''}
   </div></div>
+  <div class="card" style="margin-bottom:14px"><label for="inventoryBarcodeSearch">Código de barras EAN/GTIN (leitor USB ou digitação)</label><div class="field-row"><input id="inventoryBarcodeSearch" inputmode="numeric" type="search" autocomplete="off" maxlength="24" placeholder="Bipe o código e pressione Enter"><button id="inventoryBarcodeFocus" type="button" class="btn soft">Ler código</button></div><div id="inventoryBarcodeResult" aria-live="polite" class="muted">O leitor USB funciona como teclado; não exige driver ou serviço pago.</div></div>
   ${table(['SKU','Descrição','Saldo','Mínimo','Preço',''],parts.map(p=>[
-   esc(p.sku),`<strong>${esc(p.description)}</strong><br><small>${esc(p.category||'')}</small>`,
+   esc(p.sku),`<strong>${esc(p.description)}</strong><br><small>${esc(p.category||'')} ${p.barcode?' · GTIN: '+esc(p.barcode):''}</small>`,
    Number(p.quantity)<=Number(p.min_stock)?`<span class="pill orange">${p.quantity}</span>`:p.quantity,
    p.min_stock,money(p.sale_price_cents),
-   office?`<button class="btn sm" data-entry="${p.id}">Movimentar</button> <button class="btn sm" data-fitments="${p.id}">Aplicações</button>`:''
+   office?`<button class="btn sm" data-entry="${p.id}">Movimentar</button> <button class="btn sm" data-part-edit="${p.id}">Editar</button> <button class="btn sm" data-fitments="${p.id}">Aplicações</button>`:''
   ]))}
   ${office?`<section class="card" style="margin-top:18px"><div class="section-head"><div><h2>Pedidos de compra</h2><span class="muted">Receba por etapas sem duplicar saldos</span></div><button type="button" id="allPurchaseOrders" class="btn sm">Ver todos</button></div>
    <div class="list">${orders.length?orders.map(o=>`<div class="list-item"><div><strong>${esc(o.reference||'Pedido '+String(o.id).slice(-6))}</strong> ${badge(o.status)}
     <br><small>${esc(o.supplier_name)} · ${dt(o.created_at)}</small></div>
     <button type="button" class="btn sm" data-purchase-open="${o.id}">Ver pedido</button></div>`).join(''):'<p class="empty">Nenhum pedido de compra cadastrado.</p>'}</div></section>`:''}`);
  if($('#newPart'))$('#newPart').onclick=()=>partCreateModal();
+ if($('#stocktakeOpen'))$('#stocktakeOpen').onclick=()=>listStocktakesModal(parts).catch(e=>toast(e.message,true));
+ const barcodeInput=$('#inventoryBarcodeSearch'),barcodeResult=$('#inventoryBarcodeResult');
+ $('#inventoryBarcodeFocus').onclick=()=>barcodeInput.focus();
+ barcodeInput.onkeydown=async e=>{
+  if(e.key!=='Enter')return;e.preventDefault();
+  const code=barcodeInput.value.replace(/[\\s-]/g,'');
+  if(!code){barcodeResult.textContent='Informe um EAN/GTIN.';return}
+  barcodeResult.textContent='Consultando código…';
+  try{
+   const part=await api('/api/parts/barcode/'+encodeURIComponent(code));
+   barcodeResult.textContent=part.sku+' · '+part.description+' · Saldo: '+part.quantity;
+   if(office)stockMoveModal(Number(part.id),part);
+  }catch(error){barcodeResult.textContent='Nenhuma peça encontrada para este código.';toast(error.message,true)}
+ };
  $('#stockHistory').onclick=()=>openInventoryHistory().catch(e=>toast(e.message,true));
  if($('#suppliersManage'))$('#suppliersManage').onclick=()=>showSuppliersModal().catch(e=>toast(e.message,true));
  if($('#purchaseNew'))$('#purchaseNew').onclick=()=>newPurchaseOrderModal().catch(e=>toast(e.message,true));
  if($('#allPurchaseOrders'))$('#allPurchaseOrders').onclick=()=>showPurchaseOrdersList().catch(e=>toast(e.message,true));
- $$('[data-entry]').forEach(b=>b.onclick=()=>stockMoveModal(Number(b.dataset.entry),parts.find(p=>p.id===Number(b.dataset.entry))));
+ $('[data-entry]').forEach(b=>b.onclick=()=>stockMoveModal(Number(b.dataset.entry),parts.find(p=>p.id===Number(b.dataset.entry))));
+ $('[data-part-edit]').forEach(b=>b.onclick=()=>editPartModal(parts.find(p=>p.id===Number(b.dataset.partEdit))));
  $$('[data-fitments]').forEach(b=>b.onclick=()=>partFitmentsModal(parts.find(p=>p.id===Number(b.dataset.fitments))));
  $$('[data-purchase-open]').forEach(b=>b.onclick=()=>openPurchaseOrder(Number(b.dataset.purchaseOpen)).catch(e=>toast(e.message,true)));
  showPagedLoadMore({cursor:page.nextCursor,loaded:parts.length,total:page.total,onMore:()=>renderInventory({cursor:page.nextCursor,loaded:parts})});
 }
-function partCreateModal(){const requestId=newCommandId();showModal('Nova peça',`<form class="form-stack"><div class="field-row"><label>SKU<input name="sku" required></label><label>Descrição<input name="description" required></label></div><div class="field-row three"><label>Categoria<input name="category"></label><label>Unidade<input name="unit" value="UN"></label><label>Localização<input name="location"></label></div><div class="field-row three"><label>Custo (R$)<input name="cost" type="number" step="0.01" value="0"></label><label>Venda (R$)<input name="sale" type="number" step="0.01" value="0"></label><label>Estoque mínimo<input name="minStock" type="number" step="0.01" value="0"></label></div><button class="btn primary" type="submit">Salvar peça</button></form>`,async fd=>{const o=formObj(fd);await api('/api/parts',{method:'POST',body:{requestId,sku:o.sku,description:o.description,category:o.category,unit:o.unit,location:o.location,costCents:Math.round(Number(o.cost)*100),salePriceCents:Math.round(Number(o.sale)*100),minStock:Number(o.minStock)}});toast('Peça cadastrada');await refreshCurrentPage()})}
+function partCreateModal(){const requestId=newCommandId();showModal('Nova peça',`<form class="form-stack"><div class="field-row"><label>SKU<input name="sku" required></label><label>Descrição<input name="description" required></label></div><div class="field-row three"><label>Categoria<input name="category"></label><label>Unidade<input name="unit" value="UN"></label><label>Localização<input name="location"></label></div><label>EAN/GTIN (opcional)<input name="barcode" inputmode="numeric" maxlength="24" placeholder="8, 12, 13 ou 14 dígitos"></label><div class="field-row three"><label>Custo (R$)<input name="cost" type="number" step="0.01" value="0"></label><label>Venda (R$)<input name="sale" type="number" step="0.01" value="0"></label><label>Estoque mínimo<input name="minStock" type="number" step="0.01" value="0"></label></div><button class="btn primary" type="submit">Salvar peça</button></form>`,async fd=>{const o=formObj(fd);await api('/api/parts',{method:'POST',body:{requestId,sku:o.sku,description:o.description,barcode:o.barcode,category:o.category,unit:o.unit,location:o.location,costCents:Math.round(Number(o.cost)*100),salePriceCents:Math.round(Number(o.sale)*100),minStock:Number(o.minStock)}});toast('Peça cadastrada');await refreshCurrentPage()})}
 function stockMoveModal(id,p){
  const requestId=newCommandId(),admin=state.user.role==='ADMIN';
  showModal('Movimentar — '+p.description,`<form class="form-stack">
@@ -51,6 +68,25 @@ function stockMoveModal(id,p){
  const type=$('#stockMoveType'),note=$('#stockMoveNote'),hint=$('#stockMoveHint');
  const sync=()=>{const adjust=type.value==='AJUSTE';note.required=adjust;note.minLength=adjust?5:0;hint.hidden=!adjust};
  type.addEventListener('change',sync);sync();
+}
+
+function editPartModal(p){
+ const requestId=newCommandId();
+ showModal('Editar peça — '+p.description,`<form class="form-stack">
+  <div class="field-row"><label>SKU<input name="sku" maxlength="100" value="${esc(p.sku)}" required></label><label>Descrição<input name="description" maxlength="200" value="${esc(p.description)}" required></label></div>
+  <label>EAN/GTIN (opcional)<input name="barcode" inputmode="numeric" maxlength="24" value="${esc(p.barcode||'')}" placeholder="8, 12, 13 ou 14 dígitos"></label>
+  <div class="field-row three"><label>Categoria<input name="category" value="${esc(p.category||'')}"></label><label>Unidade<input name="unit" value="${esc(p.unit||'UN')}"></label><label>Localização<input name="location" value="${esc(p.location||'')}"></label></div>
+  <div class="field-row three"><label>Custo (R$)<input name="cost" type="number" min="0" step="0.01" value="${Number(p.cost_cents)/100}"></label><label>Venda (R$)<input name="sale" type="number" min="0" step="0.01" value="${Number(p.sale_price_cents)/100}"></label><label>Estoque mínimo<input name="minStock" type="number" min="0" step="0.01" value="${p.min_stock}"></label></div>
+  <p class="muted">A alteração de cadastro não modifica o saldo nem o histórico.</p>
+  <button type="submit" class="btn primary">Salvar alterações</button>
+ </form>`,async fd=>{
+  const o=formObj(fd);
+  await api('/api/parts/'+p.id,{method:'PATCH',body:{
+   ...o,requestId,costCents:Math.round(Number(o.cost)*100),
+   salePriceCents:Math.round(Number(o.sale)*100),minStock:Number(o.minStock)
+  }});
+  toast('Peça atualizada');await refreshCurrentPage();
+ });
 }
 
 async function renderSchedule({cursor=null,loaded=[],period=null}={}){pageTitle('Agenda','PLANEJAMENTO');const from=period?new Date(period.from):new Date();if(!period)from.setDate(from.getDate()-7);const to=period?new Date(period.to):new Date();if(!period)to.setDate(to.getDate()+60);const currentPeriod={from:from.toISOString(),to:to.toISOString()};const [page,maintenanceAlerts]=await Promise.all([api(`/api/schedule/page?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}&limit=50${cursor?'&cursor='+encodeURIComponent(cursor):''}`),api('/api/maintenance-alerts')]);const events=loaded.concat(page.items);setContent(`<div class="section-head"><div><h2>Agenda da oficina</h2><span class="muted">Diagnósticos, execuções, visitas e entregas</span></div>${['ADMIN','ATENDIMENTO','TECNICO'].includes(state.user.role)?`<button id="newEvent" class="btn primary">+ Novo evento</button>`:''}</div><div class="card"><div class="list">${events.length?events.map(e=>`<div class="list-item"><div><strong>${esc(e.title)}</strong> ${badge(e.type)}<br><small>${esc(e.customer_name||'')} ${e.os_number?`· OS #${e.os_number}`:''} ${e.technician_name?`· ${esc(e.technician_name)}`:''}</small></div><strong>${dt(e.starts_at)}</strong></div>`).join(''):'<div class="empty">Nenhum evento no período.</div>'}</div></div><div class="card"><h3>Manutenções preventivas a vencer ou atrasadas</h3><div class="list">${maintenanceAlerts.length?maintenanceAlerts.map(p=>`<div class="list-item"><div><strong>${esc(p.name)}</strong> · ${esc(p.brand||'')} ${esc(p.model||'')} <br><small>${esc(p.customer_name)} · ${esc(p.next_due_date||'Sem data')} · ${p.next_due_km??'—'} km · ${p.next_due_hours??'—'} h</small></div>${badge(p.status)}</div>`).join(''):'<div class="empty">Nenhuma manutenção próxima do vencimento.</div>'}</div></div>`);if($('#newEvent'))$('#newEvent').onclick=async()=>{
