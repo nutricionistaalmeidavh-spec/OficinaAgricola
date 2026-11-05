@@ -1,6 +1,7 @@
 // Emissor NFS-e Nacional sem intermediário: SEFIN + certificado A1 self-hosted.
 // Não cria DPS fictícia nem marca autorizada sem XML oficial íntegro.
 import {createNationalNfseClient} from './nfse-national-api.js';
+import {renderNationalDanfse} from './nfse-national-danfse.js';
 import {createLocalNationalDpsStore} from './nfse-national-dps-store.js';
 import {createLocalFiscalTaxStore} from './local-fiscal-tax-store.js';
 import {join} from 'node:path';
@@ -78,7 +79,13 @@ export function createNationalNfseProvider({certificateStore,inputDir,client}={}
      throw Error('DANFSe exige NFS-e autorizada e não cancelada');
    if(!/^\d{50}$/.test(String(document.access_key||'')))
      throw Error('DANFSe exige chave oficial de acesso íntegra');
-   return api.downloadDanfse({issuer:issuerFor(document),accessKey:document.access_key});
+   const issuer=issuerFor(document);
+   if(document.environment&&document.environment!==issuer.environment)
+     throw Error('Ambiente do emissor divergente do documento autorizado');
+   if(typeof document.authorized_xml!=='string'||!document.authorized_xml)
+     throw Error('XML autorizado obrigatório para gerar DANFSe local');
+   return renderNationalDanfse({xml:document.authorized_xml,accessKey:document.access_key,
+     environment:issuer.environment,issuerCnpj:issuer.cnpj});
   }
  });
 }
