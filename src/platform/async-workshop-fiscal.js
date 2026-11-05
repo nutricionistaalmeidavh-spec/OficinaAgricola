@@ -67,7 +67,8 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
    const certificateIdentity=provider?.certificateIdentity?.()||null;
    const providerName=clean(provider?.name);
    const providerReady=Boolean(provider&&typeof provider.transmit==='function');
-   const proofs=port.engine!=='sqlite'&&certificateIdentity&&providerName==='acbrlib-local'
+   const proofs=port.engine!=='sqlite'&&certificateIdentity&&
+     ['acbrlib-local','sefin-nacional-direta'].includes(providerName)
      ?await port.all(`SELECT e.document_id,e.kind,e.issuer_digest,e.certificate_digest,
        e.xml_digest,e.provider_name,d.status,d.environment,d.authorized_xml,
        d.access_key,d.protocol FROM fiscal_homologation_evidence e
