@@ -79,6 +79,13 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
      pfxBase64:input.pfxBase64,password:input.password
    });
  }
+ async function installFiscalCsc(input={}){
+   const settings=await getFiscalSettings();
+   if(!settings.enabled)fail('Cadastre os dados fiscais da empresa antes do CSC',409);
+   if(!provider||typeof provider.installCsc!=='function')
+     fail('CSC NFC-e requer ACBr embarcado desta unidade',503);
+   return provider.installCsc({idCsc:input.idCsc,csc:input.csc});
+ }
  async function diagnoseFiscal(){
    const settings=await getFiscalSettings();
    if(!settings.enabled)fail('Cadastro fiscal incompleto',409);
@@ -354,7 +361,7 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
      :applyResult(doc.id,doc.attempt_id,result,clean(provider.name)||'local');
  }
  return Object.freeze({getFiscalSettings,setFiscalSettings,getFiscalOnboardingStatus,
-   installFiscalCertificate,diagnoseFiscal,saveFiscalTaxReview,getFiscalDocument,
+   installFiscalCertificate,installFiscalCsc,diagnoseFiscal,saveFiscalTaxReview,getFiscalDocument,
    getFiscalEvents,listFiscalDocuments,submitFiscalDocument,reconcileFiscalDocument,
    cancelFiscalDocument,getFiscalPdf});
 }
