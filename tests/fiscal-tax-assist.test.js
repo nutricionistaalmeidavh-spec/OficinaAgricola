@@ -70,3 +70,12 @@ test('grupos IBS/CBS incompletos e múltiplos regimes são rejeitados',()=>{
  data.sections.gCBS001={pCBS:'0.90',vCBS:'0.72'};
  assert.throws(()=>validateReviewedTaxItems(data),/IBS.CBS/i);
 });
+
+test('códigos fiscais fora da tabela reconhecida exigem revisão em vez de seguir para emissão',()=>{
+ const data=base();
+ data.sections.ICMS001.CSOSN='999';
+ assert.throws(()=>validateReviewedTaxItems(data),/CSOSN/);
+ data.sections.ICMS001.CSOSN='102';
+ data.sections.PIS001.CST='00';
+ assert.throws(()=>validateReviewedTaxItems(data),/PIS/);
+});
