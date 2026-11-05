@@ -24,7 +24,7 @@ async function renderInventory({cursor=null,loaded=[]}={}){
     <br><small>${esc(o.supplier_name)} · ${dt(o.created_at)}</small></div>
     <button type="button" class="btn sm" data-purchase-open="${o.id}">Ver pedido</button></div>`).join(''):'<p class="empty">Nenhum pedido de compra cadastrado.</p>'}</div></section>`:''}`);
  if($('#newPart'))$('#newPart').onclick=()=>partCreateModal();
- if($('#stocktakeOpen'))$('#stocktakeOpen').onclick=()=>listStocktakesModal(parts).catch(e=>toast(e.message,true));
+ if($('#stocktakeOpen'))$('#stocktakeOpen').onclick=()=>listStocktakesModal(parts.filter(p=>Number(p.active)===1)).catch(e=>toast(e.message,true));
  const barcodeInput=$('#inventoryBarcodeSearch'),barcodeResult=$('#inventoryBarcodeResult');
  $('#inventoryBarcodeFocus').onclick=()=>barcodeInput.focus();
  barcodeInput.onkeydown=async e=>{
