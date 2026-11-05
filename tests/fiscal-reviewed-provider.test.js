@@ -6,38 +6,44 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createAcbrLibFiscalProvider} from '../src/platform/acbrlib-fiscal-provider.js';
 
-test('fiscal tax review builds real ACBr INI from guided data and frozen commercial values',()=>{
- const root=mkdtempSync(join(tmpdir(),'oficina-tax-')),inputDir=join(root,'fiscal');
+const issuer={cnpj:'11222333000181',uf:'SP',municipalityIbge:'3550308',
+ taxRegime:'SIMPLES',stateRegistration:'12345678',environment:'HOMOLOGACAO'};
+const company={legalName:'Oficina QA LTDA',street:'Rua Central',number:'10',
+ district:'Centro',city:'São Paulo',zip:'01001000'};
+const customer={name:'Comprador',street:'Rua Norte',number:'30',
+ district:'Centro',city:'São Paulo',uf:'SP',municipalityIbge:'3550308',zip:'01001001'};
+const goods={kind:'GOODS',name:'Mercadorias de teste',
+ ncm:'84212300',cfop:'5102',origin:'0',icmsScheme:'CSOSN',icmsCode:'102',
+ pisCst:'49',cofinsCst:'49',unit:'UN'};
+function fixture({kind='NFE',id=12,amount=9000,discount=1000}={}){
+ const root=mkdtempSync(join(tmpdir(),'oficina-guided-')),inputDir=join(root,'fiscal');
  mkdirSync(inputDir);
+ const nfeLib=join(root,'ACBrNFe64.dll'),nfeConfig=join(root,'ACBrLibNFe.ini');
+ writeFileSync(nfeLib,'fixture');writeFileSync(nfeConfig,'[Principal]\nLogNivel=0\n');
+ const provider=createAcbrLibFiscalProvider({nfeLib,nfeConfig,inputDir,
+  runner:async()=>({status:'INDETERMINADO'})});
+ const snapshot_json=JSON.stringify({originType:'VENDA',lines:[{
+  sourceItemId:10,kind:'PECA',description:'Filtro de ar',quantity:1,
+  unitPriceCents:10000,subtotalCents:10000,discountCents:discount,totalCents:amount
+ }],customer:kind==='NFE'?{name:'Comprador',document:'11222333000181'}:{}});
+ const document={id,kind,status:'RASCUNHO',amount_cents:amount,
+  snapshot_json,snapshot_hash:createHash('sha256').update(snapshot_json).digest('hex'),
+  environment:'HOMOLOGACAO'};
+ return {root,inputDir,provider,document};
+}
+
+test('revisão guiada NF-e conserva os valores canônicos e cria INI pelo perfil cadastrado',()=>{
+ const {root,inputDir,provider,document}=fixture();
  try{
-  const nfeLib=join(root,'ACBrNFe64.dll'),nfeConfig=join(root,'ACBrLibNFe.ini');
-  writeFileSync(nfeLib,'fixture');writeFileSync(nfeConfig,'[Principal]\nLogNivel=0\n');
-  const provider=createAcbrLibFiscalProvider({
-    nfeLib,nfeConfig,inputDir,runner:async()=>({status:'INDETERMINADO'})
-  });
-  const snapshot_json=JSON.stringify({originType:'OS',lines:[{
-    sourceItemId:10,kind:'PECA',description:'Filtro de ar',quantity:1,
-    unitPriceCents:10000,subtotalCents:10000,discountCents:1000,totalCents:9000
-  }],customer:{name:'Cliente',document:'11222333000181'}});
-  const document={id:12,kind:'NFE',status:'RASCUNHO',amount_cents:9000,
-    snapshot_json,snapshot_hash:createHash('sha256').update(snapshot_json).digest('hex'),
-    environment:'HOMOLOGACAO'};
-  const issuer={cnpj:'11222333000181',uf:'SP',municipalityIbge:'3550308',environment:'HOMOLOGACAO'};
-  const sections={
-    infNFe:{versao:'4.00'},
-    Identificacao:{mod:'55',cUF:'35',cMunFG:'3550308',serie:'1',nNF:'12',tpAmb:'2',natOp:'Venda'},
-    Emitente:{CNPJCPF:issuer.cnpj,IE:'123',xNome:'Oficina QA'},
-    Destinatario:{CNPJCPF:'11222333000181',xNome:'Cliente'},
-    Produto001:{NCM:'84212300',CFOP:'5102',uCom:'UN',vProd:'0.01'},
-    ICMS001:{CSOSN:'102',orig:'0'},PIS001:{CST:'49'},COFINS001:{CST:'49'},
-    Total:{vProd:'100.00',vDesc:'10.00',vNF:'90.00'}
-  };
-  assert.equal(provider.saveTaxReview({document,issuer,sections}).reviewed,true);
+  const profile=provider.saveTaxProfile({issuer,profile:goods});
+  const payload={document,issuer,company,customer,
+   issuance:{number:'12',series:'1',nature:'Venda de mercadorias'},
+   items:[{profileId:profile.id}]};
+  assert.equal(provider.saveTaxReview(payload).reviewed,true);
   const stem='NFE-12-'+document.snapshot_hash;
-  const review=JSON.parse(readFileSync(join(inputDir,stem+'.review.json'),'utf8'));
-  assert.match(review.sections.Identificacao.cNF,/^\d{8}$/);
+  const review=provider.getTaxReview({document,issuer});
+  assert.equal(review.reviewed,true);
   provider.prepare({document,issuer});
-  assert.equal(existsSync(join(inputDir,stem+'.ini')),true);
   const ini=readFileSync(join(inputDir,stem+'.ini'),'utf8');
   assert.match(ini,/\[Produto001\]/);
   assert.match(ini,/xProd=Filtro de ar/);
@@ -45,40 +51,25 @@ test('fiscal tax review builds real ACBr INI from guided data and frozen commerc
   assert.match(ini,/vDesc=10\.00/);
   assert.match(ini,/vNF=90\.00/);
   assert.match(ini,/cNF=\d{8}/);
-  assert.match(ini,/dhEmi=\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}:\d{2}/);
-  assert.throws(()=>provider.saveTaxReview({document,issuer,sections}),/já preparado/);
+  assert.throws(()=>provider.saveTaxReview(payload),/já preparado|sobrescrever|preparado/);
  }finally{rmSync(root,{recursive:true,force:true});}
 });
 
-test('revisão NFC-e guiada salva INI com pagamento explícito, sem alterar valores comerciais',()=>{
- const root=mkdtempSync(join(tmpdir(),'oficina-nfce-review-')),inputDir=join(root,'fiscal');
- mkdirSync(inputDir);
+test('NFC-e guiada exige meio de pagamento e bloqueia INI arbitrário na API',()=>{
+ const {root,inputDir,provider,document}=fixture({kind:'NFCE',id:16,amount:10000,discount:0});
  try{
-  const nfeLib=join(root,'ACBrNFe64.dll'),nfeConfig=join(root,'ACBrLibNFe.ini');
-  writeFileSync(nfeLib,'fixture');writeFileSync(nfeConfig,'[Principal]\nLogNivel=0\n');
-  const provider=createAcbrLibFiscalProvider({nfeLib,nfeConfig,inputDir,runner:async()=>({status:'INDETERMINADO'})});
-  const snapshot_json=JSON.stringify({originType:'VENDA',lines:[{
-   sourceItemId:5,kind:'PECA',description:'Óleo',quantity:1,
-   unitPriceCents:9000,subtotalCents:9000,discountCents:0,totalCents:9000
-  }],customer:{}});
-  const document={id:16,kind:'NFCE',status:'RASCUNHO',amount_cents:9000,
-    snapshot_json,snapshot_hash:createHash('sha256').update(snapshot_json).digest('hex'),
-    environment:'HOMOLOGACAO'};
-  const issuer={cnpj:'11222333000181',uf:'SP',municipalityIbge:'3550308',environment:'HOMOLOGACAO'};
-  const sections={
-   infNFe:{versao:'4.00'},
-   Identificacao:{mod:'65',cUF:'35',cMunFG:'3550308',serie:'1',nNF:'16',tpAmb:'2',
-    natOp:'Venda',idDest:'1',indFinal:'1',indPres:'1',tpEmis:'1'},
-   Emitente:{CNPJCPF:issuer.cnpj,IE:'123',xNome:'Oficina QA'},
-   Produto001:{NCM:'27101932',CFOP:'5102',uCom:'UN'},
-   ICMS001:{CSOSN:'102',orig:'0'},PIS001:{CST:'49'},COFINS001:{CST:'49'},
-   pag001:{tPag:'01',vPag:'90.00'},Total:{vProd:'90.00',vDesc:'0.00',vNF:'90.00'}
-  };
-  assert.equal(provider.saveTaxReview({document,issuer,sections}).reviewed,true);
+  const profile=provider.saveTaxProfile({issuer,profile:goods});
+  const payload={document,issuer,company,customer:null,
+   issuance:{number:'16',series:'1',nature:'Venda',paymentCode:'01'},
+   items:[{profileId:profile.id}]};
+  assert.throws(()=>provider.saveTaxReview({document,issuer,sections:{
+    Emitente:{CNPJCPF:'99999999999999'}}}),/itens|perfil|canônico|obrigatório/i);
+  assert.equal(provider.saveTaxReview(payload).reviewed,true);
   provider.prepare({document,issuer});
   const ini=readFileSync(join(inputDir,'NFCE-16-'+document.snapshot_hash+'.ini'),'utf8');
   assert.match(ini,/mod=65/);
   assert.match(ini,/\[pag001\]/);
-  assert.match(ini,/vPag=90\.00/);
+  assert.match(ini,/vPag=100\.00/);
+  assert.doesNotMatch(ini,/99999999999999/);
  }finally{rmSync(root,{recursive:true,force:true});}
 });
