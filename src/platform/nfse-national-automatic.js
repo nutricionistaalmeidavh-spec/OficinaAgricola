@@ -74,14 +74,16 @@ export function prepareNationalDpsInput({document,issuer,profile,customer,issuan
  if(profile.withheld!==undefined&&Boolean(profile.withheld)!==(tpRetISSQN==='2'))
    fail('Retenção ISS diverge do perfil tributário aprovado');
  const federal=str(issuance?.cstPisCofins,/^\d{2}$/,'CST PIS/COFINS',2);
- const taxRate={
-   pTotTribFed:percentage(issuance?.percentFederal,'Carga tributária federal'),
-   pTotTribEst:percentage(issuance?.percentState,'Carga tributária estadual'),
-   pTotTribMun:percentage(issuance?.percentMunicipal,'Carga tributária municipal')
- };
+ if((issuer.taxRegime==='SIMPLES'&&opSimpNac!=='3')||
+    (issuer.taxRegime==='NORMAL'&&opSimpNac!=='1')||
+    (issuer.taxRegime==='MEI'&&opSimpNac!=='2'))
+   fail('Opção Simples Nacional incompatível com o cadastro fiscal da empresa');
+ if(tribISSQN!=='1')fail('Cenários de imunidade/exportação de ISS exigem revisão avançada');
  const totTrib=opSimpNac==='3'
    ?{pTotTribSN:percentage(issuance?.percentSimples,'Carga tributária do Simples Nacional')}
-   :taxRate;
+   :{pTotTribFed:percentage(issuance?.percentFederal,'Carga tributária federal'),
+     pTotTribEst:percentage(issuance?.percentState,'Carga tributária estadual'),
+     pTotTribMun:percentage(issuance?.percentMunicipal,'Carga tributária municipal')};
  const payload={ambiente:'restrita',prestador:{
    cnpj,cLocEmi:city,serie:series,opSimpNac,regEspTrib,
    ...(issuance?.regApTribSN?{regApTribSN:str(issuance.regApTribSN,/^[123]$/,'Apuração Simples Nacional',1)}:{})
@@ -91,9 +93,7 @@ export function prepareNationalDpsInput({document,issuer,profile,customer,issuan
  },emissao:{
    nDPS:number,dhEmi:issuedAt,dCompet:snapshot.nfseRoute.competenceDate,
    tomador,valores:{vServ:(total/100).toFixed(2)},
-   tributacaoMunicipal:{tribISSQN,tpRetISSQN,
-     ...(tribISSQN==='3'?{cPaisResult:'BR'}:{}),
-     ...(tribISSQN==='2'?{tpImunidade:str(issuance?.tpImunidade,/^[1-9]$/,'Imunidade ISS',1)}:{})},
+   tributacaoMunicipal:{tribISSQN,tpRetISSQN},
    tributacaoFederal:{piscofins:{CST:federal}},
    totTrib
  }};
