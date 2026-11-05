@@ -23,7 +23,7 @@ Os recursos do instalador são executáveis compartilhados. Dados fiscais ficam 
 
 Esses arquivos são criados na primeira inicialização do executável quando o bundle é íntegro; **não** são sobrescritos nas atualizações. Certificados digitais, senhas e configuração fiscal do contribuinte **nunca** são adicionados ao pacote nem ao Git.
 
-A emissão permanece bloqueada até a habilitação explícita em `fiscal_settings` e depende de: CNPJ/UF/regime, certificado e credenciamento, configuração nativa do ACBr, INI tributário revisado e homologação junto à SEFAZ ou ao município. **O gerador automático de INIs tributários completos não foi implementado**; o bundle resolve a distribuição da infraestrutura, não a conformidade fiscal da operação.
+A homologação é disponibilizada quando o contribuinte conclui o cadastro fiscal. O cliente importa certificado A1 pela interface; o PFX e a senha são cifrados por unidade no perfil local e usados temporariamente pelo ACBr. A NF-e dispõe de revisão tributária guiada, sem necessidade de preparar arquivo JSON/INI manualmente. **Ainda pendem homologação real, A3 assistido, sequenciamento legal, regras tributárias completas e suporte NFS-e por município.**
 
 ## Construção reprodutível — Windows builder (não cliente)
 

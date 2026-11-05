@@ -3,7 +3,8 @@
 // manifesto vinculado ao snapshot canônico e ACBrLib compilada/instalada pelo operador.
 // Segredos do certificado permanecem na configuração externa da própria ACBrLib.
 import {spawn} from 'node:child_process';
-import {readFileSync,realpathSync,statSync} from 'node:fs';
+import {createHash,randomBytes,randomInt} from 'node:crypto';
+import {readFileSync,realpathSync,statSync,writeFileSync,existsSync,renameSync,rmSync} from 'node:fs';
 import {isAbsolute,join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {prepareReviewedFiscalIni} from './fiscal-ini-preparer.js';
@@ -172,8 +173,8 @@ export function createAcbrLibFiscalProvider(opts={}){
     const iniPath=resolveInputs(inputDir,document,safeIssuer);
     return {kind,documentId:Number(document.id),iniPath,
       snapshotHash:document.snapshot_hash,amountCents:Number(document.amount_cents),environment:safeIssuer.environment,
-      issuerCnpj:safeIssuer.cnpj,
-      ...libraries[libraryKind],issuerUf:safeIssuer.uf};
+      issuerCnpj:safeIssuer.cnpj,issuerUf:safeIssuer.uf,
+      ...libraries[libraryKind]};
   };
   return {
     name:'acbrlib-local',

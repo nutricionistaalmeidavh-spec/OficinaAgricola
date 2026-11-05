@@ -39,14 +39,15 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
      state=input.stateRegistration===undefined?old.state_registration:clean(input.stateRegistration).slice(0,40),
      municipality=input.municipalRegistration===undefined?old.municipal_registration:clean(input.municipalRegistration).slice(0,40),
      environment=input.environment===undefined?old.environment:clean(input.environment).toUpperCase(),
-     enabled=input.enabled===undefined?Boolean(old.enabled):input.enabled===true,
+     // A transmissão em homologação é habilitada pelo cadastro válido, sem toggle manual.
+     enabled=validCnpj(cnpj)&&validStates.has(uf)&&/^\d{7}$/.test(ibge)&&validRegimes.has(regime),
      production=input.productionConfirmed===undefined?Boolean(old.production_confirmed):input.productionConfirmed===true;
    if(cnpj&&!validCnpj(cnpj))fail('CNPJ do emissor inválido');
    if(uf&&!validStates.has(uf))fail('UF do emissor inválida');
    if(ibge&&!/^\d{7}$/.test(ibge))fail('Município IBGE inválido');
    if(regime&&!validRegimes.has(regime))fail('Regime tributário inválido');
    if(!['HOMOLOGACAO','PRODUCAO'].includes(environment))fail('Ambiente fiscal inválido');
-   if(enabled&&(!validCnpj(cnpj)||!validStates.has(uf)||!/^\d{7}$/.test(ibge)||!validRegimes.has(regime)))
+   if(input.enabled===true&&!enabled)
      fail('Complete CNPJ, UF, município IBGE e regime tributário');
    if(enabled)assertFiscalIssuerUf({uf,municipalityIbge:ibge});
    if(enabled&&environment==='PRODUCAO'&&!production)

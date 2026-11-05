@@ -121,6 +121,7 @@ const ROUTES=[
  'GET /api/fiscal/:id /v1/fiscal/:id FIN',
  'GET /api/fiscal/:id/events /v1/fiscal/:id/events FIN',
  'POST /api/fiscal/:id/submit /v1/fiscal/:id/submit FIN',
+ 'POST /api/fiscal/:id/review /v1/fiscal/:id/review ADMIN',
  'POST /api/fiscal/:id/reconcile /v1/fiscal/:id/reconcile FIN',
  'POST /api/fiscal/:id/cancel /v1/fiscal/:id/cancel ADMIN',
  'GET /api/services /v1/services ALL',
