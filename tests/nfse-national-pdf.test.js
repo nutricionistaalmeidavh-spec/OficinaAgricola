@@ -6,7 +6,7 @@ import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 const key='31062002211222333000181000000000012326111234567890';
-const store={withTlsIdentity:async(_issuer,fn)=>fn({pfx:Buffer.from('only-local'),passphrase:'only-local'})};
+const store={identity:()=> 'opaque-test-cert-identity',withTlsIdentity:async(_issuer,fn)=>fn({pfx:Buffer.from('only-local'),passphrase:'only-local'})};
 test('DANFSe é recuperado apenas pelo ADN oficial com chave autorizada e mTLS A1',async()=>{
  const urls=[];
  const c=createNationalNfseClient({certificateStore:store,
@@ -38,6 +38,7 @@ test('PDF de NFS-e autorizada é acessível pelo provedor instalado no Oficina',
        return Buffer.from('%PDF-1.7\n documento oficial');
      }}
    });
+   assert.equal(provider.certificateIdentity(),'opaque-test-cert-identity');
    const pdf=await provider.printPdf({document:{
      kind:'NFSE',status:'AUTORIZADA_HOMOLOGACAO',access_key:key,
      issuer_snapshot_json:JSON.stringify(issuer)
