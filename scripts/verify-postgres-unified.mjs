@@ -281,6 +281,79 @@ try{
    assert.equal(fail.status,409,JSON.stringify(fail.data));
    assert.equal(Number((await call('/api/parts/'+part.data.id,{token,unit})).data.quantity),7);
  });
+ await test('PostgreSQL: GTIN, contagem auditada, concorrência na aplicação e saldo obsoleto',async()=>{
+  const signed=await registry.login({username:'admin-p4',password:'TestPass2026!'});
+  const token=signed.token,unit=1;
+  const part=await call('/api/parts',{method:'POST',token,unit,body:{
+   requestId:'gtin-pg-create',sku:'QA-PG-GTIN',description:'Filtro de código',
+   barcode:'5901234123457',salePriceCents:2000}});
+  assert.equal(part.status,200,JSON.stringify(part.data));
+  const match=await call('/api/parts/barcode/5901234123457',{token,unit});
+  assert.equal(match.status,200,JSON.stringify(match.data));
+  assert.equal(match.data.id,part.data.id);
+  assert.equal((await call('/api/parts/page?search=5901234123457',{token,unit})).data.items.length,1);
+  const entered=await call('/api/inventory/movements',{method:'POST',token,unit,body:{
+   requestId:'gtin-pg-entry',partId:part.data.id,type:'ENTRADA',quantity:10}});
+  assert.equal(entered.status,200,JSON.stringify(entered.data));
+  const create=()=>call('/api/inventory/stocktakes',{method:'POST',token,unit,
+   body:{requestId:'pg-count-001',name:'Inventário PostgreSQL',partIds:[part.data.id]}});
+  const started=await create();
+  assert.equal(started.status,200,JSON.stringify(started.data));
+  assert.equal(started.data.lines[0].expected_quantity,10);
+  const counted=await call('/api/inventory/stocktakes/'+started.data.id+'/counts',{method:'POST',token,unit,
+   body:{requestId:'pg-count-002',counts:[{partId:part.data.id,quantity:7}]}});
+  assert.equal(counted.status,200,JSON.stringify(counted.data));
+  assert.equal(counted.data.lines[0].difference,-3);
+  assert.equal(Number((await call('/api/parts/'+part.data.id,{token,unit})).data.quantity),10);
+  const replies=await Promise.all([1,2].map(n=>call('/api/inventory/stocktakes/'+started.data.id+'/apply',
+   {method:'POST',token,unit,body:{requestId:'pg-count-apply-'+n,reason:'Contagem física revisada'}})));
+  assert.ok(replies.every(x=>x.status===200),JSON.stringify(replies));
+  const runtime=await factory.handlerForUnit({id:1,companyId:1});
+  assert.equal(Number((await runtime.services.getPart(part.data.id)).quantity),7);
+  const adj=await call('/api/inventory/history?type=AJUSTE&search=QA-PG-GTIN',{token,unit});
+  assert.equal(adj.data.items.filter(x=>x.source_type==='STOCKTAKE_LINE').length,1);
+  assert.equal((await runtime.services.reconcileStock(part.data.id)).difference,0);
+  const stale=await call('/api/inventory/stocktakes',{method:'POST',token,unit,body:{
+   requestId:'pg-count-003',name:'Contagem concorrente',partIds:[part.data.id]}});
+  assert.equal(stale.status,200);
+  await call('/api/inventory/stocktakes/'+stale.data.id+'/counts',{method:'POST',token,unit,
+   body:{requestId:'pg-count-004',counts:[{partId:part.data.id,quantity:6}]}});
+  await runtime.services.postStockMovement({partId:part.data.id,type:'SAIDA_MANUAL',quantity:1});
+  const conflict=await call('/api/inventory/stocktakes/'+stale.data.id+'/apply',{method:'POST',token,unit,
+   body:{requestId:'pg-count-005',reason:'Saldo mudou no período'}});
+  assert.equal(conflict.status,409,JSON.stringify(conflict.data));
+  assert.equal((await runtime.services.reconcileStock(part.data.id)).difference,0);
+ });
+ await test('PostgreSQL: concorrência venda contra consumo na OS e duas vendas',async()=>{
+  const signed=await registry.login({username:'admin-p4',password:'TestPass2026!'});
+  const token=signed.token,unit=1;
+  const runtime=await factory.handlerForUnit({id:1,companyId:1}),s=runtime.services;
+  const part=await s.createPart({sku:'QA-PG-RACE-OS',description:'Peça de corrida',salePriceCents:1000});
+  await s.postStockMovement({partId:part.id,type:'ENTRADA',quantity:1});
+  const customer=await s.createCustomer({name:'Cliente corrida'});
+  const machine=await s.createMachine({customerId:customer.id,type:'Carro',model:'Modelo QA'});
+  const order=await s.createWorkOrder({customerId:customer.id,machineId:machine.id,problemReported:'Revisão'});
+  // Fixture: quote approvals are verified by the existing separate approval journey.
+  await runtime.port.run("UPDATE work_orders SET status='APROVADA' WHERE id=?",[order.id]);
+  const results=await Promise.all([
+   call('/api/sales',{method:'POST',token,unit,body:{requestId:'race-sale-os-1',paymentMethod:'PIX',
+    expectedTotalCents:1000,items:[{partId:part.id,quantity:1,expectedUnitPriceCents:1000}]}}),
+   call('/api/work-orders/'+order.id+'/parts',{method:'POST',token,unit,body:{
+    requestId:'race-consume-os-1',partId:part.id,quantity:1}})
+  ]);
+  assert.equal(results.filter(x=>x.status===200).length,1,JSON.stringify(results));
+  assert.equal(results.filter(x=>x.status===409).length,1,JSON.stringify(results));
+  assert.equal(Number((await s.getPart(part.id)).quantity),0);
+  assert.equal((await s.reconcileStock(part.id)).difference,0);
+  const part2=await s.createPart({sku:'QA-PG-RACE-VENDA',description:'Concorrência vendas',salePriceCents:500});
+  await s.postStockMovement({partId:part2.id,type:'ENTRADA',quantity:1});
+  const sells=await Promise.all([1,2].map(n=>call('/api/sales',{method:'POST',token,unit,
+   body:{requestId:'race-two-sales-'+n,paymentMethod:'PIX',expectedTotalCents:500,
+    items:[{partId:part2.id,quantity:1,expectedUnitPriceCents:500}]}})));
+  assert.equal(sells.filter(x=>x.status===200).length,1,JSON.stringify(sells));
+  assert.equal(sells.filter(x=>x.status===409).length,1,JSON.stringify(sells));
+  assert.equal((await s.reconcileStock(part2.id)).difference,0);
+ });
 await test('bound PostgreSQL tenant fails closed if physical schema is missing',async()=>{
    const adminId=(await registry.login({username:'admin-p4',password:'TestPass2026!'})).user.id;
    const company=await registry.createCompany(adminId,{slug:'sem-schema',name:'Sem Schema'});
