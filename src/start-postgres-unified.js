@@ -92,7 +92,7 @@ function fiscalProviderForUnit(unit){
     if(!existsSync(target)){
       // Criar apenas o modelo vazio da unidade. Nunca copiar um INI com
       // certificado/senha de outra unidade ou da configuração global.
-      try{writeFileSync(target,'[Principal]\\nLogNivel=0\\n',{flag:'wx',mode:0o600})}
+      try{writeFileSync(target,'[Principal]\nLogNivel=0\n',{flag:'wx',mode:0o600})}
       catch(error){if(error.code!=='EEXIST')throw error}
     }
     return target;
