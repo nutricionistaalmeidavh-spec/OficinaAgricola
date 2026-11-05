@@ -25,16 +25,17 @@
     const cert=fiscal?.certificate?.configured===true;
     const provider=fiscal?.providerReady===true;
     const fiscalTestEligible=fiscalRegistration&&cert&&provider;
-    const fiscalProduction=fiscalTestEligible&&fiscal?.authorizationVerified===true&&
-      fiscal?.taxProfileVerified===true&&settings?.environment==='PRODUCAO'&&
-      settings?.production_confirmed===true;
+    const fiscalProduction=fiscalTestEligible&&fiscal?.productionReady===true;
+    const fiscalHomologationVerified=fiscal?.authorizationVerified===true;
+    const fiscalModels=fiscal?.models&&typeof fiscal.models==='object'?fiscal.models:{};
     const operationReady=db&&companyReady;
     return {
       unitId:unitKey(),db,companyReady,operationsConfigured,
       servicesCount:array(services).length,techniciansCount:array(technicians).length,
       fiscalRegistration,cert,provider,fiscalTestEligible,fiscalProduction,
-      operationReady,
-      fiscalState:fiscalProduction?'PRODUCAO_AUTORIZADA':
+      fiscalHomologationVerified,fiscalModels,operationReady,
+      fiscalState:fiscalProduction?'PRODUCAO_APTA_POR_MODELO':
+        fiscalHomologationVerified?'HOMOLOGACAO_VERIFICADA':
         fiscalTestEligible?'PREPARADO_PARA_HOMOLOGACAO':'CONFIGURACAO_PENDENTE',
       pendingCore:(!db?1:0)+(!companyReady?1:0),
       coreCompleted:Number(db)+Number(companyReady),
@@ -61,13 +62,13 @@
         'Cadastrar serviços e técnicos; pode ser feito depois'],
       ['P3','Certificado e ambiente fiscal',status.fiscalTestEligible,
         'Completar cadastro fiscal, certificado A1/A3 e ACBr local'],
-      ['P4','Diagnóstico e homologação',false,
-        'Executar diagnóstico SEFAZ; autorização real requer testes com emitente credenciado'],
+      ['P4','Diagnóstico e homologação',status.fiscalHomologationVerified,
+        'Autorização real em homologação, individual por modelo de documento'],
       ['P5','Liberação',status.operationReady,
         'Oficina operacional independente da liberação fiscal'],
       ['P6','Retomada',true,'Progresso calculado a partir dos cadastros existentes'],
-      ['P7','QA de distribuição',false,
-        'Validar instalação limpa Windows e CI antes de distribuir']
+      ['P7','QA de distribuição',null,
+        'Validado pela ArtiSys no pipeline do instalador, não pelo cadastro do cliente']
     ];
   }
   function actionButton(action,text){
@@ -106,7 +107,7 @@
       button.onclick=async()=>{
         const action=button.dataset.firstAccessAction;
         if(action==='dismiss'){setDismissed(true);if(!document.querySelector('#modal')?.classList.contains('hidden'))closeModal();await renderBanner();return;}
-        if(action==='open'){setDismissed(false);await openWizard(status);return;}
+        if(action==='open'){setDismissed(false);await openWizard();return;}
         try{
           if(action==='company'){closeModal();await navigate('settings');return;}
           if(action==='services'){closeModal();await navigate('services');return;}
@@ -161,8 +162,8 @@
     const s=cached||await readStatus();
     const steps=statuses(s);
     const items=steps.map(([id,title,ok,help])=>{
-      const diagnostic=id==='P4';
-      const status=diagnostic?'Verificação necessária':label(ok,'Concluído','Pendente');
+      const status=ok===null?'Controle de distribuição da ArtiSys':
+        label(ok,'Concluído','Pendente');
       return '<div class="list-item" style="align-items:flex-start"><div><strong>'+
         esc(id+' — '+title)+'</strong><br><small>'+esc(status+' · '+help)+
         '</small></div></div>';
@@ -173,11 +174,22 @@
     showModal('Preparar o ArtiSys Oficina',
       '<div class="form-stack" data-onboarding-unit="'+esc(s.unitId)+'">'+
       '<p><strong>'+esc(s.operationReady?'Oficina pronta':'Configuração operacional pendente')+'</strong> · '+
-      esc(s.fiscalProduction?'Fiscal autorizado para produção':
+      esc(s.fiscalProduction?'Ao menos um modelo fiscal apto para produção':
+        s.fiscalHomologationVerified?'Homologação comprovada; confira cada modelo':
         s.fiscalTestEligible?'Fiscal apto a iniciar testes de homologação':
         'Fiscal ainda não preparado para homologação')+'</p>'+
       warning+
       '<div class="list">'+items+'</div>'+
+      '<p><strong>Liberação fiscal por modelo</strong></p>'+
+      '<div class="list">'+['NFE','NFCE','NFSE'].map(kind=>{
+        const model=s.fiscalModels[kind];
+        const title=kind==='NFE'?'NF-e':kind==='NFCE'?'NFC-e':'NFS-e';
+        const detail=model?.productionReady?'Apto a tentar emissão em produção':
+          model?.homologationVerified?'Homologação comprovada':'Sem prova suficiente';
+        return '<div class="list-item"><div><strong>'+esc(title)+'</strong><br><small>'+
+          esc(detail+' · '+(model?.reason||'Verificação fiscal indisponível'))+
+          '</small></div></div>';
+      }).join('')+'</div>'+
       '<p><strong>1. Dados da empresa</strong></p><div class="action-row">'+
       actionButton('company','Editar empresa')+actionButton('fiscal-settings','Dados fiscais')+'</div>'+
       '<p><strong>2. Operação (opcional)</strong></p><div class="action-row">'+
