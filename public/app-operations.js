@@ -6,7 +6,7 @@ async function renderInventory({cursor=null,loaded=[]}={}){
   office?api('/api/purchases/orders?limit=12'):Promise.resolve([])
  ]);
  const parts=loaded.concat(page.items);
- setContent(`<div class="section-head"><div><h2>Estoque</h2><span class="muted">Saldos por peça e movimentações auditáveis</span></div>
+ setContent(`${window.OficinaBarcode?.markup('inventory')||''}<div class="section-head"><div><h2>Estoque</h2><span class="muted">Saldos por peça e movimentações auditáveis</span></div>
   <div class="action-row">
    <button id="stockHistory" type="button" class="btn soft">Histórico de movimentos</button>
    ${office?'<button id="suppliersManage" type="button" class="btn soft">Fornecedores</button><button id="purchaseNew" type="button" class="btn soft">+ Pedido de compra</button><button id="newPart" type="button" class="btn primary">+ Nova peça</button>':''}
@@ -21,6 +21,7 @@ async function renderInventory({cursor=null,loaded=[]}={}){
    <div class="list">${orders.length?orders.map(o=>`<div class="list-item"><div><strong>${esc(o.reference||'Pedido '+String(o.id).slice(-6))}</strong> ${badge(o.status)}
     <br><small>${esc(o.supplier_name)} · ${dt(o.created_at)}</small></div>
     <button type="button" class="btn sm" data-purchase-open="${o.id}">Ver pedido</button></div>`).join(''):'<p class="empty">Nenhum pedido de compra cadastrado.</p>'}</div></section>`:''}`);
+ window.OficinaBarcode?.attach($('#content [data-barcode-panel]'),async code=>{const part=await window.OficinaBarcode.findPartBySku(code,api,{includeInactive:true});if(!part)return {state:'error',message:'Código '+code+' não localizado entre os SKUs cadastrados. Pesquise ou cadastre a peça.'};return {state:'success',message:'Peça '+part.sku+' — '+part.description+' identificada. Saldo: '+part.quantity+'. Nenhum estoque foi movimentado.'};});
  if($('#newPart'))$('#newPart').onclick=()=>partCreateModal();
  $('#stockHistory').onclick=()=>openInventoryHistory().catch(e=>toast(e.message,true));
  if($('#suppliersManage'))$('#suppliersManage').onclick=()=>showSuppliersModal().catch(e=>toast(e.message,true));

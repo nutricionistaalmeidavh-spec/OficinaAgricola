@@ -86,6 +86,7 @@ async function saleModal() {
   const defaultKind=partPage.total?'P':'S';
   showModal('Nova venda de balcão', `<form class="form-stack">
     <label>Cliente (opcional)<select name="customerId" id="saleCustomer"><option value="">Consumidor</option></select></label>
+    ${window.OficinaBarcode?.markup('sale')||''}
     <div class="card-head"><strong>Itens</strong><button type="button" class="btn sm soft" id="addSaleItem">+ Item</button></div>
     <div id="saleItems"></div>
     <div class="field-row"><label>Desconto (R$)<input name="discount" type="number" min="0" step="0.01" value="0"></label><label>Pagamento<select name="paymentMethod"><option>DINHEIRO</option><option>PIX</option><option>CARTAO_DEBITO</option><option>CARTAO_CREDITO</option><option>TRANSFERENCIA</option></select></label></div>
@@ -205,6 +206,26 @@ async function saleModal() {
     updatePreview();
   };
   addRow();
+  const barcodeSalePanel=$('#modalBody [data-barcode-panel]');
+  window.OficinaBarcode?.attach(barcodeSalePanel,async code=>{
+    const part=await window.OficinaBarcode.findPartBySku(code,api);
+    if(!barcodeSalePanel?.isConnected||barcodeSalePanel.closest?.('.modal-backdrop.hidden'))
+      return {state:'warning',message:'Leitura interrompida ao fechar a venda.'};
+    if(!part)return {state:'error',message:'Código '+code+' não localizado entre os SKUs ativos. Pesquise a peça ou cadastre-a no estoque.'};
+    let row=Array.from(document.querySelectorAll('.sale-item-row')).find(item=>$('[data-sale-kind]',item).value==='P'&&!$('[data-sale-part]',item).value);
+    if(!row){addRow();row=Array.from(document.querySelectorAll('.sale-item-row')).at(-1);}
+    const kind=$('[data-sale-kind]',row);
+    kind.value='P';kind.dispatchEvent(new Event('change',{bubbles:true}));
+    const select=$('[data-sale-part]',row);
+    let option=Array.from(select.options).find(item=>item.value===String(part.id));
+    if(!option){option=new Option(part.sku+' — '+part.description+' · '+money(part.sale_price_cents),String(part.id));select.add(option);}
+    option.dataset.priceCents=String(part.sale_price_cents);
+    select.value=String(part.id);
+    select.dispatchEvent(new Event('change',{bubbles:true}));
+    if(modalSession)modalSession.dirty=true;
+    updatePreview();
+    return {state:'success',message:part.sku+' — '+part.description+' adicionada à prévia. Confira quantidade e preço antes de concluir.'};
+  });
   $('#addSaleItem').onclick = addRow;
 }
 
