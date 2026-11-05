@@ -463,7 +463,7 @@ def execute(req):
             # A ACBr retorna um ou mais registros Serial|Razao|CNPJ|Vencimento|CA.
             # Não retornar lista de terceiros ou nomes ao backend.
             issuer = req["issuerCnpj"]
-            matched = re.search(r"\\|"+re.escape(issuer)+r"\\|", detail) is not None
+            matched = re.search(r"\|"+re.escape(issuer)+r"\|", detail) is not None
             return {"status": "CERTIFICATE_MATCH" if matched else "CERTIFICATE_MISMATCH"}
         if req["operation"] == "status":
             if req["kind"] != "NFE":
