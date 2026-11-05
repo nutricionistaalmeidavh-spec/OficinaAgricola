@@ -173,8 +173,10 @@ function drawQr(ops,key){
  }
  return url;
 }
-export function renderNationalDanfse({xml,accessKey,environment}={}){
+export function renderNationalDanfse({xml,accessKey,environment,issuerCnpj}={}){
  const data=readXml(xml,accessKey,environment);
+ if(issuerCnpj&&digits(data.issuer.id)!==digits(issuerCnpj))
+   error('Prestador no XML NFS-e não corresponde ao CNPJ autorizado');
  const p=pdfWriter();
  p.rectangle(5.1,5.1,585.08,831.69,{border:true});
  p.rectangle(8.5,8.5,578.3,36,{shade:true});
