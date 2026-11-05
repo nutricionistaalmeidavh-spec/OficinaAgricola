@@ -1,0 +1,17 @@
+/* Barcode scanner: compact mobile-first component, no external UI dependency. */
+.barcode-panel{margin:0 0 18px;padding:16px;border:1px solid var(--line,#d8e2d5);border-radius:16px;background:var(--surface,#fff);display:grid;gap:12px}
+.barcode-panel-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.barcode-panel-head strong{font-size:15px}
+.barcode-panel-head small,.barcode-panel-status{font-size:12px;line-height:1.5}
+.barcode-panel-controls{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap}
+.barcode-panel-controls label{display:grid;gap:6px;flex:1 1 225px;min-width:0;font-size:12px}
+.barcode-panel-controls input{width:100%;min-height:44px;padding:10px 12px;border-radius:9px;border:1px solid var(--line,#ccd8c8);font:inherit;background:var(--surface,#fff);color:inherit}
+.barcode-panel-controls button{min-height:44px;white-space:nowrap}
+.barcode-panel video:not([hidden]){display:block;width:100%;max-height:320px;object-fit:cover;aspect-ratio:4/3;border-radius:12px;background:#111}
+.barcode-panel [hidden]{display:none!important}
+.barcode-panel-status{margin:0;min-height:18px}
+.barcode-panel[data-scan-state=error] .barcode-panel-status{color:#b42318}
+.barcode-panel[data-scan-state=success] .barcode-panel-status{color:#217a3b}
+.barcode-panel[data-scan-state=pending] .barcode-panel-status{color:#915b07}
+@media(max-width:560px){.barcode-panel{padding:12px}.barcode-panel-controls{display:grid;grid-template-columns:minmax(0,1fr);gap:8px}.barcode-panel-controls label{min-width:0}.barcode-panel-controls button{width:100%}}
+@media(prefers-reduced-motion:reduce){.barcode-panel *{scroll-behavior:auto!important}}
