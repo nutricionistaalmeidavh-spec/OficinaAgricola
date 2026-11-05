@@ -1,6 +1,8 @@
 import { readFileSync, statSync } from 'node:fs';
 import { createLocalFiscalProvider } from './local-fiscal-provider.js';
 import { createAcbrLibFiscalProvider } from './acbrlib-fiscal-provider.js';
+import {createNationalNfseProvider} from './nfse-national-provider.js';
+import {createLocalFiscalCertificateStore} from './fiscal-certificate-store.js';
 
 // Trusted server-side configuration only. No certificates, secrets or tokens
 // are accepted from the HTTP request body or stored in the tenant registry.
@@ -35,7 +37,18 @@ export function validateTenantFiscalConfigs(configs){
         fail('ACBr requer inputDir e pelo menos uma biblioteca local configurada');
       if(config.nfeLib&&!config.nfeConfig)fail('ACBr NFe requer configuração exclusiva');
       if(config.nfseLib&&!config.nfseConfig)fail('ACBr NFSe requer configuração exclusiva');
-    }else fail('Tipo fiscal inválido: sidecar ou acbr');
+    }else if(config.type==='nacional'){
+      if(typeof config.inputDir!=='string'||typeof config.certificateDir!=='string')
+        fail('Emissor Nacional exige pastas locais privadas por unidade');
+      if(config.nfseChannel&&config.nfseChannel!=='NACIONAL')
+        fail('SEFIN Nacional não permite canal municipal');
+      for(const other of Object.entries(configs)){
+        if(other[0]!==id&&other[1]?.type==='nacional'&&
+          (other[1].inputDir===config.inputDir||
+           other[1].certificateDir===config.certificateDir))
+          fail('Empresas não podem compartilhar armazenamento de DPS/certificado');
+      }
+    }else fail('Tipo fiscal inválido: sidecar, acbr ou nacional');
   }
   return configs;
 }
@@ -49,6 +62,10 @@ export function loadTenantFiscalConfigs(path){
 export function resolveTenantFiscalProvider({
   companyId,configs={},providers={
     sidecar:options=>createLocalFiscalProvider({url:options.url}),
+    nacional:options=>createNationalNfseProvider({
+      inputDir:options.inputDir,
+      certificateStore:createLocalFiscalCertificateStore({directory:options.certificateDir})
+    }),
     acbr:options=>createAcbrLibFiscalProvider({
       nfeLib:options.nfeLib||null,nfseLib:options.nfseLib||null,
       nfeConfig:options.nfeConfig||null,nfseConfig:options.nfseConfig||null,
@@ -82,7 +99,7 @@ export function resolveTenantFiscalProvider({
       selectA3Certificate:input=>underlying.selectA3Certificate(input)}:{}),
     ...(typeof underlying.diagnose==='function'?{
       diagnose:input=>underlying.diagnose(input)}:{}),
-    nfseChannel:cfg.nfseChannel||null,
+    nfseChannel:cfg.nfseChannel||underlying.nfseChannel||null,
     nfseMunicipalityIbge:cfg.nfseMunicipalityIbge||null,
     ...(typeof underlying.prepare==='function'?{prepare:args=>{ensureIssuer(args);return underlying.prepare(args);}}:{}),
     transmit:async args=>{ensureIssuer(args);return underlying.transmit(args);},
@@ -93,6 +110,16 @@ export function resolveTenantFiscalProvider({
       consultCancellation:async args=>{ensureIssuer(args);return underlying.consultCancellation(args);}}:{}),
     ...(typeof underlying.prepareCancellation==='function'?{
       prepareCancellation:args=>{ensureIssuer(args);return underlying.prepareCancellation(args);}}:{}),
+    ...(typeof underlying.listTaxProfiles==='function'?{
+      listTaxProfiles:args=>{ensureIssuer(args);return underlying.listTaxProfiles(args)}}:{}),
+    ...(typeof underlying.saveTaxProfile==='function'?{
+      saveTaxProfile:args=>{ensureIssuer(args);return underlying.saveTaxProfile(args)}}:{}),
+    ...(typeof underlying.prepareAutomaticNationalDps==='function'?{
+      prepareAutomaticNationalDps:args=>{ensureIssuer(args);return underlying.prepareAutomaticNationalDps(args)}}:{}),
+    ...(typeof underlying.saveNationalDps==='function'?{
+      saveNationalDps:args=>{ensureIssuer(args);return underlying.saveNationalDps(args)}}:{}),
+    ...(typeof underlying.nationalDpsStatus==='function'?{
+      nationalDpsStatus:args=>{ensureIssuer(args);return underlying.nationalDpsStatus(args)}}:{}),
     ...(typeof underlying.printPdf==='function'?{
       printPdf:async args=>{ensureIssuer(args);return underlying.printPdf(args);}}:{})
   });
