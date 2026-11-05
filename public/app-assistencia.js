@@ -100,7 +100,7 @@ async function saleModal() {
   </form>`, async fd => {
     if (fd.get('paymentMethod') !== 'DINHEIRO' && fd.get('paymentVerified') !== 'on')
       throw new Error('Pagamento não conferido. Confirme o recebimento no banco ou na maquininha antes de concluir.');
-    const items = $('.sale-item-row').map(row => {
+    const items = $$('.sale-item-row').map(row => {
       const kind=$('[data-sale-kind]',row).value;
       const select=kind==='P'?$('[data-sale-part]',row):$('[data-sale-service]',row);
       const id=Number(select?.value||0);
