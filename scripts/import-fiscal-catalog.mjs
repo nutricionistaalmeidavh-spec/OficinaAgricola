@@ -28,7 +28,7 @@ const codes=(file,header,pattern)=>{
  return [...new Set(values)].sort();
 };
 const ncm=codes(options.ncm,'NCM',/^\d{8}$/);
-const cfop=codes(options.cfop,'CFOP',/^[567]\d{3}$/);
+const cfop=codes(options.cfop,'CFOP',/^[123567]\d{3}$/);
 const rows=read(options.ibscbs);
 if(rows[0]?.join(',')!=='CST,cClassTrib,regime,reduction,deferral')
  fail('Cabeçalho IBS/CBS inválido: CST,cClassTrib,regime,reduction,deferral');
