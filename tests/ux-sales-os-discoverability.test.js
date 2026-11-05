@@ -36,11 +36,11 @@ test('P2: estados e acessibilidade mobile com botões descobríveis',()=>{
   assert.match(css,/@media\(max-width:840px\)/);
 });
 
-test('regressão: markup da OS e seleção de vários itens não escondem funções nem quebram envio',()=>{
+test('regressão: HTML e coleções JS preservam recursos no browser',()=>{
   assert.match(orders,/<div class="detail-grid">/);
   assert.doesNotMatch(orders,/<div class="detail-grid'>/);
-  assert.match(sales,/const items = \\\$\\\$\\\('\.sale-item-row'\\\)\.map/);
-  assert.match(orders,/\\\$\\\$\\\('\[data-reverse-part\]'\\\)\.forEach/);
-  assert.match(orders,/\\\$\\\$\\\('\[data-reverse-receipt\]'\\\)\.forEach/);
-  assert.match(fiscal,/\\\$\\\$\\\('\[data-tax-edit\]'\\\)\.forEach/);
+  assert.ok(sales.includes("const items = $$('.sale-item-row').map"));
+  assert.ok(orders.includes("$$('[data-reverse-part]').forEach"));
+  assert.ok(orders.includes("$$('[data-reverse-receipt]').forEach"));
+  assert.ok(fiscal.includes("$$('[data-tax-edit]').forEach"));
 });
