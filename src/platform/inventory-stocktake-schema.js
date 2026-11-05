@@ -1,6 +1,6 @@
 // Schema extension for physical counts and product barcodes. Never rewrites stock ledger.
 const ddl=[
- ~CREATE TABLE IF NOT EXISTS stocktakes(
+ `CREATE TABLE IF NOT EXISTS stocktakes(
   id INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'ABERTO' CHECK(status IN ('ABERTO','APLICADO')),
@@ -8,8 +8,8 @@ const ddl=[
   applied_by INTEGER REFERENCES users(id),
   reason TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL,updated_at TEXT NOT NULL,applied_at TEXT
- )~,
- ~CREATE TABLE IF NOT EXISTS stocktake_lines(
+ )`,
+ `CREATE TABLE IF NOT EXISTS stocktake_lines(
   id INTEGER PRIMARY KEY,
   stocktake_id INTEGER NOT NULL REFERENCES stocktakes(id),
   part_id INTEGER NOT NULL REFERENCES parts(id),
@@ -17,17 +17,17 @@ const ddl=[
   counted_quantity REAL CHECK(counted_quantity>=0),
   movement_id INTEGER UNIQUE REFERENCES inventory_movements(id),
   UNIQUE(stocktake_id,part_id)
- )~,
- ~CREATE TABLE IF NOT EXISTS stocktake_count_events(
+ )`,
+ `CREATE TABLE IF NOT EXISTS stocktake_count_events(
   id INTEGER PRIMARY KEY,
   stocktake_line_id INTEGER NOT NULL REFERENCES stocktake_lines(id),
   previous_quantity REAL,
   counted_quantity REAL NOT NULL CHECK(counted_quantity>=0),
   created_by INTEGER REFERENCES users(id),
   created_at TEXT NOT NULL
- )~,
- ~CREATE INDEX IF NOT EXISTS idx_stocktake_count_events ON stocktake_count_events(stocktake_line_id,created_at)~,
- ~CREATE INDEX IF NOT EXISTS idx_stocktake_lines_stocktake ON stocktake_lines(stocktake_id,part_id)~
+ )`,
+ `CREATE INDEX IF NOT EXISTS idx_stocktake_count_events ON stocktake_count_events(stocktake_line_id,created_at)`,
+ `CREATE INDEX IF NOT EXISTS idx_stocktake_lines_stocktake ON stocktake_lines(stocktake_id,part_id)`
 ].map(s=>s.replaceAll('~',''));
 const VERSION='2026-11-05-stocktake-barcode-v1';
 export function stocktakeSchema(engine){
