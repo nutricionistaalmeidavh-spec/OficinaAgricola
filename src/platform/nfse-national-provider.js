@@ -4,6 +4,8 @@ import {createNationalNfseClient} from './nfse-national-api.js';
 import {createLocalNationalDpsStore} from './nfse-national-dps-store.js';
 import {createLocalFiscalTaxStore} from './local-fiscal-tax-store.js';
 import {join} from 'node:path';
+import {loadPfxFromBuffer,signDps,verifyDps} from '@useinvio/nfse-sdk';
+import {prepareNationalDpsInput} from './nfse-national-automatic.js';
 
 export function createNationalNfseProvider({certificateStore,inputDir,client}={}){
  if(!certificateStore||typeof certificateStore.withTlsIdentity!=='function')
@@ -20,6 +22,24 @@ export function createNationalNfseProvider({certificateStore,inputDir,client}={}
   installCertificate:input=>certificateStore.install(input),
   listTaxProfiles:({issuer})=>taxStore.listProfiles({issuer}),
   saveTaxProfile:({issuer,profile})=>taxStore.saveProfile({issuer,profile}),
+  prepareAutomaticNationalDps:async({document,issuer,profileId,customer,issuance}={})=>{
+   const existing=dps.read({document,issuer});
+   if(existing)return {prepared:true,idDps:existing.idDps,existing:true};
+   if(certificateStore.status().certificateType!=='A1')
+     throw Error('A geração automática da DPS exige certificado A1 instalado nesta empresa');
+   const profiles=taxStore.listProfiles({issuer});
+   const profile=profiles.find(x=>x.id===profileId&&x.kind==='SERVICE');
+   if(!profile)throw Error('Selecione perfil tributário de serviço cadastrado nesta empresa');
+   const prepared=prepareNationalDpsInput({document,issuer,profile,customer,issuance});
+   const xmlSigned=await certificateStore.withTlsIdentity({cnpj:issuer.cnpj},identity=>{
+     const material=loadPfxFromBuffer(identity.pfx,identity.passphrase);
+     const signed=signDps(prepared.xml,prepared.idDps,material);
+     if(!verifyDps(signed,material.certPem))
+       throw Error('Assinatura XMLDSig local inválida: DPS não armazenada');
+     return signed;
+   });
+   return {...dps.save({document,issuer,signedDpsXml:xmlSigned}),automatic:true};
+  },
   saveNationalDps:args=>dps.save(args),
   nationalDpsStatus:args=>dps.status(args),
   prepare:({document,issuer})=>{
