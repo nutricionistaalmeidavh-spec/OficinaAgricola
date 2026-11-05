@@ -132,6 +132,7 @@ test('A3 provider lists Windows certificates and binds selected serial to issuer
       {serial:'AA998877',cnpj:'11222333000181',name:'Empresa A',validUntil:'31/12/2032'},
       {serial:'BB887766',cnpj:'99888777000166',name:'Empresa B',validUntil:'31/12/2032'}
      ]};
+     if(req.operation==='certificate')return {status:'CERTIFICATE_MATCH'};
      return {status:'ONLINE',code:'107'};
    }});
   const settings={enabled:1,issuer_cnpj:'11222333000181',issuer_uf:'SP',environment:'HOMOLOGACAO'};
