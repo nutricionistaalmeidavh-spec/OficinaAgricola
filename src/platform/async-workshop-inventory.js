@@ -1,4 +1,5 @@
 import {randomBytes,createHash} from 'node:crypto';
+import {normalizeGtin} from './inventory-gtin.js';
 
 // The materialized part quantity is always modified together with the
 // inventory_movements canonical ledger, on one DB connection/atomic D1 batch.
@@ -29,14 +30,14 @@ export function createAsyncWorkshopInventory(port){
  async function listParts({includeInactive=false,search=''}={}){
    const like='%'+clean(search)+'%';
    return port.all(`SELECT * FROM parts WHERE (?=1 OR active=1)
-     AND (sku LIKE ? OR description LIKE ? OR category LIKE ?)
-     ORDER BY description,id`,[includeInactive?1:0,like,like,like]);
+     AND (sku LIKE ? OR description LIKE ? OR category LIKE ? OR barcode LIKE ?)
+     ORDER BY description,id`,[includeInactive?1:0,like,like,like,like]);
  }
  async function listPartsPage({includeInactive=false,search='',limit=50,cursor=null}={}){
    const filter=['(?=1 OR active=1)'],params=[includeInactive?1:0];
    if(clean(search)){const like='%'+clean(search)+'%';
-     filter.push('(sku LIKE ? OR description LIKE ? OR category LIKE ?)');
-     params.push(like,like,like);
+     filter.push('(sku LIKE ? OR description LIKE ? OR category LIKE ? OR barcode LIKE ?)');
+     params.push(like,like,like,like);
    }
    const where=' WHERE '+filter.join(' AND '),size=restrict(limit,1,100);
    const total=Number((await port.first('SELECT COUNT(*) n FROM parts'+where,params)).n);
@@ -55,11 +56,12 @@ export function createAsyncWorkshopInventory(port){
    const minStock=input.minStock===undefined?Number(old.min_stock):Number(input.minStock);
    if(!Number.isFinite(minStock)||minStock<0)fail('Estoque mínimo inválido');
    await port.run(`UPDATE parts SET sku=?,description=?,category=?,unit=?,
-     cost_cents=?,sale_price_cents=?,min_stock=?,location=?,active=?,updated_at=? WHERE id=?`,[
+     cost_cents=?,sale_price_cents=?,min_stock=?,location=?,barcode=?,active=?,updated_at=? WHERE id=?`,[
      sku,description,pick('category','category'),pick('unit','unit'),
      input.costCents===undefined?old.cost_cents:nonnegative(input.costCents,'Custo'),
      input.salePriceCents===undefined?old.sale_price_cents:nonnegative(input.salePriceCents,'Preço'),
      minStock,pick('location','location'),
+     input.barcode===undefined?old.barcode:normalizeGtin(input.barcode),
      input.active===undefined?old.active:input.active?1:0,at(),old.id
    ]);
    return getPart(old.id);
