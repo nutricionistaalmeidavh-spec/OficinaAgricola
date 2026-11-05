@@ -91,9 +91,10 @@ def full_ncm(blob, today):
     raw = source.get("Nomenclaturas")
     if not isinstance(raw, list):
         raise ValueError("NCM sem lista de Nomenclaturas")
-    codes = sorted({str(row.get("Codigo", "")).strip()
+    # Siscomex publica NCM no formato 0101.21.00; normalizar para oito dígitos.
+    codes = sorted({str(row.get("Codigo", "")).replace(".", "")
                     for row in raw if isinstance(row, dict) and
-                    re.fullmatch(r"\d{8}", str(row.get("Codigo", "")).strip())})
+                    re.fullmatch(r"\d{4}\.\d{2}\.\d{2}", str(row.get("Codigo", "")).strip())})
     if len(codes) < MIN_COUNTS["ncm"]:
         from collections import Counter
         print("NCM_DIAG", "TOTAL",len(raw),"SAMPLES",[r.get("Codigo") for r in raw[:18]],
@@ -190,7 +191,7 @@ def main():
     ibs = full_ibscbs(ibs_raw, today)
     sources = {
         "ncm": {"url": NCM_URL, "version": ncm_act + " — " + ncm_date,
-                "publishedAt": args.checked_at,
+                "publishedAt": "2026-09-03",
                 "sha256": hashlib.sha256(ncm_raw).hexdigest()},
         "cfop": {"url": CFOP_URL, "version": "IT 2023.002 v2.10",
                  "publishedAt": "2026-09-04",
