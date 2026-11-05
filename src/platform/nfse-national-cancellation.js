@@ -13,7 +13,7 @@ export function buildNationalCancelRequest({issuer,accessKey,reason,at=new Date(
  if(!['HOMOLOGACAO','PRODUCAO'].includes(issuer?.environment))
    throw Error('Ambiente de cancelamento inválido');
  const why=String(reason||'').trim();
- if(why.length<15||why.length>255||/[\\r\\n<>]/.test(why))
+ if(why.length<15||why.length>255||/[\r\n<>]/.test(why))
    throw Error('Justificativa fiscal exige 15 a 255 caracteres, uma linha');
  if(!(at instanceof Date)||!Number.isFinite(at.getTime()))
    throw Error('Data do evento inválida');
