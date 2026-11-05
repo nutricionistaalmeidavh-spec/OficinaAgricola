@@ -148,7 +148,9 @@ test('primeiro acesso: apresenta quatro etapas em linguagem de oficina e progres
   assert.equal(steps[0].state,'done');
   assert.equal(steps[1].state,'done');
   assert.equal(steps[2].state,'optional');
-  assert.equal(steps[3].state,'optional');
+  assert.equal(steps[3].state,'progress');
+  const noFiscal=ui.evaluate({health,company,services:[],technicians:[]});
+  assert.equal(ui.customerSteps(noFiscal)[3].state,'optional');
   assert.equal(ui.customerProgress(s).completed,2);
   assert.equal(ui.customerProgress(s).total,4);
   assert.equal(ui.customerProgress(s).percentage,50);
