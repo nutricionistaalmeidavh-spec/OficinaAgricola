@@ -84,6 +84,10 @@ function readXml(xml,accessKey,environment){
   iss:child(dpsInfo,'trib'),ibscbs:child(dpsInfo,'IBSCBS'),
   serviceValue:first(field(chain(dpsValues,'vServPrest'),'vServ'),field(total,'vServ')),
   discount:field(chain(dpsValues,'vDescCondIncond'),'vDescIncond'),
+  conditionalDiscount:field(chain(dpsValues,'vDescCondIncond'),'vDescCond'),
+  retained:first(field(total,'vTotRet'),field(total,'vTotalRet')),
+  ibsCbsTotal:field(total,'vTotIBSCBS'),
+  totalWithIbs:first(field(total,'vTotNF'),field(total,'vLiqNFSeIBSCBS')),
   net:first(field(total,'vLiq'),field(chain(total,'vLiq'),'vLiq')),extra:field(dpsInfo,'infCpl')
  };
 }
@@ -312,11 +316,15 @@ export function renderNationalDanfse({xml,accessKey,environment,issuerCnpj,logoP
  p.header('Valor total da NFS-e',699,17);
  p.group('Valor da operação / serviço',12,719,money(data.serviceValue),142);
  p.group('Desconto incondicionado',155,719,money(data.discount),143);
- p.group('Valor líquido da NFS-e',302,719,money(data.net),143);
- p.group('Total IBS/CBS',450,719,money(field(ibs,'vIBSCBS')),128);
- p.line(8.5,743,586.8,743);
- p.header('Informações complementares',744,17);
- p.paragraph(data.extra,12,765,{size:7,width:568,maxLines:6,lineHeight:9});
+ p.group('Desconto condicionado',302,719,money(data.conditionalDiscount),143);
+ p.group('Total das retenções (ISSQN / Federais)',450,719,money(data.retained),128);
+ p.group('Valor líquido da NFS-e',12,740,money(data.net),142);
+ p.group('Total IBS/CBS',155,740,money(data.ibsCbsTotal),143);
+ p.rectangle(446,737,140,24,{shade:true});
+ p.group('Valor líquido da NFS-e + IBS/CBS',449,740,money(data.totalWithIbs),134);
+ p.line(8.5,763,586.8,763);
+ p.header('Informações complementares',764,17);
+ p.paragraph(data.extra,12,783,{size:7,width:568,maxLines:4,lineHeight:9});
  p.line(8.5,826,586.8,826);
  p.text('NFS-e '+data.number+' / '+data.key,12,827,{size:6,max:105,width:570});
  const pdf=toPdf(p.ops,url,logo);
