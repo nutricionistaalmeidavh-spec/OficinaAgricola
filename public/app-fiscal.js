@@ -312,7 +312,9 @@ async function fiscalNationalDpsAutoModal(documentId){
         issuance:{series:x.series,number:x.number,opSimpNac:x.opSimpNac,regEspTrib:x.regEspTrib,
           regApTribSN:x.regApTribSN,tribISSQN:x.tribISSQN,tpRetISSQN:x.tpRetISSQN,
           cstPisCofins:x.cstPisCofins,percentSimples:x.percentSimples,
-          percentFederal:x.percentFederal,percentState:x.percentState,percentMunicipal:x.percentMunicipal}
+          percentFederal:x.percentFederal,percentState:x.percentState,percentMunicipal:x.percentMunicipal,
+          rtc:{finNFSe:x.finNFSe,cIndOp:x.cIndOp,indDest:x.indDest,
+            CST:x.rtcCst,cClassTrib:x.rtcClass,...(x.indFinal?{indFinal:x.indFinal}:{})}}
       }});
       toast('DPS assinada e pronta para transmitir. Nenhuma nota enviada ainda.');
       await refreshCurrentPage();
