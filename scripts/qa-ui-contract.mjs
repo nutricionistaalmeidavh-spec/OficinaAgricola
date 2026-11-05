@@ -168,6 +168,14 @@ export async function verifyUiContract(page,viewportName,outputDir){
     await page.locator('#mobileMoreBtn').click();
     await page.locator('[data-mobile-page="fiscal"]').click();
   }else await page.locator('[data-page="fiscal"]').click();
+  try{
+    await page.locator('#fiscalNew').waitFor({state:'visible',timeout:8000});
+  }catch(error){
+    const message=await page.locator('#content').innerText().catch(()=>'(sem conteúdo)');
+    const pageName=await page.evaluate(()=>state?.page||'desconhecida').catch(()=>'desconhecida');
+    throw new Error('QA: página fiscal não carregou. Página='+pageName+
+      ', conteúdo='+message.slice(0,1000),{cause:error});
+  }
   await page.locator('#fiscalNew').click();
   const fiscalDialog=page.getByRole('dialog',{name:'Preparar documento fiscal'});
   await fiscalDialog.waitFor({state:'visible'});
