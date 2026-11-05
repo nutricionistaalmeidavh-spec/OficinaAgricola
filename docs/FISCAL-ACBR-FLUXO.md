@@ -61,6 +61,17 @@ A assinatura e transmissão via `NFSE_Emitir` e a consulta de RPS já existiam; 
 
 Há um contrato de pedido de cancelamento `NFSE_Cancelar` que depende de um INI municipal `.cancel.ini` revisado. O aplicativo **não marca NFS-e cancelada apenas porque um provedor retornou sucesso no recebimento do evento**. A confirmação de status final requer integração específica para o prestador/município.
 
+
+## Revisão tributária assistida pela interface (branch)
+
+- O administrador abre **Fiscal → Revisar tributação** em rascunhos NF-e (55) e NFC-e (65); não precisa escrever INI ou JSON.
+- Identificação e endereços, numeração/série e NCM/CFOP, CST/CSOSN, origem, CST PIS/COFINS são campos da interface. Valores comerciais vêm do snapshot canônico da OS/venda e são imutáveis.
+- Quando a tributação exige cálculo, a interface recebe base e alíquota **revisadas**, calcula o imposto em centavos e o backend confere diferenças acima de 1 centavo. Não preenche alíquotas nem escolhe códigos automaticamente.
+- O guard valida destino × CFOP, regime × CST/CSOSN, códigos reconhecidos, PIS/COFINS, ausência de grupos IBS/CBS parciais e coerência CST × cClassTrib. Para o grupo IBS/CBS, o cálculo automatizado cobre apenas CST `000` sem redução, diferimento ou monofasia; outros casos são **bloqueados para revisão especializada**, não declarados isentos.
+- NFC-e exige grupo de pagamento explicitamente revisado. RS exige informações de integração/credenciadora e autorização em operações aplicáveis, conforme contrato regional.
+- As seções ACBr são compiladas para arquivo local privado com manifesto vinculado ao hash de snapshot, valor e emitente. Não se exporta certificado, PIN, CSC ou segredo.
+- Esta revisão **não** certifica a tabela completa de NCM/CFOP por mercadoria, o enquadramento material, créditos e benefícios fiscais, validação dinâmica da tabela oficial `cClassTrib`, os regimes especiais de ICMS/IBS/CBS ou layouts NFS-e municipais. Esses casos precisam de parametrização contábil e testes adicionais. Sem prova real de transmissão/retorno, não divulgar como emissor homologado.
+
 ## Gates de distribuição
 
 - CI, QA visual, integração PostgreSQL e D1, build NSIS Windows limpo e primeiro login.
