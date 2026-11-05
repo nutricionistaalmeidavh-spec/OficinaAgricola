@@ -57,7 +57,7 @@ export function compileReviewedFiscalIni({document,issuer,review}={}){
  if(String(sections.Emitente.CNPJCPF||'').replace(/\D/g,'')!==issuer.cnpj)
    fail('CNPJ revisado diverge do emitente');
  const customer=String(snapshot.customer?.document||'').replace(/\D/g,'');
- if(customer&&customer!==String(sections.Destinatario.CNPJCPF||'').replace(/\D/g,''))
+ if(customer&&customer!==String(sections.Destinatario?.CNPJCPF||'').replace(/\D/g,''))
    fail('Destinatário diverge do snapshot');
  let gross=0,discount=0,net=0;
  snapshot.lines.forEach((line,index)=>{
