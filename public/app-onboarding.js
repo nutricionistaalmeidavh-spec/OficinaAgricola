@@ -105,7 +105,7 @@
     root.querySelectorAll('[data-first-access-action]').forEach(button=>{
       button.onclick=async()=>{
         const action=button.dataset.firstAccessAction;
-        if(action==='dismiss'){setDismissed(true);await renderBanner();return;}
+        if(action==='dismiss'){setDismissed(true);if(!document.querySelector('#modal')?.classList.contains('hidden'))closeModal();await renderBanner();return;}
         if(action==='open'){setDismissed(false);await openWizard(status);return;}
         try{
           if(action==='company'){closeModal();await navigate('settings');return;}
@@ -167,7 +167,7 @@
       actionButton('company','Editar empresa')+actionButton('fiscal-settings','Dados fiscais')+'</div>'+
       '<p><strong>2. Operação (opcional)</strong></p><div class="action-row">'+
       actionButton('services','Serviços')+actionButton('technicians','Técnicos')+
-      actionButton('users','Usuários')+actionButton('cash','Caixa e impressora')+'</div>'+
+      actionButton('users','Usuários')+actionButton('cash','Caixa e vendas')+'</div>'+
       '<p><strong>3. Certificado fiscal e testes</strong></p><div class="action-row">'+
       actionButton('a1','Instalar A1')+actionButton('a3','Selecionar A3')+
       actionButton('diagnose','Testar comunicação SEFAZ')+actionButton('fiscal','Abrir Fiscal')+'</div>'+
