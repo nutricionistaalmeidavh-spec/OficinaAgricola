@@ -7,7 +7,7 @@ import {spawnSync} from 'node:child_process';
 import {createLocalFiscalCertificateStore} from '../src/platform/fiscal-certificate-store.js';
 import {createAcbrLibFiscalProvider} from '../src/platform/acbrlib-fiscal-provider.js';
 
-test('certificate onboarding is scoped to one company directory and rejects invalid PFX',()=>{
+test('certificate onboarding is scoped to one company directory and rejects invalid PFX',async()=>{
  const root=mkdtempSync(join(tmpdir(),'oficina-cert-'));
  try{
   const a=createLocalFiscalCertificateStore({directory:join(root,'empresa-1','segredos')});
