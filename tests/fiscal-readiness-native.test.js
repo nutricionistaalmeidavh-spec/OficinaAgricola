@@ -6,7 +6,7 @@ import {createD1Port} from '../src/platform/async-sql-ports.js';
 import {migrateAsyncTenantStore} from '../src/platform/async-tenant-migrations.js';
 import {createAsyncWorkshopFiscal} from '../src/platform/async-workshop-fiscal.js';
 
-const key='35111122233300018155001000000011000000001000';
+const key='35'+'2611'+'11222333000181'+'55'+'001'+'000000110'+'1'+'00000001'+'2';
 const xml='<nfeProc><NFe><infNFe Id="NFe'+key+'"><ide><tpAmb>2</tpAmb></ide>'+
   '<emit><CNPJ>11222333000181</CNPJ></emit></infNFe></NFe>'+
   '<protNFe><infProt><cStat>100</cStat><chNFe>'+key+'</chNFe>'+
