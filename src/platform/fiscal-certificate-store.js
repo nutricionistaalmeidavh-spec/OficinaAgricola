@@ -25,11 +25,12 @@ export function createLocalFiscalCertificateStore({directory}={}){
  if(lstatSync(directory).isSymbolicLink()||!lstatSync(directory).isDirectory())
    throw Error('Diretório fiscal privado inseguro');
  const secretFile=join(directory,'certificate.enc.json');
+ const cscFile=join(directory,'nfce-csc.enc.json');
  const keyFile=join(directory,'vault.key');
  function key(){
    if(!regular(keyFile)){
      // Não substituir a chave de um certificado já existente: recuperação explícita.
-     if(regular(secretFile))throw Error('Chave fiscal perdida; restaure o backup seguro');
+     if(regular(secretFile)||regular(cscFile))throw Error('Chave fiscal perdida; restaure o backup seguro');
      try{writeFileSync(keyFile,randomBytes(32),{flag:'wx',mode:0o600});}
      catch(error){if(error.code!=='EEXIST')throw error;}
    }
@@ -48,9 +49,10 @@ export function createLocalFiscalCertificateStore({directory}={}){
  }
  function status(){
    const saved=envelope();
-   return saved?{configured:true,certificateType:'A1',
+   const cscConfigured=regular(cscFile);
+   return saved?{configured:true,certificateType:'A1',cscConfigured,
      fingerprint:saved.fingerprint.slice(0,12),configuredAt:saved.configuredAt}
-     :{configured:false,certificateType:null};
+     :{configured:false,certificateType:null,cscConfigured};
  }
  function install({pfxBase64,password}={}){
    if(typeof pfxBase64!=='string'||pfxBase64.length>MAX_PFX*1.5||
@@ -79,6 +81,37 @@ export function createLocalFiscalCertificateStore({directory}={}){
      return status();
    }finally{pfx.fill(0);}
  }
+ function installCsc({idCsc,csc}={}){
+   if(!/^[1-9][0-9]{0,5}$/.test(String(idCsc||''))||
+       typeof csc!=='string'||! /^[A-Za-z0-9_-]{16,128}$/.test(csc))
+     throw Error('Informe IdCSC numérico e CSC válido disponibilizados pela SEFAZ');
+   const vaultKey=key(),iv=randomBytes(12);
+   const cipher=createCipheriv('aes-256-gcm',vaultKey,iv);
+   cipher.setAAD(Buffer.from('artisys-oficina-nfce-csc-v1'));
+   const data=Buffer.concat([cipher.update(JSON.stringify({
+     idCsc:String(idCsc),csc
+   }),'utf8'),cipher.final()]);
+   atomic(cscFile,JSON.stringify({version:1,iv:iv.toString('base64'),
+     tag:cipher.getAuthTag().toString('base64'),cipherText:data.toString('base64')}));
+   return status();
+ }
+ function readCsc(){
+   if(!regular(cscFile))throw Error('Cadastre CSC e IdCSC da NFC-e desta empresa');
+   const saved=JSON.parse(readFileSync(cscFile,'utf8'));
+   if(saved.version!==1)throw Error('Cofre CSC inválido');
+   try{
+     const cipher=createDecipheriv('aes-256-gcm',key(),Buffer.from(saved.iv,'base64'));
+     cipher.setAAD(Buffer.from('artisys-oficina-nfce-csc-v1'));
+     cipher.setAuthTag(Buffer.from(saved.tag,'base64'));
+     const values=JSON.parse(Buffer.concat([
+       cipher.update(Buffer.from(saved.cipherText,'base64')),cipher.final()
+     ]).toString('utf8'));
+     if(!/^[1-9][0-9]{0,5}$/.test(values.idCsc)||
+        !/^[A-Za-z0-9_-]{16,128}$/.test(values.csc))
+       throw Error('Cofre CSC inválido');
+     return values;
+   }catch{throw Error('Cofre CSC corrompido: não transmitir NFC-e');}
+ }
  async function withConfig({kind,environment,uf},action){
    if(!['NFE','NFCE','NFSE'].includes(kind)||!['HOMOLOGACAO','PRODUCAO'].includes(environment)||
       !/^[A-Z]{2}$/.test(uf||'')||typeof action!=='function')
@@ -104,7 +137,11 @@ export function createLocalFiscalCertificateStore({directory}={}){
        '\nSenha='+content.password+'\nUF='+uf+
        '\nVerificarValidade=1\nSSLCryptLib=1\nSSLHttpLib=3\nSSLXmlSignLib=1\n\n'+
        (kind==='NFSE'?'[NFSe]\n':'[NFe]\n')+
-       'Ambiente='+(environment==='HOMOLOGACAO'?'1':'0')+'\n';
+       'Ambiente='+(environment==='HOMOLOGACAO'?'1':'0')+'\n'+
+       (kind==='NFCE'?(()=>{
+         const {idCsc,csc}=readCsc();
+         return 'IdCSC='+idCsc+'\nCSC='+csc+'\n';
+       })():'');
      writeFileSync(config,ini,{flag:'wx',mode:0o600});
      return await action(config);
    }finally{
@@ -112,5 +149,5 @@ export function createLocalFiscalCertificateStore({directory}={}){
      rmSync(run,{force:true,recursive:true,maxRetries:4,retryDelay:100});
    }
  }
- return Object.freeze({status,install,withConfig});
+ return Object.freeze({status,install,installCsc,withConfig});
 }
