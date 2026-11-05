@@ -30,7 +30,7 @@ export function setFiscalSettings(db,input={}){
     // O cadastro válido habilita homologação automaticamente. `enabled` é
     // apenas coluna legada: não existe feature flag global para o fiscal.
     const configured=validCnpj(issuerCnpj)&&STATES.has(issuerUf)&&
-      /^\\d{7}$/.test(municipalityIbge)&&REGIMES.has(taxRegime);
+      /^\d{7}$/.test(municipalityIbge)&&REGIMES.has(taxRegime);
     const enabled=configured;
     const productionConfirmed=input.productionConfirmed===undefined?Boolean(old.production_confirmed):input.productionConfirmed===true;
     if(issuerCnpj&&!validCnpj(issuerCnpj))throw new Error('CNPJ do emissor inválido');
