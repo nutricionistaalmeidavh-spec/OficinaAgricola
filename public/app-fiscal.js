@@ -206,13 +206,21 @@ async function fiscalTaxReviewModal(documentId){
     field('Base COFINS (R$)','cofinsBase'+index,'',false)+
     field('Alíquota COFINS (%)','cofinsRate'+index,'',false)+'</details>'+
     '<details><summary>IBS/CBS — reforma tributária (quando aplicável)</summary>'+
-    '<p class="muted">Somente CST 000 (tributação regular) é calculado aqui. Benefícios, redução, monofasia e diferimento exigem revisão específica.</p>'+
+    '<p class="muted">Redução e diferimento só serão aceitos quando o cClassTrib constar da tabela oficial revisada. Monofasia, créditos e combinações especiais continuam bloqueados.</p>'+
     field('CST IBS/CBS (3 dígitos)','ibsCst'+index,'',false)+
     field('cClassTrib (6 dígitos)','ibsClass'+index,'',false)+
     field('Base IBS/CBS (R$)','ibsBase'+index,'',false)+
     field('Alíquota IBS UF (%)','ibsUfRate'+index,'',false)+
     field('Alíquota IBS municipal (%)','ibsMunRate'+index,'',false)+
-    field('Alíquota CBS (%)','cbsRate'+index,'',false)+'</details></div>'
+    field('Alíquota CBS (%)','cbsRate'+index,'',false)+
+    '<details><summary>Redução de alíquota (quando autorizada na tabela oficial)</summary>'+
+    field('Redução IBS UF (%)','ibsReductionUf'+index,'',false)+
+    field('Redução IBS municipal (%)','ibsReductionMun'+index,'',false)+
+    field('Redução CBS (%)','ibsReductionCbs'+index,'',false)+'</details>'+
+    '<details><summary>Diferimento (quando autorizado na tabela oficial)</summary>'+
+    field('Diferimento IBS UF (%)','ibsDeferralUf'+index,'',false)+
+    field('Diferimento IBS municipal (%)','ibsDeferralMun'+index,'',false)+
+    field('Diferimento CBS (%)','ibsDeferralCbs'+index,'',false)+'</details></details></div>'
   ).join('');
   showModal('Revisão tributária '+(doc.kind==='NFCE'?'NFC-e':'NF-e'),
     '<form class="form-stack"><p class="muted">As classificações devem corresponder à operação e às orientações contábeis. Valores e produtos vêm da OS e não são editáveis aqui. Homologação não tem valor fiscal.</p>'+
@@ -300,13 +308,29 @@ async function fiscalTaxReviewModal(documentId){
         if([ibsCst,ibsClass,ibsBase,ufRate,munRate,cbsRate].some(Boolean)){
           if(![ibsCst,ibsClass,ibsBase,ufRate,munRate,cbsRate].every(Boolean))
             throw Error('IBS/CBS do item '+(index+1)+' incompleto');
-          const ufValue=taxAmount(ibsBase,ufRate),munValue=taxAmount(ibsBase,munRate);
+          const component=(code,nominal,keyPercent,keyAmount)=>{
+            const reduction=decimal(v['ibsReduction'+code+index]);
+            const deferral=decimal(v['ibsDeferral'+code+index]);
+            if(reduction&&deferral)throw Error('Redução com diferimento simultâneo exige revisão especializada');
+            const p=Number(nominal);
+            const effective=reduction?
+              (Math.round(p*(1-Number(reduction)/100)*10000)/10000).toFixed(4):nominal;
+            const calculated=taxAmount(ibsBase,effective);
+            const deferred=deferral?taxAmount(calculated,deferral):'0.00';
+            const net=(Number(calculated)-Number(deferred)).toFixed(2);
+            return {[keyPercent]:nominal,[keyAmount]:net,
+              ...(reduction?{pRedAliq:reduction,pAliqEfet:effective}:{}),
+              ...(deferral?{pDif:deferral,vDif:deferred}:{})};
+          };
+          const uf=component('Uf',ufRate,'pIBSUF','vIBSUF'),
+            mun=component('Mun',munRate,'pIBSMun','vIBSMun'),
+            cbs=component('Cbs',cbsRate,'pCBS','vCBS');
           sections['IBSCBS'+suffix]={CST:ibsCst,cClassTrib:ibsClass};
           sections['gIBSCBS'+suffix]={vBC:ibsBase,vIBS:
-            (Number(ufValue)+Number(munValue)).toFixed(2)};
-          sections['gIBSUF'+suffix]={pIBSUF:ufRate,vIBSUF:ufValue};
-          sections['gIBSMun'+suffix]={pIBSMun:munRate,vIBSMun:munValue};
-          sections['gCBS'+suffix]={pCBS:cbsRate,vCBS:taxAmount(ibsBase,cbsRate)};
+            (Number(uf.vIBSUF)+Number(mun.vIBSMun)).toFixed(2)};
+          sections['gIBSUF'+suffix]=uf;
+          sections['gIBSMun'+suffix]=mun;
+          sections['gCBS'+suffix]=cbs;
         }
       });
       await api('/api/fiscal/'+documentId+'/review',{method:'POST',body:{sections}});
