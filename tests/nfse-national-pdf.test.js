@@ -1,3 +1,4 @@
+import {danfseTestLogo} from './fixtures/nfse-logo-fixture.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createNationalNfseClient} from '../src/platform/nfse-national-api.js';
@@ -36,7 +37,7 @@ test('DANFSe de nota autorizada é gerado offline sem requisitar PDF à API susp
   '</infDPS></DPS></infNFSe></NFSe>';
  try{
    const provider=createNationalNfseProvider({
-     certificateStore:store,inputDir:join(dir,'entrada'),
+     certificateStore:store,inputDir:join(dir,'entrada'),danfseLogoPng:danfseTestLogo,
      client:{downloadDanfse:async()=>{throw Error('API DANFSe suspensa não deve ser chamada')}}
    });
    assert.equal(provider.certificateIdentity(),'opaque-test-cert-identity');
