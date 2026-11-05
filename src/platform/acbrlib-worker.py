@@ -492,13 +492,13 @@ def probe_library(path):
 
 
 def execute(req):
-    if req.get("operation") not in ("transmit", "consult", "cancel", "consultCancellation", "pdf", "status", "certificates") or req.get("kind") not in ("NFE", "NFCE", "NFSE"):
+    if req.get("operation") not in ("transmit", "consult", "cancel", "consultCancellation", "pdf", "status", "certificates", "certificate") or req.get("kind") not in ("NFE", "NFCE", "NFSE"):
         raise ACBrError("Operação fiscal inválida")
     if req.get("environment") not in ("HOMOLOGACAO", "PRODUCAO"):
         raise ACBrError("Ambiente fiscal não identificado")
     if not re.fullmatch(r"\d{14}", str(req.get("issuerCnpj", ""))):
         raise ACBrError("CNPJ de emitente ausente")
-    expected_files = ("libraryPath", "configPath") if req["operation"] in ("status", "certificates") else ("libraryPath", "configPath", "iniPath")
+    expected_files = ("libraryPath", "configPath") if req["operation"] in ("status", "certificates", "certificate") else ("libraryPath", "configPath", "iniPath")
     for field in expected_files:
         if not Path(req.get(field, "")).is_file():
             raise ACBrError("Arquivo local obrigatório não encontrado: " + field)
@@ -530,6 +530,14 @@ def execute(req):
                     raise ACBrError("NFC-e exige CSC/IdCSC no arquivo ACBr privado do emitente")
                 do(lib, "NFE_ConfigGravarValor", encoded("NFe"), encoded("FormaEmissao"),
                    encoded("0"), types=[ct.c_char_p] * 3)
+        if req["operation"] == "certificate":
+            if req["kind"] != "NFE":
+                raise ACBrError("Verificação de certificado requer biblioteca NF-e")
+            records=parse_certificate_records(response(lib,"NFE_ObterCertificados",limit=128*1024))
+            expected_serial=str(req.get("expectedSerial") or "").upper()
+            valid=[x for x in records if x["cnpj"]==req["issuerCnpj"]
+                   and (not expected_serial or x["serial"]==expected_serial)]
+            return {"status":"CERTIFICATE_MATCH" if valid else "CERTIFICATE_MISMATCH"}
         if req["operation"] == "certificates":
             if req["kind"] != "NFE":
                 raise ACBrError("Listagem A3 suporta biblioteca NF-e")
