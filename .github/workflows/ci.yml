@@ -16,7 +16,7 @@ permissions:
 jobs:
   quality:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 18
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,6 +29,19 @@ jobs:
         run: npm ci
       - name: Validate packaged national NFS-e SDK
         run: node scripts/stage-nfse-national.mjs
+      - name: Renderizar DANFSe NT 008/2026 com logomarca oficial
+        run: |
+          if ! command -v pdftoppm >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y poppler-utils
+          fi
+          node scripts/qa-danfse-nt008.mjs
+      - name: Guardar PDF e render sintéticos para conferência
+        uses: actions/upload-artifact@v4
+        with:
+          name: danfse-nt008-layout
+          path: build/qa-danfse/
+          retention-days: 7
       - name: Lint
         run: npm run lint
       - name: ACBrLib Python syntax and offline unit tests
