@@ -257,3 +257,17 @@ test('P6: entrada inválida não faz chamadas à API e mostra instrução de rec
   assert.match(ui.elements.status.textContent,/Código vazio/i);
   assert.equal(ui.elements.camera.disabled,false);
 });
+
+
+test('P6: fechamento, saída e navegação liberam câmera imediatamente',()=>{
+  const core=readFileSync('public/app-core.js','utf8');
+  assert.match(core,/function closeModal\(\)\s*\{\s*window\.OficinaBarcode\?\.stopCamera\(\)/);
+  assert.match(core,/function logout\(\)\s*\{\s*window\.OficinaBarcode\?\.stopCamera\(\)/);
+  assert.match(core,/if\(page!==state\.page\)window\.OficinaBarcode\?\.stopCamera\(\)/);
+});
+
+test('P6: leitura assíncrona de venda não pode editar modal substituído ou ocultado',()=>{
+  const sales=readFileSync('public/app-assistencia.js','utf8');
+  assert.match(sales,/const barcodeSalePanel=\$\('#modalBody \[data-barcode-panel\]'\)/);
+  assert.match(sales,/barcodeSalePanel\?\.isConnected\|\|barcodeSalePanel\.closest\?\.\('\.modal-backdrop\.hidden'\)/);
+});
