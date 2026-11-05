@@ -26,5 +26,6 @@ test('a tela expõe cadastro, revisão por documento e serviço municipal, sem e
  assert.match(ui,/\/api\/fiscal\/\S+tax-review/);
  assert.match(ui,/municipalServiceCode/);
  assert.match(ui,/icmsScheme/);
+ assert.match(ui,/\$\$\('\[data-fiscal-tax-review\]'\)\.forEach/);
  assert.doesNotMatch(ui,/textarea[^>]*name=['"]iniSource/);
 });
