@@ -1,0 +1,88 @@
+name: Native PostgreSQL e D1 · Paridade operacional
+
+on:
+  push:
+    branches: [main, "feat/**"]
+    paths:
+      - "src/platform/async-**"
+      - "src/platform/billing-p3-p4.js"
+      - "tests/billing-p3-p4.test.js"
+      - "scripts/verify-postgres-native.mjs"
+      - "scripts/verify-d1-local.mjs"
+      - ".github/workflows/native-backend-parity.yml"
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: native-sql-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  postgres-native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: oficina_ci
+          POSTGRES_PASSWORD: ci-only-disposable
+          POSTGRES_DB: oficina_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U oficina_ci -d oficina_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+          cache: npm
+      - name: Install core
+        run: npm ci
+      - name: Audit SQLite cutover blockers (read-only P0)
+        run: npm run db:postgres:audit
+      - name: Native PostgreSQL transactional regression
+        env:
+          CI: "true"
+          POSTGRES_TEST_URL: postgresql://oficina_ci:ci-only-disposable@127.0.0.1:5432/oficina_ci
+        run: node scripts/verify-postgres-native.mjs
+      - name: PostgreSQL 16 · registry global, RBAC e sessões reais
+        env:
+          CI: "true"
+          POSTGRES_TEST_URL: postgresql://oficina_ci:ci-only-disposable@127.0.0.1:5432/oficina_ci
+        run: node scripts/verify-postgres-registry.mjs
+      - name: PostgreSQL 16 · gateway real com clientes, OS e isolamento entre schemas
+        env:
+          CI: "true"
+          POSTGRES_TEST_URL: postgresql://oficina_ci:ci-only-disposable@127.0.0.1:5432/oficina_ci
+        run: node scripts/verify-postgres-unified.mjs
+
+  d1-local:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+          cache: npm
+      - name: Install core
+        run: npm ci
+      - name: Install local open-source D1/Workerd emulator for CI only
+        run: npm install --no-save --no-package-lock miniflare@4
+      - name: Native local D1 transactional regression
+        env:
+          CI: "true"
+        run: node scripts/verify-d1-local.mjs

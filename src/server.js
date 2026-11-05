@@ -1,3 +1,5 @@
+import {requestPayloadLimit} from './platform/billing-http-limits.js';
+import {startBillingReminderScheduler} from './platform/billing-reminder-scheduler.js';
 import { createServer } from 'node:http';
 import {publicErrorMessage} from './platform/public-errors.js';
 import { readFileSync, existsSync, statSync } from 'node:fs';
@@ -20,6 +22,10 @@ import {listDiagnosticAdapters} from './services/diagnostics.js';
 import {executeDiagnosticWorker,isLocalHardwareRequest} from './platform/diagnostic-hardware.js';
 import { createPart, listParts, listPartsPage,  updatePart, addInventoryMovement, consumePart, reverseWorkOrderPart, listWorkOrderParts, lowStockParts } from './services/inventory.js';
 import { createScheduleEvent, listSchedule, listSchedulePage,  updateScheduleEvent, createChecklistTemplate, getChecklistTemplate, listChecklistTemplates, createWorkOrderChecklist, listWorkOrderChecklists, saveAttachment, listAttachments } from './services/operations.js';
+import { saveRemoteAttachment, readRemoteAttachment } from './platform/remote-attachments.js';
+import {createCommonDataAdapter} from './platform/common-data-adapter.js';
+import {createPaymentCollection} from './platform/payment-collection.js';
+import {createBillingService} from './platform/billing-p3-p4.js';
 import { addReceipt, reverseReceipt, listReceipts, getPaymentSummary, createExpense, updateExpense, listExpenses, listExpensesPage,  financeSummary } from './services/finance.js';
 import { dashboardData } from './services/dashboard.js';
 import { getOperationalReport } from './services/reports.js';
@@ -67,7 +73,7 @@ function requireVersion(body){
  return version;
 }
 
-function createRouter({db,storageDir,diagnosticRunner=executeDiagnosticWorker}){
+function createRouter({db,storageDir,objectStore=null,diagnosticRunner=executeDiagnosticWorker}){
   const r=new Router(); const add=(m,p,roles,h,o)=>r.add(m,p,roles,h,o);
   add('GET','/api/health',null,()=>({ok:true}),{publicRoute:true});
   add('GET','/api/setup/status',null,()=>({required:isSetupRequired(db)}),{publicRoute:true});
@@ -160,7 +166,17 @@ function createRouter({db,storageDir,diagnosticRunner=executeDiagnosticWorker}){
   add('POST','/api/work-orders/:id/checklists',ROLE_TECH,({params,body})=>createWorkOrderChecklist(db,int(params.id),int(body.templateId),body.responses||[]));
   add('GET','/api/work-orders/:id/attachments',ROLE_ALL,({params})=>listAttachments(db,int(params.id)));
   add('POST','/api/work-orders/:id/attachments',ROLE_TECH,({params,body})=>saveAttachment(db,int(params.id),{...body,storageDir}));
-  add('GET','/api/attachments/:id/file',ROLE_ALL,({params})=>{const a=db.prepare('SELECT * FROM attachments WHERE id=?').get(int(params.id));if(!a)throw new Error('Anexo não encontrado');const root=resolve(storageDir),file=resolve(root,a.relative_path);if(file!==root&&!file.startsWith(root+sep))throw new Error('Caminho de anexo inválido');if(!existsSync(file))throw new Error('Arquivo de anexo não encontrado');return {__binary:readFileSync(file),mimeType:a.mime_type,filename:a.original_name}});
+  add('GET','/api/attachments/:id/file',ROLE_ALL,async({params})=>{
+    const a=db.prepare('SELECT * FROM attachments WHERE id=?').get(int(params.id));
+    if(!a)throw new Error('Anexo não encontrado');
+    if(a.relative_path.startsWith('s3:')){
+      return {__binary:await readRemoteAttachment(a,objectStore),mimeType:a.mime_type,filename:a.original_name};
+    }
+    const root=resolve(storageDir),file=resolve(root,a.relative_path);
+    if(file!==root&&!file.startsWith(root+sep))throw new Error('Caminho de anexo inválido');
+    if(!existsSync(file))throw new Error('Arquivo de anexo não encontrado');
+    return {__binary:readFileSync(file),mimeType:a.mime_type,filename:a.original_name};
+  });
 
   add('GET','/api/work-orders/:id/payment',ROLE_ALL,({params})=>getPaymentSummary(db,int(params.id)));
   add('GET','/api/work-orders/:id/receipts',ROLE_ALL,({params})=>listReceipts(db,int(params.id)));
@@ -216,14 +232,97 @@ function serveStatic(req,res,path){
   res.writeHead(200,{'Content-Type':MIME[extname(file)]||'application/octet-stream','Cache-Control':rel==='index.html'?'no-cache':'public, max-age=3600'});res.end(readFileSync(file));return true;
 }
 
-export function createAppServer({db=openDatabase(),storageDir=process.env.STORAGE_DIR||'./storage/uploads',eventRuntime=null,fiscalProvider=null,diagnosticRunner=executeDiagnosticWorker}={}){
-  migrate(db); const router=createRouter({db,storageDir,diagnosticRunner});
-  return createServer(async(req,res)=>{
+export function createAppServer({db=openDatabase(),storageDir=process.env.STORAGE_DIR||'./storage/uploads',eventRuntime=null,fiscalProvider=null,objectStore=null,diagnosticRunner=executeDiagnosticWorker,paymentOptions=null}={}){
+  migrate(db); const router=createRouter({db,storageDir,objectStore,diagnosticRunner});
+  const paymentIntents=createPaymentCollection(createCommonDataAdapter({engine:'sqlite',db}),{
+    receivePayment:input=>addReceipt(db,input.workOrderId,input),
+    getPaymentSummary:workOrderId=>getPaymentSummary(db,workOrderId),
+    ...(paymentOptions??{})
+  });
+  const billing=createBillingService(createCommonDataAdapter({engine:'sqlite',db}),{
+    receivePayment:input=>addReceipt(db,input.workOrderId,input),
+    getPaymentSummary:workOrderId=>getPaymentSummary(db,workOrderId),
+    providers:paymentOptions?.billingProviders??{},
+    reversePayment:input=>reverseReceipt(db,input.workOrderId,input.receiptId,input),
+    reminderSender:paymentOptions?.reminderSender??null
+  });
+  const httpServer=createServer(async(req,res)=>{
     const url=new URL(req.url||'/','http://localhost'); const route=router.match(req.method||'GET',url.pathname);
     hardenHttpResponse(res,req);
     try{
       assertSecureNetwork(req);
       assertSameOrigin(req);
+      if(url.pathname==='/api/payment-intents/capabilities'||
+         url.pathname==='/api/payment-intents'||
+         /^\/api\/payment-intents\/[a-f0-9]{32}(?:\/sync)?$/.test(url.pathname)){
+        const user=validateSession(db,tokenFrom(req));roleGuard(user,ROLE_FIN);
+        if(req.method==='GET'&&url.pathname==='/api/payment-intents/capabilities')
+          return json(res,200,paymentIntents.getCapabilities());
+        if(req.method==='POST'&&url.pathname==='/api/payment-intents'){
+          const data=await readJson(req,16384);
+          return json(res,201,await paymentIntents.createIntent({
+            ...data,requestId:data.requestId??req.headers['idempotency-key']
+          }));
+        }
+        const view=url.pathname.match(/^\/api\/payment-intents\/([a-f0-9]{32})$/);
+        if(view&&req.method==='GET')
+          return json(res,200,await paymentIntents.getIntent(view[1]));
+        const sync=url.pathname.match(/^\/api\/payment-intents\/([a-f0-9]{32})\/sync$/);
+        if(sync&&req.method==='POST')
+          return json(res,200,await paymentIntents.syncIntent(sync[1]));
+        return json(res,405,{error:'Método não permitido'});
+      }
+      if(url.pathname.startsWith('/api/billing/')){
+        const user=validateSession(db,tokenFrom(req));roleGuard(user,ROLE_FIN);
+        const method=req.method,path=url.pathname;
+        const body=method==='POST'?await readJson(req,requestPayloadLimit(method,path,16384)):{};
+        const data={...body,requestId:body.requestId??req.headers['idempotency-key']};
+        const capture=pattern=>path.match(pattern);
+        let result;
+        if(method==='POST'&&path==='/api/billing/plans')result=await billing.createPlan(data);
+        else if(method==='GET'&&path==='/api/billing/capabilities')result=billing.capabilities();
+        else if(method==='GET'&&path==='/api/billing/report')result=await billing.financeReport({asOf:url.searchParams.get('asOf')||undefined});
+        else if(method==='GET'&&path==='/api/billing/statements')result=await billing.listStatements({limit:url.searchParams.get('limit')||100});
+        else if(method==='GET'&&path==='/api/billing/receipts/available')result=await billing.listAvailableReceipts({limit:url.searchParams.get('limit')||100});
+        else if(method==='POST'&&path==='/api/billing/statements')result=await billing.importStatement(data);
+        else if(method==='POST'&&path==='/api/billing/statements/import')result=await billing.importStatementFile(data);
+        else if(method==='POST'&&path==='/api/billing/settlements')result=await billing.recordSettlement(data);
+        else if(method==='POST'&&path==='/api/billing/reminders/prepare')result=await billing.prepareReminders(data);
+        else if(method==='POST'&&path==='/api/billing/reminders/run')result=await billing.dispatchReminders(data);
+        else if(method==='GET'&&path==='/api/billing/reminders')result=await billing.listReminders({limit:url.searchParams.get('limit')||100});
+        else if(method==='GET'&&capture(/^\/api\/billing\/refunds\/([a-f0-9]{32})$/))result=await billing.getExternalRefund(capture(/^\/api\/billing\/refunds\/([a-f0-9]{32})$/)[1]);
+        else if(method==='POST'&&capture(/^\/api\/billing\/refunds\/([a-f0-9]{32})\/sync$/))result=await billing.syncExternalRefund(capture(/^\/api\/billing\/refunds\/([a-f0-9]{32})\/sync$/)[1]);
+        else if(method==='POST'&&capture(/^\/api\/billing\/installments\/([a-f0-9]{32})\/refund$/))result=await billing.requestExternalRefund(capture(/^\/api\/billing\/installments\/([a-f0-9]{32})\/refund$/)[1],data);
+        else if(method==='GET'&&capture(/^\/api\/billing\/orders\/([1-9]\d*)\/plan$/))
+          result=await billing.getPlanForOrder(Number(capture(/^\/api\/billing\/orders\/([1-9]\d*)\/plan$/)[1]));
+        else if(method==='GET'&&capture(/^\/api\/billing\/plans\/([a-f0-9]{32})$/))
+          result=await billing.getPlan(capture(/^\/api\/billing\/plans\/([a-f0-9]{32})$/)[1]);
+        else if(method==='POST'&&capture(/^\/api\/billing\/installments\/([a-f0-9]{32})\/(activate|sync|manual)$/)){
+          const [,id,action]=capture(/^\/api\/billing\/installments\/([a-f0-9]{32})\/(activate|sync|manual)$/);
+          result=await (action==='activate'?billing.activateInstallment(id):action==='sync'?billing.syncInstallment(id):billing.confirmManual(id,data));
+        }else if(method==='POST'&&capture(/^\/api\/billing\/statements\/([a-f0-9]{32})\/match$/))
+          result=await billing.matchStatement(capture(/^\/api\/billing\/statements\/([a-f0-9]{32})\/match$/)[1],data.receiptId);
+        else return json(res,404,{error:'Rota financeira não encontrada'});
+        return json(res,200,result);
+      }
+      // S3 is async: upload before committing metadata, but never await while
+      // inside a synchronous SQLite transaction. Local/disk mode is unchanged.
+      const attachmentUpload=objectStore&&req.method==='POST'
+        ?url.pathname.match(/^\/api\/work-orders\/(\d+)\/attachments$/):null;
+      if(attachmentUpload){
+        const user=validateSession(db,tokenFrom(req));
+        roleGuard(user,ROLE_TECH);
+        const body=await readJson(req);
+        const workOrderId=int(attachmentUpload[1]);
+        const data=await saveRemoteAttachment(db,workOrderId,{
+          ...body,requestId:body.requestId??req.headers['idempotency-key']
+        },{objectStore,onPersist:row=>enqueueHttpEvent(db,'POST',url.pathname,row,{
+          requestId:body.requestId??req.headers['idempotency-key'],actorId:user.id
+        })});
+        if(eventRuntime)void dispatchOutbox(db,eventRuntime,100,{respectBackoff:true})
+          .catch(e=>console.error('[outbox]',e.message));
+        return json(res,200,data);
+      }
       // Transmissão fiscal faz I/O externo; nunca manter transação SQLite aberta durante a rede.
       // Rotas assíncronas são separadas do envelopamento HTTP de comandos síncronos.
       const fiscalAction=(req.method==='POST')?url.pathname.match(/^\/api\/fiscal\/(\d+)\/(submit|reconcile)$/):null;
@@ -275,5 +374,10 @@ export function createAppServer({db=openDatabase(),storageDir=process.env.STORAG
       json(res,404,{error:'Rota não encontrada'});
     }catch(error){console.error('[request]',req.method,url.pathname.startsWith('/api/public/approval/')?'/api/public/approval/[redacted]':url.pathname,error.message);json(res,statusFor(error),{error:publicErrorMessage(error)})}
   });
+  httpServer.once('listening',()=>{
+    const stop=startBillingReminderScheduler(billing,{onError:error=>
+      console.error('[billing-reminders] Falha:',error.message)});
+    httpServer.once('close',stop);
+  });
+  return httpServer;
 }
-

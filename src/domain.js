@@ -1,6 +1,6 @@
 export const OS_STATUSES = Object.freeze([
   'ENTRADA', 'DIAGNOSTICO', 'ORCAMENTO', 'AGUARDANDO_APROVACAO',
-  'APROVADA', 'EM_SERVICO', 'PRONTA', 'ENTREGUE', 'CANCELADA', 'REPROVADA'
+  'APROVADA', 'EM_SERVICO', 'PRONTA', 'ENTREGUE', 'CANCELADA', 'REPROVADA', 'TRANSFERIDA'
 ]);
 
 const transitions = new Map([
@@ -12,6 +12,7 @@ const transitions = new Map([
   ['EM_SERVICO', new Set(['PRONTA', 'CANCELADA'])],
   ['PRONTA', new Set(['ENTREGUE', 'EM_SERVICO'])],
   ['ENTREGUE', new Set()],
+  ['TRANSFERIDA', new Set()],
   ['CANCELADA', new Set()],
   ['REPROVADA', new Set(['ORCAMENTO', 'CANCELADA'])]
 ]);

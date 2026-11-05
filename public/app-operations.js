@@ -13,7 +13,7 @@ function eventModal({techs}){const requestId=newCommandId();showModal('Novo even
   attachPagedLookup($('#eventOS'),{resource:'work-orders',label:'ordem de serviço',empty:'Sem OS vinculada'});
 }
 
-async function renderFinance({cursor=null,loaded=[]}={}){pageTitle('Financeiro','GESTÃO FINANCEIRA');if(!['ADMIN','FINANCEIRO'].includes(state.user.role)){setContent('<div class="card"><div class="empty">Seu perfil não possui acesso ao financeiro.</div></div>');return}const from=new Date();from.setDate(1);from.setHours(0,0,0,0);const to=new Date();to.setMonth(to.getMonth()+1,0);to.setHours(23,59,59,999);const qs=`from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`;const [s,page]=await Promise.all([api(`/api/finance/summary?${qs}`),api(`/api/expenses/page?${qs}&limit=50${cursor?'&cursor='+encodeURIComponent(cursor):''}`)]);const expenses=loaded.concat(page.items);setContent(`<div class="grid stats">${stat('Faturado',money(s.invoicedCents))}${stat('Recebido',money(s.receivedCents),'kpi-positive')}${stat('Pendente',money(s.pendingCents))}${stat('Despesas pagas',money(s.expensesCents),'kpi-negative')}${stat('Resultado',money(s.resultCents),s.resultCents>=0?'kpi-positive':'kpi-negative')}</div><div class="section-head" style="margin-top:20px"><div><h2>Despesas</h2><span class="muted">Mês atual</span></div><button id="newExpense" class="btn primary">+ Nova despesa</button></div>${table(['Descrição','Categoria','Valor','Vencimento','Pago em','OS'],expenses.map(e=>[`<strong>${esc(e.description)}</strong>`,esc(e.category||'—'),money(e.amount_cents),esc(e.due_date||'—'),e.paid_at?dt(e.paid_at):badge('PENDENTE'),e.os_number?`#${e.os_number}`:'—']))}`);$('#newExpense').onclick=()=>expenseModal();showPagedLoadMore({cursor:page.nextCursor,loaded:expenses.length,total:page.total,onMore:()=>renderFinance({cursor:page.nextCursor,loaded:expenses})})}
+async function renderFinance({cursor=null,loaded=[]}={}){pageTitle('Financeiro','GESTÃO FINANCEIRA');if(!['ADMIN','FINANCEIRO'].includes(state.user.role)){setContent('<div class="card"><div class="empty">Seu perfil não possui acesso ao financeiro.</div></div>');return}const from=new Date();from.setDate(1);from.setHours(0,0,0,0);const to=new Date();to.setMonth(to.getMonth()+1,0);to.setHours(23,59,59,999);const qs=`from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`;const [s,page]=await Promise.all([api(`/api/finance/summary?${qs}`),api(`/api/expenses/page?${qs}&limit=50${cursor?'&cursor='+encodeURIComponent(cursor):''}`)]);const expenses=loaded.concat(page.items);setContent(`<div class="grid stats">${stat('Faturado',money(s.invoicedCents))}${stat('Recebido',money(s.receivedCents),'kpi-positive')}${stat('Pendente',money(s.pendingCents))}${stat('Despesas pagas',money(s.expensesCents),'kpi-negative')}${stat('Resultado',money(s.resultCents),s.resultCents>=0?'kpi-positive':'kpi-negative')}</div><div class="section-head" style="margin-top:20px"><div><h2>Despesas</h2><span class="muted">Mês atual</span></div><div class="action-row"><button id="financeBilling" class="btn soft">Cobranças e conciliação</button><button id="newExpense" class="btn primary">+ Nova despesa</button></div></div>${table(['Descrição','Categoria','Valor','Vencimento','Pago em','OS'],expenses.map(e=>[`<strong>${esc(e.description)}</strong>`,esc(e.category||'—'),money(e.amount_cents),esc(e.due_date||'—'),e.paid_at?dt(e.paid_at):badge('PENDENTE'),e.os_number?`#${e.os_number}`:'—']))}`);$('#newExpense').onclick=()=>expenseModal();$('#financeBilling').onclick=()=>billingFinanceModal().catch(error=>toast(error.message,true));showPagedLoadMore({cursor:page.nextCursor,loaded:expenses.length,total:page.total,onMore:()=>renderFinance({cursor:page.nextCursor,loaded:expenses})})}
 function expenseModal(){const requestId=newCommandId();let submittedPaidAt=null;showModal('Nova despesa',`<form class="form-stack"><div class="field-row"><label>Descrição<input name="description" required></label><label>Categoria<input name="category"></label></div><div class="field-row"><label>Valor (R$)<input name="amount" type="number" step="0.01" required></label><label>Vencimento<input name="dueDate" type="date"></label></div><label><input name="paid" type="checkbox" style="width:auto"> Marcar como paga agora</label><button class="btn primary" type="submit">Salvar despesa</button></form>`,async fd=>{const o=formObj(fd);await api('/api/expenses',{method:'POST',body:{description:o.description,category:o.category,amountCents:Math.round(Number(o.amount)*100),dueDate:o.dueDate||null,paidAt:fd.get('paid')?(submittedPaidAt??=new Date().toISOString()):null,requestId}});toast('Despesa salva');await refreshCurrentPage()})}
 
 
@@ -40,4 +40,105 @@ async function partFitmentsModal(part){
       await api('/api/parts/'+part.id+'/fitments',{method:'POST',body:{...o,requestId}});
       toast('Aplicação registrada');await partFitmentsModal(part);
     });
+}
+
+async function billingFinanceModal(){
+ const [report,entries]=await Promise.all([
+  api('/api/billing/report'),api('/api/billing/statements?limit=50')
+ ]);
+ showModal('Cobranças, taxas e conciliação',`<div class="form-stack">
+  <div class="grid stats">
+   ${stat('Parcelas recebidas',money(report.grossReceivedCents))}
+   ${stat('Parcelas pendentes',money(report.pendingCents))}
+   ${stat('Parcelas vencidas',money(report.overdueCents))}
+   ${stat('Taxas registradas',money(report.feeCents))}
+   ${stat('Repasse líquido registrado',money(report.netSettledCents))}
+  </div>
+  <p class="muted">O extrato associa recebimentos existentes sem duplicar receita. Lembretes são preparados automaticamente no funcionamento offline; envio só quando SMTP próprio está habilitado.</p>
+  <div class="action-row"><button class="btn sm" type="button" id="prepareBillingReminders">Executar lembretes agora</button></div>
+  <form id="statementForm" class="form-stack">
+   <h3>Adicionar lançamento de extrato</h3>
+   <div class="field-row">
+    <label>Identificação da conta<input name="bankAccount" maxlength="80" required></label>
+    <label>Identificador bancário único<input name="externalId" maxlength="128" required></label>
+   </div>
+   <div class="field-row">
+    <label>Data<input type="date" name="bookedAt" value="${new Date().toISOString().slice(0,10)}" required></label>
+    <label>Entrada (R$)<input type="number" name="amount" step="0.01" min="0.01" required></label>
+   </div>
+   <label>Descrição<input name="description" maxlength="300"></label>
+   <button class="btn sm primary" type="submit">Registrar no extrato</button>
+  </form>
+  <form id="statementFileForm" class="form-stack">
+   <h3>Importar extrato OFX ou CSV</h3>
+   <div class="field-row">
+    <label>Identificação da conta<input name="bankAccount" maxlength="80" required></label>
+    <label>Arquivo (.ofx ou .csv)<input type="file" name="statementFile" accept=".ofx,.csv,text/csv" required></label>
+   </div>
+   <small class="muted">Até 1 MB ou 1.000 lançamentos. Reimportar não duplica registros. Conciliar recebimentos separadamente.</small>
+   <button class="btn sm primary" type="submit">Importar arquivo</button>
+  </form>
+  <h3>Últimos lançamentos</h3>
+  <div class="list">${entries.length?entries.map(row=>`<div class="list-item">
+   <div><strong>${money(row.amount_cents)}</strong> · ${esc(row.bank_account)}<br>
+    <small>${esc(row.booked_at)} · ${esc(row.description)}</small></div>
+   ${row.receipt_id?`<span class="muted">Conciliado #${row.receipt_id}</span>`:
+    `<button type="button" class="btn sm" data-match-entry="${row.id}">Conciliar</button>`}
+  </div>`).join(''):'<p class="muted">Nenhum lançamento importado</p>'}</div>
+ </div>`);
+ const reminders=$('#prepareBillingReminders');
+ if(reminders)reminders.onclick=async()=>{
+  try{
+   const result=await api('/api/billing/reminders/run',{method:'POST',body:{daysAhead:3}});
+   toast(result.disabled
+    ?result.prepared+' rascunho(s). SMTP não habilitado; nenhum e-mail enviado.'
+    :result.sent+' e-mail(s) enviado(s); '+(result.uncertain||0)+' requer(em) conferência.');
+  }catch(error){toast(error.message,true)}
+ };
+ const fileForm=$('#statementFileForm');
+ if(fileForm)fileForm.onsubmit=async e=>{
+  e.preventDefault();
+  try{
+   const fd=new FormData(fileForm),file=fd.get('statementFile');
+   if(!file||!file.name||file.size>1024*1024)throw Error('Selecione um OFX ou CSV até 1 MB');
+   const ext=file.name.toLowerCase().split('.').at(-1);
+   if(!['csv','ofx'].includes(ext))throw Error('Formato suportado: .csv ou .ofx');
+   const result=await api('/api/billing/statements/import',{method:'POST',body:{
+    bankAccount:String(fd.get('bankAccount')||''),
+    format:ext.toUpperCase(),content:await file.text()
+   }});
+   toast(result.imported+' lançamento(s) importado(s); '+result.repeated+' já existia(m).');
+   await billingFinanceModal();
+  }catch(error){toast(error.message,true)}
+ };
+ const statement=$('#statementForm');
+ if(statement)statement.onsubmit=async e=>{
+  e.preventDefault();
+  try{
+   const fd=new FormData(statement),amountCents=Math.round(Number(fd.get('amount'))*100);
+   await api('/api/billing/statements',{method:'POST',body:{
+    bankAccount:fd.get('bankAccount'),externalId:fd.get('externalId'),
+    bookedAt:fd.get('bookedAt'),amountCents,description:fd.get('description')
+   }});
+   toast('Lançamento de extrato registrado');await billingFinanceModal();
+  }catch(error){toast(error.message,true)}
+ };
+ document.querySelectorAll('[data-match-entry]').forEach(btn=>btn.onclick=async()=>{
+  try{
+   const receipts=await api('/api/billing/receipts/available?limit=100');
+   const bank=entries.find(x=>x.id===btn.dataset.matchEntry);
+   const possible=receipts.filter(x=>Number(x.amount_cents)===Number(bank?.amount_cents));
+   if(!possible.length){toast('Não há recebimentos de mesmo valor para conciliar',true);return;}
+   showModal('Conciliar com recebimento da OS',`<form class="form-stack">
+    <p>Extrato: <strong>${money(bank.amount_cents)}</strong> · ${esc(bank.booked_at)}</p>
+    <label>Selecione a OS e o recebimento
+     <select name="receiptId" required>${possible.map(r=>`<option value="${r.id}">OS #${r.os_number} · ${esc(r.customer_name)} · ${money(r.amount_cents)} (${esc(r.method)})</option>`).join('')}</select>
+    </label><button type="submit" class="btn primary">Conciliar</button></form>`,async fd=>{
+     await api('/api/billing/statements/'+btn.dataset.matchEntry+'/match',{
+      method:'POST',body:{receiptId:Number(fd.get('receiptId'))}
+     });
+     toast('Extrato conciliado sem duplicar receita');await billingFinanceModal();
+   });
+  }catch(error){toast(error.message,true)}
+ });
 }

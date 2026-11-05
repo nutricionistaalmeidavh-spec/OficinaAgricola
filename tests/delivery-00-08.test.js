@@ -20,10 +20,14 @@ test('entregas 00-08 permanecem isoladas e sem dependência SaaS de runtime', as
   const pkg = JSON.parse(pkgText);
 
   assert.equal(pkg.name, 'artisys-oficina');
-  assert.equal(pkg.dependencies, undefined);
+  assert.ok(pkg.dependencies && typeof pkg.dependencies.pg==='string' && /^\^8\./.test(pkg.dependencies.pg),
+    'PostgreSQL OSS é dependência local empacotada, não SaaS');
+  assert.deepEqual(Object.keys(pkg.dependencies),['pg']);
   assert.equal(pkg.devDependencies, undefined);
   assert.match(env, /PORT=3344/);
-  assert.match(env, /DATABASE_PATH=/);
+  assert.match(env, /OFICINA_POSTGRES_REGISTRY_URL=/);
+  assert.match(env, /OFICINA_POSTGRES_OPERATIONS_URL=/);
+  assert.doesNotMatch(env, /DATABASE_PATH=|OFICINA_DATABASE_ENGINE=sqlite/);
   assert.ok(builder.includes('appId: com.artisys.oficina'));
   assert.match(start, /createAssistenciaServer/);
 
@@ -45,6 +49,6 @@ test('entregas 00-08 permanecem isoladas e sem dependência SaaS de runtime', as
   assert.match(sw, /\/app-assistencia\.js/);
   assert.match(docs, /<strong>Equipamento<\/strong>/);
   assert.match(docs, /ArtiSys Oficina/);
-  assert.match(readme, /core R\$ 0/);
-  assert.match(readme, /nenhuma API ou SaaS pago obrigatório/i);
+  assert.match(readme, /R\$ 0/);
+  assert.match(readme, /nenhuma API[^\n]*SaaS pago[^\n]*obrigatório/i);
 });

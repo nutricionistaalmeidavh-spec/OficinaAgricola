@@ -1,13 +1,13 @@
-# ArtiSys Oficina — homologação P0–P3 (sem multiempresa)
+# ArtiSys Oficina — homologação P0–P3 (PostgreSQL e multiempresa)
 
-**Escopo:** aplicativo local-first, SQLite, Electron/Windows e Linux self-hosted. Nenhum serviço pago é obrigatório. A PR de multiempresa segue separada. Não publicar, fazer merge ou ativar emissão fiscal por existir um teste simulado aprovado.
+**Escopo:** núcleo local-first, PostgreSQL 16 embarcado no Windows, Electron e Linux self-hosted, com isolamento multiempresa. D1 é opcional; nenhum serviço pago obrigatório. Não habilitar fiscalização por testes simulados.
 
 ## P0 · integridade, recuperação e distribuição
 
-- Backup usa snapshot SQLite WAL-consistente, inventário de arquivos com SHA-256, rejeição de manifestos sem banco, paths de fuga, links simbólicos e arquivos extras. Antes da restauração, banco deve passar em `PRAGMA integrity_check` e `foreign_key_check`.
-- Backup recente só é reutilizado após prova de restauração; arquivo corrompido é preservado para análise e novo snapshot é criado. Retenção remove apenas arquivos já verificados, sem apagar cópia suspeita.
+- O endurecimento do backup SQLite legado de testes valida SHA-256, manifestos, symlinks e integridade antes da restauração. **Não comprova backup PostgreSQL**. O núcleo PostgreSQL exige uma estratégia verificada com `pg_dump`/`pg_restore` ou equivalente, isolamento por unidade e restauração de ensaio antes da entrega.
+- O módulo legado evita reutilizar backup corrompido e preserva arquivos suspeitos. Um gate equivalente de backup/restauração PostgreSQL permanece pendente.
 - `npm run ci`, QA visual desktop/mobile e workflow `Windows · Instalador limpo` devem estar verdes **para o commit exato**. Atualização de dependências/Node e vulnerabilidades exigem verificação própria.
-- Smoke Windows instala em VM limpa, cria administrador, abre sessão, registra cliente, reinicia instalador sobre a mesma instalação, confirma que usuário/dados permanecem e que fiscal continua desativado. **É reinstalação da mesma versão, não migração comprovada entre duas versões publicadas.**
+- Smoke Windows instala PostgreSQL 16 offline, cria administrador, salva cliente, reinstala o NSIS no mesmo diretório, confirma cluster, credenciais, dados, arquivos locais e fiscal desabilitado. **É reinstalação da mesma versão, não migração comprovada entre duas versões publicadas.**
 - Antes de entregar executável, executar `powershell -File scripts/verify-installer.ps1 -Installer <arquivo.exe> -ExpectedSha256 <hash>`. Com certificado de assinatura válido, adicionar `-RequireSignature`; assinatura não é requisito do núcleo R$ 0.
 - Atualização de versão anterior: executar matriz independente com instaladores antigo/novo, banco de cliente **cópia anonimizada**, migração, backup, rollback testado, anexos e operações pendentes. Não existe auto-update remoto habilitado por esta entrega.
 - Simular queda de processo/SIGKILL em testes automatizados. **Queda física de energia/SSD danificado** exige prova manual em equipamento de laboratório, sem dados de cliente; nenhuma suíte reproduz isso integralmente.
@@ -41,7 +41,7 @@ O adaptador ACBr local e DLLs Windows não representam homologação real. A emi
 
 - Formulários principais devem usar `/api/customers/page`, `/api/machines/page` e `/api/parts/page` com limite e busca remota, sem carregar tabelas enormes na abertura.
 - Seleções preservam IDs canônicos e guardam opção previamente escolhida. Ao trocar cliente, equipamento anterior deve ser limpo.
-- Benchmarks disponíveis: `npm run db:benchmark -- --size=1000`, `10000` e `100000` em ambiente isolado. Validar p50/p95 e memória no hardware alvo, sem limiar universal arbitrário.
+- Executar benchmarks PostgreSQL isolados com 1 mil, 10 mil e 100 mil registros; avaliar p50/p95 e memória no hardware-alvo, sem pressupor scripts SQLite antigos.
 - Nesta branch, formulários de abertura, edição e duplicação de OS, cadastro de equipamento, agenda e vendas de balcão passaram a consultar clientes, veículos, peças e OS por busca paginada; a venda preserva saldo/preço e a chave idempotente original.
 - Rotas integrais antigas continuam disponíveis por compatibilidade. Histórico de alterações, alguns formulários secundários e catálogo de serviços ainda exigem auditoria e eventual paginação antes de afirmar cobertura integral da interface.
 
@@ -51,6 +51,6 @@ O adaptador ACBr local e DLLs Windows não representam homologação real. A emi
 2. Para vender funcionalidades fiscal, diagnóstico ou impressão como **homologadas**, coletar resultado real por módulo, nunca apenas mocks.
 3. O verificador local `node scripts/release-evidence.mjs <arquivo.json> [core|fiscal|diagnostics|printing|full]` exige campos obrigatórios e falha em resultados `SIMULATED`, mas **não consulta o GitHub nem a autoridade fiscal**: referências e autenticidade devem ser conferidas fora do comando.
 4. O manifesto de exemplo é apenas template; não usar evidências inventadas para liberar produto.
-5. Publicação e merge somente após revisão independente, CI/QA/Windows verdes e autorização expressa. Manter a main e a branch paralela de multiempresa intocadas.
+5. Publicação e merge somente após revisão independente, CI/QA/Windows verdes e autorização expressa. Manter a `main` inalterada até a revisão e gates verdes.
 
-**Estado atual:** CI e smoke podem provar partes automatizadas; NF-e/NFS-e, diagnóstico e impressão física são **NÃO HOMOLOGADOS** até execução supervisionada real.
+**Estado atual:** CI e smoke cobrem etapas automatizadas; backup/restauração PostgreSQL para desastre, NF-e/NFS-e, diagnóstico e impressão física são **NÃO HOMOLOGADOS** até ensaio supervisionado real.

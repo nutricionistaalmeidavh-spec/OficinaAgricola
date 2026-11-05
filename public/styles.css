@@ -5,6 +5,22 @@
 .quote-items,.checklist-items{display:grid;gap:10px}.quote-item-row{display:grid;grid-template-columns:145px minmax(180px,1fr) 95px 145px auto;gap:10px;align-items:end;border:1px solid var(--line);border-radius:12px;padding:12px;background:#fafcfb}.quote-item-row .btn{margin-bottom:1px}.check-item{display:grid;grid-template-columns:minmax(180px,1fr) 150px minmax(170px,1fr);gap:10px;align-items:center;border:1px solid var(--line);border-radius:12px;padding:11px;background:#fafcfb}.check-item>div{display:grid;gap:3px}.check-item small{color:var(--muted);font-size:10px}
 @media(max-width:840px){.quote-item-row,.check-item{grid-template-columns:1fr}.quote-item-row .btn{width:100%}}
 
+/* Unidades: selector displayed in sidebar on desktop and topbar on mobile. */
+#mobileTenantContainer{display:none}
+#mobileTenantContainer[hidden],#tenantContainer[hidden]{display:none!important}
+#tenantContainer label{color:inherit}
+@media(max-width:840px){
+  #tenantContainer{display:none!important}
+  #mobileTenantContainer:not([hidden]){display:flex;align-items:center;gap:5px;min-width:0;max-width:45vw}
+  #mobileTenantSelect{width:100%;min-width:0;font-size:11px;max-width:100%;padding:7px 5px}
+  #mobileTenantManageBtn{font-size:10px;padding:6px}
+  .topbar .page-heading{min-width:0}
+  .topbar .page-heading h1{font-size:16px}
+}
+@media(max-width:440px){
+  #mobileTenantContainer:not([hidden]){max-width:44vw}
+  #mobileTenantManageBtn{display:none}
+}
 /* Fila de operações locais: feedback permanente, inclusive em telas compactas. */
 .pending-commands{border:1px solid #bc7b27;background:#fff6e6;color:#774612;
   font:inherit;font-size:12px;font-weight:650;line-height:1.2;

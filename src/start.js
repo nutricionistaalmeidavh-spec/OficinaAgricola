@@ -1,3 +1,4 @@
+import {createSecureSmtpReminderSender} from './platform/billing-smtp.js';
 import {cleanupOperationalData} from './platform/data-maintenance.js';
 import { resolveDatabasePath, resolveStoragePath } from './platform/data-location.js';
 import {readFileSync} from 'node:fs';
@@ -14,12 +15,20 @@ import {createMaintenanceCrmTasks} from './services/market-parity.js';
 import {startBackupSchedule} from './platform/backup-scheduler.js';
 import { listLanUrls, resolveServerConfig } from './platform/network.js';
 
+if(String(process.env.OFICINA_DATABASE_ENGINE||'sqlite').toLowerCase()!=='sqlite'||
+   String(process.env.OFICINA_OBJECT_STORAGE||'disk').toLowerCase()!=='disk')
+  throw new Error('Provedores alternativos exigem npm run start:multi; modo legado não pode ignorar configuração de backend');
 process.env.DATABASE_PATH = resolveDatabasePath();
 process.env.STORAGE_DIR = resolveStoragePath({databasePath:process.env.DATABASE_PATH});
 process.env.EVENT_LOG_PATH ||= './data/oficina-events.jsonl';
 process.env.PORT ||= '3344';
 
 const db = openDatabase();
+// Never bypass the multiempresa membership registry with a legacy server.
+if(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='tenant_registry_link'").get()){
+  db.close();
+  throw new Error('Banco vinculado ao modo multiempresa: use npm run start:multi. Modo legado bloqueado para não ignorar permissões.');
+}
 migrate(db);
 migrateAssistencia(db);
 seed(db);
@@ -66,7 +75,15 @@ const tls=process.env.HTTPS_CERT_FILE&&process.env.HTTPS_KEY_FILE?{
   cert:readFileSync(process.env.HTTPS_CERT_FILE),
   key:readFileSync(process.env.HTTPS_KEY_FILE)
 }:null;
-const server = createAssistenciaServer({ db, storageDir: process.env.STORAGE_DIR, eventRuntime, tls });
+// Chave Pix local explícita: modo multiempresa nunca herda uma chave global.
+const pixStatic=process.env.OFICINA_PIX_KEY&&process.env.OFICINA_PIX_MERCHANT_NAME&&process.env.OFICINA_PIX_CITY?{
+  pixKey:process.env.OFICINA_PIX_KEY,
+  merchantName:process.env.OFICINA_PIX_MERCHANT_NAME,
+  merchantCity:process.env.OFICINA_PIX_CITY
+}:null;
+const server = createAssistenciaServer({ db, storageDir: process.env.STORAGE_DIR, eventRuntime, tls,
+  paymentOptions:{pixStatic}
+});
 const stopBackupSchedule=startBackupSchedule({
  databasePath:process.env.DATABASE_PATH,
  uploadsPath:process.env.STORAGE_DIR,

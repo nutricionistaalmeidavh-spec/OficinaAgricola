@@ -3,18 +3,18 @@ const state={token:'',user:null,page:'dashboard',pageReady:false,pageEpoch:0,pag
 const dirtyInputs=new WeakSet();
 // ID + usuário evita reenviar comandos para outra conta quando um banco for recriado.
 const currentCommandOwner=()=>state.user?
-  String(state.user.id)+':'+String(state.user.username||''):null;
+  String(state.user.id)+':'+String(state.user.username||'')+':unit:'+String(window.OficinaTenant?.getUnitId()||'default'):null;
 const commandQueue=window.OficinaCommands?.createQueue({
   send:({path,method,body})=>{
     // Autorizações nunca entram no IndexedDB; cada envio usa a sessão atual.
-    const headers={'Content-Type':'application/json'};
+    const headers=window.OficinaTenant?.headers({'Content-Type':'application/json'})||{'Content-Type':'application/json'};
     const transport=window.localRuntime?.request||fetch;
     return transport(path,{method,headers,body:JSON.stringify(body)});
   },
   lookup:async({path,method,requestId})=>{
     const query=new URLSearchParams({path,method,requestId});
     const transport=window.localRuntime?.request||fetch;
-    const response=await transport('/api/commands/status?'+query.toString());
+    const response=await transport('/api/commands/status?'+query.toString(),{headers:window.OficinaTenant?.headers()||{}});
     if(!response.ok)throw new Error('Não foi possível consultar a confirmação');
     return response.json();
   }
@@ -194,8 +194,8 @@ function trackDirtyInputs(host){
 const money=c=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(c||0)/100);
 const dt=v=>v?new Date(v).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'}):'—';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
-async function api(path,{method='GET',body,raw=false}={}){
-  const headers={};
+async function api(path,{method='GET',body,raw=false,binary=false}={}){
+  const headers=window.OficinaTenant?.headers()||{};
   if(path==='/api/auth/login')headers['X-Session-Transport']='cookie';
   if(body!==undefined)headers['Content-Type']='application/json';
   const requester=window.localRuntime?.request||fetch;
@@ -206,6 +206,11 @@ async function api(path,{method='GET',body,raw=false}={}){
     :await requester(path,{method,headers,signal,body:body===undefined?undefined:JSON.stringify(body)});
   if(isRead&&(signal?.aborted||epoch!==state.pageEpoch))throw new DOMException('Consulta obsoleta','AbortError');
   if(res.status===401){logout();throw new Error('Sessão expirada')}
+  if(binary&&res.ok){
+    const bytes=new Uint8Array(await res.arrayBuffer());
+    if(isRead&&(signal?.aborted||epoch!==state.pageEpoch))throw new DOMException('Consulta obsoleta','AbortError');
+    return bytes;
+  }
   const text=await res.text();
   if(isRead&&(signal?.aborted||epoch!==state.pageEpoch))throw new DOMException('Consulta obsoleta','AbortError');
   if(!res.ok){let msg=text;try{msg=JSON.parse(text).error}catch{}throw new Error(msg||'Erro na operação')}
@@ -344,7 +349,7 @@ function workOrderSelector(orders,{name='workOrderId',id='',label='OS vinculada 
  return '<label>'+esc(label)+'<select '+(id?'id="'+id+'" ':'')+'name="'+name+'"><option value="">Sem vínculo com OS</option>'+options+'</select></label>';
 }
 function userRoleLabel(role){return ({ADMIN:'Administrador',ATENDIMENTO:'Atendimento',TECNICO:'Técnico',FINANCEIRO:'Financeiro'}[role]||'Equipe')}
-function badge(status){const cls=/PRONTA|ENTREGUE|APROVADA|PAGO/.test(status)?'green':/AGUARDANDO|ORCAMENTO|PARCIAL/.test(status)?'orange':/CANCELADA|REPROVADA/.test(status)?'red':'blue';return `<span class="pill ${cls}">${esc(status.replaceAll('_',' '))}</span>`}
+function badge(status){const cls=/PRONTA|ENTREGUE|APROVADA|PAGO/.test(status)?'green':/AGUARDANDO|ORCAMENTO|PARCIAL/.test(status)?'orange':/CANCELADA|REPROVADA|TRANSFERIDA/.test(status)?'red':'blue';return `<span class="pill ${cls}">${esc(status.replaceAll('_',' '))}</span>`}
 function pageTitle(title,eyebrow='OFICINA'){ document.title=title+' · ArtiSys Oficina'; $('#pageTitle').textContent=title;$('#pageEyebrow').textContent=eyebrow }
 function renderRegion(host,html){
   const template=document.createElement('template');
@@ -393,6 +398,8 @@ async function boot(){
   }catch{ /* The login view will display server errors if offline. */ }
   // Sessão restaurada automaticamente pelo cookie HttpOnly; nunca pelo localStorage.
   try{
+    state.user=await api('/api/auth/me');
+    if(window.OficinaTenant)await window.OficinaTenant.load();
     state.user=await api('/api/auth/me');
     showApp();await navigate('dashboard');
     void updatePendingCommands();

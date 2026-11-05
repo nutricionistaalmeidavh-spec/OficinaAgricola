@@ -2,26 +2,20 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 
-test('P0 - smoke Windows verifica reinstalação sem perder administrador e clientes',()=>{
- const smoke=readFileSync('scripts/smoke-installer.ps1','utf8');
- assert.match(smoke,/Reinstalação preservou cadastro e autenticação/);
- assert.match(smoke,/\/api\/customers\/\$\(\$customer\.id\)/);
- assert.match(smoke,/setup\/status/);
- assert.match(smoke,/Start-Process -FilePath \$installer\.FullName/);
+test('P0: reinstalação NSIS verifica login e cliente no PostgreSQL embutido',()=>{
+ const s=readFileSync('scripts/smoke-postgres-portable.ps1','utf8');
+ for(const required of ['Start-Process -FilePath $exe.FullName','Reinstalação PostgreSQL preservou administrador','afterCustomers','api/setup/status','api/auth/login','Get-FileHash $secret','qa-reinstall-preserve.txt']){
+  assert.ok(s.includes(required),'Smoke não valida '+required);
+ }
+ assert.ok(!s.includes('database.sqlite'),'Não reinserir SQLite no smoke Windows');
 });
-
-test('P0 - verificador offline exige SHA-256 de distribuição',()=>{
- const verify=readFileSync('scripts/verify-installer.ps1','utf8');
- assert.match(verify,/SHA256/);
- assert.match(verify,/ExpectedSha256/);
- assert.match(verify,/Get-AuthenticodeSignature/);
- assert.match(verify,/throw/);
+test('P0: artefato de distribuição exige SHA256 e oferece assinatura opcional',()=>{
+ const s=readFileSync('scripts/verify-installer.ps1','utf8');
+ for(const required of ['SHA256','ExpectedSha256','Get-AuthenticodeSignature','throw'])
+  assert.ok(s.includes(required),'Ausente: '+required);
 });
-
-test('P1 - evidências físicas não são presumidas por checks simulados',()=>{
- const body=readFileSync('docs/RELEASE-HOMOLOGACAO-P0-P3.md','utf8');
- assert.match(body,/SEFAZ/);
- assert.match(body,/impressora física/i);
- assert.match(body,/veículo real/i);
- assert.match(body,/não homologado/i);
+test('P1: gate documenta provas físicas não simuladas',()=>{
+ const s=readFileSync('docs/RELEASE-HOMOLOGACAO-P0-P3.md','utf8');
+ for(const required of ['SEFAZ','impressora física','veículo real','NÃO HOMOLOGADOS'])
+  assert.ok(s.includes(required),'Ausente: '+required);
 });

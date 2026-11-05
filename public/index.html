@@ -48,6 +48,11 @@
         <span class="brand-mark small">AO</span>
         <div><strong>ArtiSys Oficina</strong><small>ArtiSys · Gestão de serviços</small></div>
       </div>
+      <div id="tenantContainer" hidden style="padding:10px 12px">
+        <label for="tenantSelect" style="display:block;font-size:12px">Empresa / unidade</label>
+        <select id="tenantSelect" aria-label="Empresa e unidade ativas" style="width:100%;min-height:40px"></select>
+        <button id="tenantManageBtn" type="button" class="btn sm" hidden>Gerenciar empresas</button>
+      </div>
       <nav id="nav" aria-label="Navegação principal">
         <button data-page="dashboard" class="active"><span class="nav-icon">⌂</span><b>Visão Geral</b></button>
         <button data-page="work-orders"><span class="nav-icon">▤</span><b>Ordens de Serviço</b></button>
@@ -97,6 +102,10 @@
           <button id="submitGlobalSearch" class="search-submit" type="button" aria-label="Buscar">Buscar</button>
           <kbd>/</kbd>
         </div>
+        <div id="mobileTenantContainer" hidden>
+          <select id="mobileTenantSelect" aria-label="Empresa e unidade ativas"></select>
+          <button id="mobileTenantManageBtn" type="button" class="btn sm" hidden aria-label="Gerenciar empresas e unidades">Gerenciar</button>
+        </div>
         <div class="top-actions">
           <span id="today"></span>
           <button id="pendingCommands" class="pending-commands hidden" type="button"
@@ -120,6 +129,7 @@
   <script defer src="/pwa-register.js"></script>
   <script defer src="/local-runtime.js"></script>
   <script defer src="/command-queue.js"></script>
+  <script defer src="/tenant-switch.js"></script>
   <script defer src="/app-core.js"></script>
   <script defer src="/obd-serial.js"></script>
   <script defer src="/obd-diagnostics.js"></script>
@@ -132,6 +142,7 @@
   <script defer src="/app-fiscal.js"></script>
   <script defer src="/app-assistencia.js"></script>
   <script defer src="/app-admin.js"></script>
+  <script defer src="/app-tenancy.js"></script>
   <script defer src="/app-market-crm.js"></script>
   <script defer src="/app-market-fleet.js"></script>
   <script defer src="/app-market-units.js"></script>

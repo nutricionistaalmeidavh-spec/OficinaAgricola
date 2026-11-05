@@ -38,6 +38,22 @@ export function createLocalFiscalProvider({url=process.env.FISCAL_LOCAL_PROVIDER
     consult:({document,attemptId})=>call('/v1/fiscal/consult',{
       documentId:document.id,kind:document.kind,requestId:document.request_id,
       attemptId,accessKey:document.access_key||null
-    })
+    }),
+    cancel:({document,attemptId,reason})=>call('/v1/fiscal/cancel',{
+      documentId:document.id,kind:document.kind,attemptId,reason,
+      accessKey:document.access_key,originalProtocol:document.protocol
+    }),
+    consultCancellation:({document,attemptId})=>call('/v1/fiscal/cancel/consult',{
+      documentId:document.id,kind:document.kind,attemptId,accessKey:document.access_key
+    }),
+    printPdf:async({document})=>{
+      const result=await call('/v1/fiscal/pdf',{documentId:document.id,
+        kind:document.kind,accessKey:document.access_key,originalProtocol:document.protocol});
+      if(result?.status!=='PDF'||typeof result.pdfBase64!=='string'||
+          result.pdfBase64.length>8*1024*1024||
+          !/^[A-Za-z0-9+/]+={0,2}$/.test(result.pdfBase64))
+        throw new Error('Emissor fiscal não retornou PDF válido');
+      return Buffer.from(result.pdfBase64,'base64');
+    }
   };
 }

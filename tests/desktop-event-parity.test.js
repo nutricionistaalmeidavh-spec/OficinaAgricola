@@ -2,13 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 
-test('desktop Electron initializes the same outbox dispatcher and domain EventBus as local CLI',()=>{
+test('desktop usa PostgreSQL e journal transacional para idempotência, sem EventBus SQLite',()=>{
  const desktop=readFileSync('electron/main.js','utf8');
- assert.match(desktop,/createEventRuntime/);
- assert.match(desktop,/dispatchOutbox/);
- assert.match(desktop,/createAssistenciaServer\(\{\s*db,\s*storageDir,\s*eventRuntime\s*\}\)/);
- assert.match(desktop,/events\.jsonl/);
- const smoke=readFileSync('scripts/smoke-installer.ps1','utf8');
- assert.match(smoke,/ENTITY_MUTATED/);
- assert.match(smoke,/events\.jsonl/);
+ const journal=readFileSync('src/platform/postgres-command-journal.js','utf8');
+ const gateway=readFileSync('src/platform/postgres-unified-gateway.js','utf8');
+ const smoke=readFileSync('scripts/smoke-postgres-portable.ps1','utf8');
+ assert.match(desktop,/await startPostgresDesktop\(\)/);
+ assert.doesNotMatch(desktop,/startLocalServer|dispatchOutbox|createEventRuntime|events\.jsonl/);
+ assert.match(journal,/createPostgresCommandJournal/);
+ assert.match(journal,/command_idempotency/);
+ assert.match(journal,/pg_advisory_xact_lock/);
+ assert.match(gateway,/journalEligible/);
+ assert.match(smoke,/api\/customers/);
+ assert.match(smoke,/customer\.id/);
 });

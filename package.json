@@ -8,17 +8,22 @@
     "node": ">=22.16.0"
   },
   "scripts": {
-    "dev": "node --watch src/start.js",
-    "start": "node src/start.js",
+    "dev": "node --watch src/start-postgres-unified.js",
+    "start": "node src/start-postgres-unified.js",
     "test": "node --test tests/*.test.js",
     "test:e2e": "node --test tests/e2e.test.js tests/jornada-cliente-os.e2e.test.js tests/jornada-resiliencia.e2e.test.js",
     "lint": "node scripts/lint.mjs",
     "build": "node scripts/build.mjs",
-    "ci": "npm run lint && npm test && npm run build && npm run test:e2e",
-    "db:migrate": "node src/migrate-assistencia.js",
-    "db:seed": "node src/seed-assistencia.js",
+    "ci": "npm run lint && npm test && npm run build && node scripts/assert-postgres-dist.mjs && npm run test:e2e",
     "desktop:dist": "powershell -ExecutionPolicy Bypass -File scripts/build-electron.ps1",
-    "db:benchmark": "node scripts/benchmark-db.mjs",
-    "db:health": "node scripts/db-health.mjs"
+    "start:postgres-core": "node src/start-postgres-core.js",
+    "db:postgres:audit": "node scripts/audit-postgres-readiness.mjs --summary",
+    "start:postgres-registry": "node src/start-postgres-registry.js",
+    "db:postgres:verify-registry": "node scripts/verify-postgres-registry.mjs",
+    "start:postgres:unified": "node src/start-postgres-unified.js",
+    "db:postgres:verify-unified": "node scripts/verify-postgres-unified.mjs"
+  },
+  "dependencies": {
+    "pg": "^8.23.1"
   }
 }
