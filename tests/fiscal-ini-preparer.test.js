@@ -32,8 +32,8 @@ test('reviewed fiscal document is compiled from immutable financial snapshot',()
  assert.match(result.ini,/vDesc=10\.00/);
  assert.match(result.ini,/xProd=Filtro de óleo/);
  assert.match(result.ini,/cProd=9/);
- assert.match(result.ini,/vUnCom=45\\.00/);
- assert.match(result.ini,/vNF=80\\.00/);
+ assert.match(result.ini,/vUnCom=45\.00/);
+ assert.match(result.ini,/vNF=80\.00/);
  assert.doesNotMatch(result.ini,/ValorProduto=|ValorNota=|ValorTotal=/);
  assert.deepEqual(result.manifest,{kind:'NFE',documentId:4,
   snapshotHash:document.snapshot_hash,amountCents:8000,
@@ -54,6 +54,6 @@ test('official ACBr NFe fields come from immutable item snapshot',()=>{
  data.sections.Produto001.vProd='1.00';
  const {ini}=compileReviewedFiscalIni({document,issuer,review:data});
  assert.match(ini,/xProd=Filtro de óleo/);
- assert.match(ini,/vProd=90\\.00/);
+ assert.match(ini,/vProd=90\.00/);
  assert.doesNotMatch(ini,/Produto indevido/);
 });
