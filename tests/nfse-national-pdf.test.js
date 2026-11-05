@@ -25,29 +25,28 @@ test('não aceita HTML, PDF de origem desconhecida nem retorno não autorizado',
  await assert.rejects(bad.downloadDanfse({issuer,accessKey:'nada'}),/chave|Chave/i);
 });
 
-test('PDF de NFS-e autorizada é acessível pelo provedor instalado no Oficina',async()=>{
- const dir=mkdtempSync(join(tmpdir(),'nfse-adn-pdf-'));
+test('DANFSe de nota autorizada é gerado offline sem requisitar PDF à API suspensa',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'nfse-danfse-offline-'));
  const issuer={cnpj:'11222333000181',environment:'HOMOLOGACAO'};
- let count=0;
+ const xml='<NFSe><infNFSe Id="NFS'+key+'"><nNFSe>123</nNFSe>'+
+  '<DPS><infDPS><tpAmb>2</tpAmb><serie>1</serie><nDPS>25</nDPS>'+
+  '<prest><CNPJ>'+issuer.cnpj+'</CNPJ><xNome>Prestador Teste</xNome></prest>'+
+  '<toma><CPF>12345678909</CPF><xNome>Cliente Teste</xNome></toma>'+
+  '<serv><cServ><xDescServ>Serviço local</xDescServ></cServ></serv>'+
+  '</infDPS></DPS></infNFSe></NFSe>';
  try{
    const provider=createNationalNfseProvider({
      certificateStore:store,inputDir:join(dir,'entrada'),
-     client:{downloadDanfse:async input=>{
-       count++;
-       assert.deepEqual(input,{issuer,accessKey:key});
-       return Buffer.from('%PDF-1.7\n documento oficial');
-     }}
+     client:{downloadDanfse:async()=>{throw Error('API DANFSe suspensa não deve ser chamada')}}
    });
    assert.equal(provider.certificateIdentity(),'opaque-test-cert-identity');
-   const pdf=await provider.printPdf({document:{
-     kind:'NFSE',status:'AUTORIZADA_HOMOLOGACAO',access_key:key,
-     issuer_snapshot_json:JSON.stringify(issuer)
-   }});
-   assert.match(pdf.toString(),/^%PDF-/);
-   assert.equal(count,1);
-   await assert.rejects(provider.printPdf({document:{
-     kind:'NFSE',status:'REJEITADA',access_key:key,
-     issuer_snapshot_json:JSON.stringify(issuer)
-   }}),/autorizad|DANFSe/i);
+   const document={kind:'NFSE',status:'AUTORIZADA_HOMOLOGACAO',access_key:key,
+      environment:'HOMOLOGACAO',authorized_xml:xml,issuer_snapshot_json:JSON.stringify(issuer)};
+   const pdf=await provider.printPdf({document});
+   assert.match(pdf.toString('latin1'),/^%PDF-/);
+   assert.match(pdf.toString('latin1'),/DANFSe v2\.0/);
+   await assert.rejects(provider.printPdf({document:{...document,status:'REJEITADA'}}),/autorizad|DANFSe/i);
+   await assert.rejects(provider.printPdf({document:{...document,authorized_xml:''}}),/XML autorizado/i);
+   await assert.rejects(provider.printPdf({document:{...document,issuer_snapshot_json:JSON.stringify({...issuer,cnpj:'99888777000122'})}}),/CNPJ|prestador/i);
  }finally{rmSync(dir,{recursive:true,force:true});}
 });
