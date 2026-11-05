@@ -21,6 +21,7 @@ export function requiredNativeRoles(method,path){
  if(/^\/v1\/fiscal\/(?:onboarding|certificate(?:\/a3)?|certificates|diagnose)$/.test(route))return ADMIN;
  if(route==='/v1/fiscal/tax/profiles')return verb==='GET'?FINANCE:ADMIN;
  if(/^\/v1\/fiscal\/[1-9]\d*\/tax-review$/.test(route))return FINANCE;
+ if(/^\/v1\/fiscal\/[1-9]\d*\/nfse\/prepare$/.test(route))return ADMIN;
  if(/^\/v1\/fiscal\/[1-9]\d*\/nfse\/dps$/.test(route))return ADMIN;
  if(/^\/v1\/fiscal\/settings$/.test(route))return verb==='GET'?FINANCE:ADMIN;
  if(/^\/v1\/fiscal\/(?:\d+\/(?:submit|reconcile))$/.test(route))return FINANCE;
