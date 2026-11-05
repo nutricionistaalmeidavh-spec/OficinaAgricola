@@ -69,22 +69,23 @@ test('diagnostics uses ACBr worker status, not fake authorization',async()=>{
   const dir=join(root,'input');mkdirSync(dir);
   for(const p of ['ACBrNFe64.dll','ACBrLibNFe.ini','worker.exe'])
     writeFileSync(join(root,p),'test');
-  let observed=null;
+  const observed=[];
   const fakeStore={status:()=>({configured:true}),
     withConfig:async (_settings,action)=>action(join(root,'ACBrLibNFe.ini')),
     install:()=>({configured:true})};
   const provider=createAcbrLibFiscalProvider({
     inputDir:dir,nfeLib:join(root,'ACBrNFe64.dll'),nfeConfig:join(root,'ACBrLibNFe.ini'),
     workerExe:join(root,'worker.exe'),certificateStore:fakeStore,
-    runner:async req=>{observed=req;return {status:'ONLINE',code:'107'};}
+    runner:async req=>{observed.push(req);return req.operation==='certificate'
+      ?{status:'CERTIFICATE_MATCH'}:{status:'ONLINE',code:'107'};}
   });
   const response=await provider.diagnose({settings:{enabled:1,environment:'HOMOLOGACAO',
     issuer_cnpj:'11222333000181',issuer_uf:'SP'}});
   assert.equal(response.ready,true);
   assert.equal(response.nfse.status,'VERIFICACAO_MUNICIPAL_NECESSARIA');
-  assert.equal(observed.operation,'status');
-  assert.equal(observed.environment,'HOMOLOGACAO');
-  assert.equal(observed.issuerUf,'SP');
-  assert.equal(observed.kind,'NFE');
+  assert.deepEqual(observed.map(x=>x.operation),['certificate','status']);
+  assert.equal(observed[1].environment,'HOMOLOGACAO');
+  assert.equal(observed[1].issuerUf,'SP');
+  assert.equal(observed[1].kind,'NFE');
  }finally{rmSync(root,{recursive:true,force:true});}
 });
