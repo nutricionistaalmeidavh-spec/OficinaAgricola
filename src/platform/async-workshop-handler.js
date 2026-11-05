@@ -273,6 +273,10 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
      return json(await services.listFiscalDocuments({
        status:u.searchParams.get('status')||'',limit:u.searchParams.get('limit')||100
      }));
+   const fiscalReview=path.match(/^\/v1\/fiscal\/([1-9]\d*)\/review$/);
+   if(fiscalReview&&method==='POST')
+     return json(await services.saveFiscalTaxReview(
+       Number(fiscalReview[1]),await dataFrom(request)));
    const fiscal=path.match(/^\/v1\/fiscal\/([1-9]\d*)$/);
    if(fiscal&&method==='GET')
      return json(await services.getFiscalDocument(Number(fiscal[1])));

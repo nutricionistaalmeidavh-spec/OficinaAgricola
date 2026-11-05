@@ -58,7 +58,7 @@ npm start
 - A página de OS carrega o histórico por cursor em `/api/work-orders/page` e permite consultar ordens antigas.
 - Página **Fiscal**: configuração da empresa com validação de CNPJ, rascunhos NF-e/NFS-e por OS/venda, histórico fiscal, consulta em falha indeterminada, XML e protocolo após autorização por adaptador.
 - O documento comercial é congelado e o livro fiscal nunca realiza uma segunda baixa no estoque nem lançamento de recebimento/caixa.
-- **Padrão seguro:** fiscal desabilitado; homologação separada de produção; ninguém recebe nota fiscal automaticamente. Sem certificado, regras tributárias e emissor homologado configurados, nenhuma emissão real ocorre.
+- **Padrão seguro:** homologação ativada automaticamente após cadastro fiscal completo; produção separada e confirmada; ninguém recebe nota fiscal automaticamente. Sem certificado, regras tributárias e emissor homologado configurados, nenhuma emissão real ocorre.
 - O motor fiscal opcional pode usar **ACBrLib local** (`FISCAL_ACBR_NFE_LIB` / `FISCAL_ACBR_NFSE_LIB`) por `ctypes` em Python 3, ou um sidecar HTTP loopback (`FISCAL_LOCAL_PROVIDER_URL`), nunca os dois simultaneamente. Não há dependência de ACBr API paga. INI tributário revisado, certificado e homologação real continuam obrigatórios para emissão legal.
 - Documentação, limites e checklist de validação: [P0 Fiscal e Relatórios](docs/P0-FISCAL-REPORTS.md).
 ## CI exclusivo no GitHub

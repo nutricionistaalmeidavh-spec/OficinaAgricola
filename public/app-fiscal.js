@@ -165,12 +165,29 @@ async function fiscalTaxReviewModal(id){
     '<label>Base '+prefix+' (R$)<input name="item'+i+prefix+'Base" placeholder="0.00" inputmode="decimal"></label>'+
     '<label>Alíquota '+prefix+' (%)<input name="item'+i+prefix+'Rate" placeholder="0.00"></label>'+
     '<label>Valor '+prefix+' (R$)<input name="item'+i+prefix+'Amount" placeholder="0.00"></label></div>';
+  const ibsField=(i,key,label)=>'<label>'+label+'<input name="item'+i+key+'" inputmode="decimal"></label>';
+  const ibsValues=i=>'<details><summary>IBS/CBS da reforma tributária, quando aplicável</summary>'+
+    '<p class="muted">Preencha somente com classificação fiscal conferida. Benefícios e diferimento exigem cClassTrib oficial.</p>'+
+    ibsField(i,'IbsCst','CST IBS/CBS (3 dígitos)')+
+    ibsField(i,'IbsClass','cClassTrib (6 dígitos)')+
+    ibsField(i,'IbsBase','Base IBS/CBS (R$)')+
+    ibsField(i,'IbsUfRate','Alíquota IBS UF (%)')+
+    ibsField(i,'IbsMunRate','Alíquota IBS Município (%)')+
+    ibsField(i,'IbsCbsRate','Alíquota CBS (%)')+
+    '<details><summary>Redução de alíquota, se autorizada</summary>'+
+    ibsField(i,'IbsReductionUf','Redução IBS UF (%)')+
+    ibsField(i,'IbsReductionMun','Redução IBS Município (%)')+
+    ibsField(i,'IbsReductionCbs','Redução CBS (%)')+'</details>'+
+    '<details><summary>Diferimento, se autorizado</summary>'+
+    ibsField(i,'IbsDeferralUf','Diferimento IBS UF (%)')+
+    ibsField(i,'IbsDeferralMun','Diferimento IBS Município (%)')+
+    ibsField(i,'IbsDeferralCbs','Diferimento CBS (%)')+'</details></details>';
   const itemRows=lines.map((line,i)=>'<fieldset class="form-stack"><legend>Item '+(i+1)+
     ' · '+esc(line.description||'')+' · '+money(line.totalCents)+'</legend>'+
     '<label>Classificação aprovada<select name="item'+i+'Profile">'+profileOptions+'</select></label>'+
     '<details><summary>Valores tributários se o CST exigir base e alíquota</summary>'+
     '<p class="muted">Para ICMS CST 00 e PIS/COFINS CST 01/02, informe base, alíquota e valor calculados pelo responsável fiscal. Não inferimos impostos.</p>'+
-    taxValues(i,'Icms')+taxValues(i,'Pis')+taxValues(i,'Cofins')+'</details></fieldset>').join('');
+    taxValues(i,'Icms')+taxValues(i,'Pis')+taxValues(i,'Cofins')+'</details>'+ibsValues(i)+'</fieldset>').join('');
   showModal('Revisar '+(doc.kind==='NFCE'?'NFC-e':'NF-e')+' #'+id,
     '<form class="form-stack">'+
     '<p class="muted">Revisão vinculada ao rascunho original. Não autoriza transmissão nem substitui a conferência do contador.</p>'+
@@ -193,12 +210,24 @@ async function fiscalTaxReviewModal(id){
       const taxes=(i,name)=>({
         base:o['item'+i+name+'Base'],rate:o['item'+i+name+'Rate'],
         amount:o['item'+i+name+'Amount']});
+      const typedIbs=i=>{
+        const names=['Cst','Class','Base','UfRate','MunRate','CbsRate',
+          'ReductionUf','ReductionMun','ReductionCbs',
+          'DeferralUf','DeferralMun','DeferralCbs'];
+        const selected=Object.fromEntries(names.map(key=>[key,String(o['item'+i+'Ibs'+key]||'').trim().replace(',','.')]));
+        if(!Object.values(selected).some(Boolean))return null;
+        return {cst:selected.Cst,cClassTrib:selected.Class,base:selected.Base,
+          ufRate:selected.UfRate,munRate:selected.MunRate,cbsRate:selected.CbsRate,
+          reductionUf:selected.ReductionUf,reductionMun:selected.ReductionMun,reductionCbs:selected.ReductionCbs,
+          deferralUf:selected.DeferralUf,deferralMun:selected.DeferralMun,deferralCbs:selected.DeferralCbs};
+      };
       const body={company:addr('issuer'),
         customer:(doc.kind==='NFE'||snap.customer?.document)?addr('customer'):null,
         issuance:{number:o.number,series:o.series,nature:o.nature,
           ...(doc.kind==='NFCE'?{paymentCode:o.paymentCode}:{})},
         items:lines.map((_,i)=>({profileId:o['item'+i+'Profile'],
-          icms:taxes(i,'Icms'),pis:taxes(i,'Pis'),cofins:taxes(i,'Cofins')}))};
+          icms:taxes(i,'Icms'),pis:taxes(i,'Pis'),cofins:taxes(i,'Cofins'),
+          ibscbs:typedIbs(i)}))};
       await api('/api/fiscal/'+id+'/tax-review',{method:'POST',body});
       toast('Revisão salva e validada contra o documento fiscal. A nota ainda não foi transmitida.');
       await refreshCurrentPage();
@@ -366,7 +395,7 @@ function fiscalDraftModal(){
     '<div id="fiscalOriginOptions" class="fiscal-origin-options" role="group" aria-label="Resultados da busca"></div>'+
     '<input type="hidden" name="originId" id="fiscalOriginId">'+
     '<div id="fiscalOriginSelection" class="fiscal-origin-selection" role="status" aria-live="polite">Nenhuma operação selecionada.</div>'+
-    '<label>Documento<select id="fiscalKind" name="kind"><option value="NFE">NF-e — peças</option><option value="NFCE">NFC-e — venda ao consumidor</option><option value="NFSE">NFS-e — mão de obra</option></select></label>'+ 
+    '<label>Documento<select id="fiscalKind" name="kind"><option value="NFE">NF-e — peças</option><option value="NFCE">NFC-e — venda ao consumidor</option><option value="NFSE">NFS-e — mão de obra</option></select></label>'+
     '<div id="fiscalNfseCompetence" hidden><label>Data de competência do serviço<input type="date" id="fiscalCompetenceDate" name="competenceDate"></label>'+
     '<p id="fiscalNfseRoute" class="muted" role="status" aria-live="polite">Informe a competência para verificar o emissor obrigatório.</p></div>'+
     '<div class="fiscal-draft-preview"><strong>Prévia do documento</strong><p id="fiscalDraftPreview" class="muted">Selecione uma operação para conferir a origem. Os itens e valores fiscais serão validados pelo servidor.</p></div>'+

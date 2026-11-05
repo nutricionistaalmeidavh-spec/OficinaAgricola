@@ -37,5 +37,7 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
+      - name: Verify official fiscal data bundled in dist
+        run: node scripts/assert-fiscal-data-bundle.mjs --dist
       - name: Critical E2E
         run: npm run test:e2e

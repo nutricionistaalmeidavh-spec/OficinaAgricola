@@ -27,10 +27,14 @@ function reviewed(){
 test('reviewed fiscal document is compiled from immutable financial snapshot',()=>{
  const result=compileReviewedFiscalIni({document,issuer,review:reviewed()});
  assert.match(result.ini,/\[Produto001\]/);
- assert.match(result.ini,/Quantidade=2/);
- assert.match(result.ini,/ValorTotal=90\.00/);
- assert.match(result.ini,/ValorDesconto=10\.00/);
- assert.match(result.ini,/Descricao=Filtro de óleo/);
+ assert.match(result.ini,/qCom=2/);
+ assert.match(result.ini,/vProd=90\.00/);
+ assert.match(result.ini,/vDesc=10\.00/);
+ assert.match(result.ini,/xProd=Filtro de óleo/);
+ assert.match(result.ini,/cProd=9/);
+ assert.match(result.ini,/vUnCom=45\.00/);
+ assert.match(result.ini,/vNF=80\.00/);
+ assert.doesNotMatch(result.ini,/ValorProduto=|ValorNota=|ValorTotal=/);
  assert.deepEqual(result.manifest,{kind:'NFE',documentId:4,
   snapshotHash:document.snapshot_hash,amountCents:8000,
   issuerCnpj:issuer.cnpj,environment:'HOMOLOGACAO'});
@@ -57,4 +61,45 @@ test('NFC-e usa modelo 65 com UF/município e pagamento revisado, sem inferir im
  assert.throws(()=>compileReviewedFiscalIni({document:nfceDoc,issuer,review:wrongUf}),/cUF/);
  const wrongModel=structuredClone(review);wrongModel.sections.Identificacao.mod='55';
  assert.throws(()=>compileReviewedFiscalIni({document:nfceDoc,issuer,review:wrongModel}),/Modelo/);
+});
+
+test('official ACBr NFe fields come from immutable item snapshot',()=>{
+ const data=reviewed();
+ data.sections.Produto001.xProd='Produto indevido';
+ data.sections.Produto001.vProd='1.00';
+ const {ini}=compileReviewedFiscalIni({document,issuer,review:data});
+ assert.match(ini,/xProd=Filtro de óleo/);
+ assert.match(ini,/vProd=90\.00/);
+ assert.doesNotMatch(ini,/Produto indevido/);
+});
+
+test('NFC-e pode omitir destinatário sem divergência de cliente da venda',()=>{
+ const doc={...document,kind:'NFCE'};
+ const review=reviewed();
+ review.kind='NFCE';
+ review.sections.Identificacao={...review.sections.Identificacao,mod:'65',idDest:'1',
+   indFinal:'1',indPres:'1',tpEmis:'1'};
+ delete review.sections.Destinatario;
+ review.sections.pag001={tPag:'01',vPag:'80.00'};
+ const result=compileReviewedFiscalIni({document:doc,issuer,review});
+ assert.match(result.ini,/\[pag001\]/);
+ assert.doesNotMatch(result.ini,/\[Destinatario\]/);
+});
+
+test('totais IBS/CBS são derivados das linhas revisadas e não aceitam totais arbitrários',()=>{
+ const review=reviewed();
+ review.sections.IBSCBS001={CST:'000',cClassTrib:'000001'};
+ review.sections.gIBSCBS001={vBC:'80.00',vIBS:'0.08'};
+ review.sections.gIBSUF001={pIBSUF:'0.10',vIBSUF:'0.08'};
+ review.sections.gIBSMun001={pIBSMun:'0.00',vIBSMun:'0.00'};
+ review.sections.gCBS001={pCBS:'0.90',vCBS:'0.72'};
+ // Catálogo de teste: não é uma tabela oficial de produção.
+ const catalog={tables:{
+  ncm:['84212300'],cfop:['5102'],
+  ibscbs:[{cst:'000',cClassTrib:'000001',regime:'REGULAR',reduction:false,deferral:false}]
+ }};
+ const {ini}=compileReviewedFiscalIni({document,issuer,review,catalog});
+ assert.match(ini,/\[IBSCBSTot\]\nvBCIBSCBS=80\.00/);
+ assert.match(ini,/\[gIBSUFTot\]\nvIBSUF=0\.08/);
+ assert.match(ini,/\[gCBSTot\]\nvCBS=0\.72/);
 });

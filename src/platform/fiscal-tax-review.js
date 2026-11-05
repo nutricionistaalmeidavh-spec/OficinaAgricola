@@ -134,6 +134,40 @@ export function assembleAssistedTaxReview({document,issuer,company,customer,issu
      Object.assign(cofins,components(chosen,'cofins','COFINS'));
    sections['PIS'+suffix]=pis;
    sections['COFINS'+suffix]=cofins;
+   // IBS/CBS recebe somente valores tipados, jamais seções INI livres do navegador.
+   if(chosen.ibscbs!=null){
+     const input=chosen.ibscbs;
+     if(typeof input!=='object'||Array.isArray(input))fail('IBS/CBS exige classificação tipada');
+     const taxCst=match(input.cst,/^\d{3}$/,'CST IBS/CBS');
+     const taxClass=match(input.cClassTrib,/^\d{6}$/,'cClassTrib');
+     const base=taxMoney(input.base),baseCents=Math.round(Number(base)*100);
+     const formatted=cents=>(cents/100).toFixed(2);
+     const part=(nominalKey,reductionKey,deferralKey,pKey,vKey)=>{
+       const pText=percentage(input[nominalKey]),nominal=Number(pText);
+       const redText=String(input[reductionKey]??'').trim();
+       const defText=String(input[deferralKey]??'').trim();
+       if(redText&&defText)fail('IBS/CBS redução e diferimento simultâneos exigem revisão especializada');
+       const reduced=redText?percentage(redText):null;
+       const deferred=defText?percentage(defText):null;
+       const effective=reduced===null?nominal:
+         Math.round(nominal*(1-Number(reduced)/100)*10000)/10000;
+       const accrued=Math.round(baseCents*effective/100);
+       const withheld=deferred===null?0:Math.round(accrued*Number(deferred)/100);
+       const values={[pKey]:pText,[vKey]:formatted(accrued-withheld)};
+       if(reduced!==null){values.pRedAliq=reduced;values.pAliqEfet=effective.toFixed(4);}
+       if(deferred!==null){values.pDif=deferred;values.vDif=formatted(withheld);}
+       return values;
+     };
+     const uf=part('ufRate','reductionUf','deferralUf','pIBSUF','vIBSUF');
+     const mun=part('munRate','reductionMun','deferralMun','pIBSMun','vIBSMun');
+     const cbs=part('cbsRate','reductionCbs','deferralCbs','pCBS','vCBS');
+     sections['IBSCBS'+suffix]={CST:taxCst,cClassTrib:taxClass};
+     sections['gIBSCBS'+suffix]={vBC:base,vIBS:formatted(
+       Math.round(Number(uf.vIBSUF)*100)+Math.round(Number(mun.vIBSMun)*100))};
+     sections['gIBSUF'+suffix]=uf;
+     sections['gIBSMun'+suffix]=mun;
+     sections['gCBS'+suffix]=cbs;
+   }
    gross+=Number(line.subtotalCents);
    discount+=Number(line.discountCents);
    total+=Number(line.totalCents);
