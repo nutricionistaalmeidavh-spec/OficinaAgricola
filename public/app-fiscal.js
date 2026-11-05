@@ -53,8 +53,8 @@ async function renderFiscal({cursor=null,loaded=[]}={}){
   if($('#fiscalCertA1'))$('#fiscalCertA1').onclick=()=>fiscalCertificateA1Modal();
   if($('#fiscalCertA3'))$('#fiscalCertA3').onclick=()=>fiscalCertificateA3Modal();
   if($('#fiscalDiagnose'))$('#fiscalDiagnose').onclick=()=>fiscalRunDiagnosis();
-  $('[data-nfse-national-dps]').forEach(b=>b.onclick=()=>fiscalNationalDpsModal(Number(b.dataset.nfseNationalDps)).catch(e=>toast(e.message,true)));
-  $('[data-nfse-competence]').forEach(b=>b.onclick=()=>fiscalReviseCompetence(Number(b.dataset.nfseCompetence)).catch(e=>toast(e.message,true)));
+  $$('[data-nfse-national-dps]').forEach(b=>b.onclick=()=>fiscalNationalDpsModal(Number(b.dataset.nfseNationalDps)).catch(e=>toast(e.message,true)));
+  $$('[data-nfse-competence]').forEach(b=>b.onclick=()=>fiscalReviseCompetence(Number(b.dataset.nfseCompetence)).catch(e=>toast(e.message,true)));
   $$('[data-fiscal-details]').forEach(b=>b.onclick=()=>showFiscalHistory(Number(b.dataset.fiscalDetails)).catch(e=>toast(e.message,true)));
   $$('[data-fiscal-submit]').forEach(b=>b.onclick=()=>fiscalAction(Number(b.dataset.fiscalSubmit),'submit'));
   $$('[data-fiscal-check]').forEach(b=>b.onclick=()=>fiscalAction(Number(b.dataset.fiscalCheck),'reconcile'));
