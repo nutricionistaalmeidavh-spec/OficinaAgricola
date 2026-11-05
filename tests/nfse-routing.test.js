@@ -1,3 +1,4 @@
+import {mapLegacyNativeRoute} from '../src/platform/native-api-route-map.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {resolveNfseRoute,assertNfseRouteForTransmission} from '../src/platform/nfse-routing.js';
@@ -115,4 +116,14 @@ test('rascunho NFS-e permite corrigir competência sem transmissões e preserva 
    await ws.reviseNfseDraftRoute(draft.id,{competenceDate:'2026-11-05'});
    assert.equal(JSON.parse((await ws.getFiscalDocument(draft.id)).snapshot_json).nfseRoute.channel,'NACIONAL');
  }finally{db.close()}
+});
+
+test('a API nativa encaminha prévia e revisão de NFS-e com perfil fiscal',()=>{
+ const preview=mapLegacyNativeRoute('POST','/api/fiscal/nfse/route');
+ assert.equal(preview?.path,'/v1/fiscal/nfse/route');
+ assert.deepEqual(preview.roles,['ADMIN','FINANCEIRO']);
+ const revise=mapLegacyNativeRoute('POST','/api/fiscal/42/nfse/competence');
+ assert.equal(revise?.path,'/v1/fiscal/42/nfse/competence');
+ assert.deepEqual(revise.roles,['ADMIN','FINANCEIRO']);
+ assert.equal(mapLegacyNativeRoute('POST','/api/fiscal/abc/nfse/competence'),null);
 });
