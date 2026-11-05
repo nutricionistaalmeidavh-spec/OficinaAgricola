@@ -42,6 +42,30 @@ try{
   await page.locator('#loginForm').waitFor({state:'visible'});
   await page.locator('#loginForm [name=password]').fill('QAOnly@2026!Strong');
   await page.locator('#loginForm button[type=submit]').click();
+  // O primeiro login agora exige a etapa operacional da empresa antes do dashboard.
+  await page.locator('#firstRunFinish').waitFor({state:'visible'});
+  assert.equal(await page.locator('#firstRunFinish').isDisabled(),true);
+  await screenshot('02-assistente-primeiro-acesso');
+  await navigate('settings');
+  await page.locator('#companyForm [name=name]').fill('Oficina QA PostgreSQL');
+  await page.locator('#companyForm [name=address]').fill('Rua de Teste, 100');
+  const companySaved=page.waitForResponse(response=>
+    response.url()===base+'/api/company'&&response.request().method()==='PATCH');
+  await page.locator('#companyForm button[type=submit]').click();
+  assert.equal((await companySaved).status(),200);
+  await navigate('onboarding');
+  await page.locator('#firstRunFinish').waitFor({state:'visible'});
+  assert.equal(await page.locator('#firstRunFinish').isEnabled(),true);
+  const fiscalSkip=page.locator('[data-first-pref="fiscal"]');
+  await fiscalSkip.click();
+  await page.reload();
+  await page.locator('#firstRunFinish').waitFor({state:'visible'});
+  assert.equal(await page.locator('[data-first-pref="fiscal"]').getAttribute('data-first-action'),'resume');
+  const done=page.waitForResponse(response=>
+    response.url()===base+'/api/onboarding'&&response.request().method()==='PATCH');
+  await page.locator('#firstRunFinish').click();
+  assert.equal((await done).status(),200);
+  await page.locator('#startFirstOrder').waitFor({state:'visible'});
   await page.locator('#startFirstOrder').click();
   await page.locator('#osCustomer').selectOption('new');
   for(const [name,value] of Object.entries({newCustomerName:'Cliente contextual PG',newCustomerPhone:'16999990000',newMachineType:'Carro',newMachineBrand:'Fiat',newMachineModel:'Uno PG',newMachinePlate:'PGQ1A23'}))await page.locator('#modalBody [name="'+name+'"]').fill(value);
@@ -86,7 +110,7 @@ try{
   const result=await page.evaluate(async id=>({sales:await api('/api/sales'),part:await api('/api/parts/'+id)}),part.id);
   assert.equal(result.sales.length,1);assert.equal(Number(result.sales[0].total_cents),5900);assert.equal(Number(result.part.quantity),8);
   await screenshot('06-venda-confirmada');assert.deepEqual(errors,[]);
-  await writeFile(path.join(output,'summary.json'),JSON.stringify({status:'passed',engine:'postgres',viewport:viewportName,checks:['first-admin-ui','contextual-customer-machine-order','diagnosis-save-twice','sale-preview','price-conflict-no-write','sale-confirmed-stock-once']},null,2));
+  await writeFile(path.join(output,'summary.json'),JSON.stringify({status:'passed',engine:'postgres',viewport:viewportName,checks:['first-admin-ui','first-run-company-required','onboarding-persist-resume','first-run-finishes-without-fiscal','contextual-customer-machine-order','diagnosis-save-twice','sale-preview','price-conflict-no-write','sale-confirmed-stock-once']},null,2));
 }catch(error){
   if(page)await screenshot('failure').catch(()=>{});
   await writeFile(path.join(output,'summary.json'),JSON.stringify({status:'failed',error:error.message,errors},null,2));throw error;

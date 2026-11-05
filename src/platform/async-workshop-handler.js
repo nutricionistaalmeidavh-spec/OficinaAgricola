@@ -90,6 +90,12 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
        to:u.searchParams.get('to')||undefined,
        includeFinance:['ADMIN','FINANCEIRO'].includes(actor.role)
      }));
+   if(path==='/v1/onboarding'&&method==='GET')
+     return json(await services.getStatus());
+   if(path==='/v1/onboarding'&&method==='PATCH')
+     return json(await services.setPreference(await dataFrom(request,4096)));
+   if(path==='/v1/onboarding/diagnostics'&&method==='GET')
+     return json(await services.runDiagnostics());
    if(path==='/v1/company'&&method==='GET')
      return json(await services.getCompanySettings());
    if(path==='/v1/company'&&method==='PATCH')

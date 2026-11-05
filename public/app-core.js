@@ -402,7 +402,7 @@ async function boot(){
     state.user=await api('/api/auth/me');
     if(window.OficinaTenant)await window.OficinaTenant.load();
     state.user=await api('/api/auth/me');
-    showApp();await navigate('dashboard');
+    showApp();await openInitialPage();
     void updatePendingCommands();
     void resumePendingCommands();
   }catch{showLogin()}
@@ -415,7 +415,7 @@ function showLogin(){
   $('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');
   $('#setupForm').classList.add('hidden');$('#loginForm').classList.remove('hidden');
 }
-function showApp(){$('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');$('#userName').textContent=state.user.name;$('#userRole').textContent=userRoleLabel(state.user.role);$('#avatar').textContent=state.user.name[0]?.toUpperCase()||'A';const fiscalLink=$('#nav [data-page="fiscal"]');if(fiscalLink)fiscalLink.hidden=!['ADMIN','FINANCEIRO'].includes(state.user.role);const mobileFiscalLink=$('#mobileMorePanel [data-mobile-page="fiscal"]');if(mobileFiscalLink)mobileFiscalLink.hidden=!['ADMIN','FINANCEIRO'].includes(state.user.role)}
+function showApp(){$('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');$('#userName').textContent=state.user.name;$('#userRole').textContent=userRoleLabel(state.user.role);$('#avatar').textContent=state.user.name[0]?.toUpperCase()||'A';const fiscalLink=$('#nav [data-page="fiscal"]');if(fiscalLink)fiscalLink.hidden=!['ADMIN','FINANCEIRO'].includes(state.user.role);const mobileFiscalLink=$('#mobileMorePanel [data-mobile-page="fiscal"]');if(mobileFiscalLink)mobileFiscalLink.hidden=!['ADMIN','FINANCEIRO'].includes(state.user.role);for(const entry of ['#nav [data-page="onboarding"]','#mobileMorePanel [data-mobile-page="onboarding"]']){const node=$(entry);if(node)node.hidden=state.user.role!=='ADMIN'}}
 function logout(){
   if(modalSession)closeModal();
   state.pageController?.abort();state.pageEpoch++;state.pageReady=false;
@@ -425,10 +425,11 @@ function logout(){
 
 function pageRenderer(page){
   const dashboard=typeof renderDashboard==='function'?renderDashboard:async()=>{};
+  const onboarding=typeof renderOnboarding==='function'?renderOnboarding:async()=>{};
   const fiscal=typeof renderFiscal==='function'?renderFiscal:async()=>{};
   const market=typeof renderMarketParity==='function'?renderMarketParity:async()=>{};
   return ({
-    dashboard,customers:renderCustomers,machines:renderMachines,
+    dashboard,onboarding,customers:renderCustomers,machines:renderMachines,
     'work-orders':renderWorkOrders,inventory:renderInventory,schedule:renderSchedule,
     finance:renderFinance,reports:renderReports,fiscal,technicians:renderTechnicians,
     settings:renderSettings,services:renderServices,sales:renderSales,market
