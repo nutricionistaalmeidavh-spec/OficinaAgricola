@@ -32,15 +32,17 @@ async function renderFiscal({cursor=null,loaded=[]}={}){
   }).join('');
   setContent('<div class="section-head fiscal-head"><div><h2>Documentos fiscais</h2>'+
     '<span class="muted">Rascunhos, notas e protocolos das ordens de serviço e vendas</span></div>'+
-    '<div class="action-row">'+(state.user.role==='ADMIN'?'<button id="fiscalSettings" class="btn">Configuração fiscal</button>':'')+
+    '<div class="action-row">'+(state.user.role==='ADMIN'?'<button id="fiscalSettings" class="btn">Configuração fiscal</button><button id="fiscalCertificate" class="btn">Certificado A1</button><button id="fiscalDiagnose" class="btn">Testar SEFAZ</button>':'')+
     '<button id="fiscalNew" class="btn primary">+ Preparar documento</button></div></div>'+
-    '<div class="card"><p><strong>Cadastro fiscal:</strong> '+(settings.enabled?'Habilitado':'Desabilitado')+' · '+esc(settings.environment)+
+    '<div class="card"><p><strong>Cadastro fiscal:</strong> '+(settings.enabled?'Cadastro completo':'Cadastro incompleto')+' · '+esc(settings.environment)+
     ' · CNPJ '+esc(settings.issuer_cnpj||'não informado')+'</p><p><strong>Emissão efetiva:</strong> exige certificado/credenciamento, classificação tributária e um emissor local validado. '+
     'Um rascunho ou um envio sem confirmação não substitui NF-e ou NFS-e autorizada.</p></div>'+
     '<div class="card"><div class="card-head"><h2>Registro fiscal</h2><small>'+docs.length+' documento(s) recente(s)</small></div>'+
     '<div class="list">'+(cards||'<div class="empty">Nenhum documento fiscal preparado.</div>')+'</div></div>');
   $('#fiscalNew').onclick=()=>fiscalDraftModal();
   if($('#fiscalSettings'))$('#fiscalSettings').onclick=()=>fiscalSettingsModal(settings);
+  if($('#fiscalCertificate'))$('#fiscalCertificate').onclick=()=>fiscalCertificateModal();
+  if($('#fiscalDiagnose'))$('#fiscalDiagnose').onclick=()=>fiscalRunDiagnosis();
   $$('[data-fiscal-details]').forEach(b=>b.onclick=()=>showFiscalHistory(Number(b.dataset.fiscalDetails)).catch(e=>toast(e.message,true)));
   $$('[data-fiscal-submit]').forEach(b=>b.onclick=()=>fiscalAction(Number(b.dataset.fiscalSubmit),'submit'));
   $$('[data-fiscal-check]').forEach(b=>b.onclick=()=>fiscalAction(Number(b.dataset.fiscalCheck),'reconcile'));
@@ -49,6 +51,48 @@ async function renderFiscal({cursor=null,loaded=[]}={}){
    showPagedLoadMore({cursor:page.nextCursor,loaded:docs.length,total:page.total,onMore:()=>renderFiscal({cursor:page.nextCursor,loaded:docs})});
 }
 
+async function fiscalRunDiagnosis(){
+  try{
+    const result=await api('/api/fiscal/diagnose',{method:'POST',body:{}});
+    const status=result?.nfe?.status||'INDETERMINADO';
+    toast('SEFAZ NF-e: '+status+'. NFS-e requer validação municipal. Esta consulta não autoriza produção.');
+  }catch(error){toast(error.message||'Falha no diagnóstico SEFAZ',true);}
+}
+async function fiscalCertificateModal(){
+  let status;
+  try{status=await api('/api/fiscal/onboarding');}
+  catch(error){toast(error.message||'Configuração local indisponível',true);return;}
+  const configured=status.certificate?.configured;
+  const certificateText=configured
+    ?'Certificado A1 local cadastrado. Identificador: '+esc(status.certificate.fingerprint||'')+
+       '. Para substituir, selecione outro PFX.'
+    :'Nenhum certificado cadastrado nesta empresa/unidade.';
+  showModal('Certificado fiscal A1',
+    '<form class="form-stack">'+
+    '<p class="muted">'+certificateText+'</p>'+
+    '<p class="muted">Selecione um arquivo .pfx ou .p12 emitido para sua empresa. Os dados são enviados somente ao backend local da unidade; a senha não é gravada no navegador nem no banco.</p>'+
+    '<label>Certificado A1 (.pfx/.p12)<input name="certificateFile" type="file" accept=".pfx,.p12" required></label>'+
+    '<label>Senha do certificado<input name="certificatePassword" type="password" autocomplete="off" maxlength="256"></label>'+
+    '<p class="muted">Cartões e tokens A3 exigem suporte criptográfico e leitor compatíveis; este formulário é específico para A1.</p>'+
+    '<button type="submit" class="btn primary">Instalar certificado e testar SEFAZ</button></form>',
+    async form=>{
+      const file=form.querySelector('[name="certificateFile"]')?.files?.[0];
+      const password=form.querySelector('[name="certificatePassword"]')?.value||'';
+      if(!file||file.size<1||file.size>3*1024*1024)
+        throw Error('Escolha um PFX/P12 válido de até 3 MB');
+      const encoded=await new Promise((resolve,reject)=>{
+        const reader=new FileReader();
+        reader.onload=()=>resolve(String(reader.result||'').split(',')[1]||'');
+        reader.onerror=()=>reject(Error('Não foi possível ler o certificado'));
+        reader.readAsDataURL(file);
+      });
+      await api('/api/fiscal/certificate',{method:'POST',body:{pfxBase64:encoded,password}});
+      form.querySelector('[name="certificatePassword"]').value='';
+      toast('Certificado A1 armazenado localmente. Executando diagnóstico SEFAZ.');
+      await fiscalRunDiagnosis();
+      await refreshCurrentPage();
+    });
+}
 function fiscalSettingsModal(current){
   const selected=(value,expected)=>value===expected?' selected':'';
   const safe=value=>esc(value||'');
@@ -67,7 +111,7 @@ function fiscalSettingsModal(current){
     '<label>Ambiente<select name="environment">'+
     '<option value="HOMOLOGACAO"'+selected(current.environment,'HOMOLOGACAO')+'>Homologação (sem valor fiscal)</option>'+
     '<option value="PRODUCAO"'+selected(current.environment,'PRODUCAO')+'>Produção</option></select></label>'+
-    '<label><input type="checkbox" name="enabled"'+(current.enabled?' checked':'')+'> Habilitar transmissão após configurar emissor local</label>'+
+    '<p class="muted">Ao concluir o cadastro, o ambiente de homologação é habilitado automaticamente. A transmissão exige certificado e ACBr configurados para esta empresa.</p>'+
     '<label><input type="checkbox" name="productionConfirmed"'+(current.production_confirmed?' checked':'')+'> Confirmo a configuração de produção (não equivale a credenciamento)</label>'+
     '<button class="btn primary" type="submit">Salvar configuração</button></form>',
     async form=>{
@@ -76,7 +120,7 @@ function fiscalSettingsModal(current){
         issuerCnpj:o.issuerCnpj,issuerUf:o.issuerUf,municipalityIbge:o.municipalityIbge,
         stateRegistration:o.stateRegistration,municipalRegistration:o.municipalRegistration,
         taxRegime:o.taxRegime,environment:o.environment,
-        enabled:o.enabled==='on',productionConfirmed:o.productionConfirmed==='on',
+        productionConfirmed:o.productionConfirmed==='on',
         requestId:newCommandId()
       }});
       toast('Configuração fiscal salva. Documentos de homologação não têm validade fiscal.');

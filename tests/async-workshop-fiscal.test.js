@@ -54,3 +54,16 @@ test('shared fiscal adapter authorizes exactly one sidecar submission with froze
   assert.equal(sent,1);
  }finally{db.close();}
 });
+
+test('shared fiscal adapter activates homologation on company registration without feature toggle',async()=>{
+ const db=openDatabase(':memory:');
+ try{
+  const {ws}=await ready(db,null);
+  assert.equal((await ws.getFiscalSettings()).enabled,0);
+  const saved=await ws.setFiscalSettings({issuerCnpj:'11222333000181',issuerUf:'SP',
+   municipalityIbge:'3550308',taxRegime:'SIMPLES'});
+  assert.equal(saved.environment,'HOMOLOGACAO');
+  assert.equal(saved.enabled,1);
+  assert.equal((await ws.setFiscalSettings({enabled:false})).enabled,1);
+ }finally{db.close();}
+});

@@ -19,17 +19,19 @@ function makeDraft(db){
   return createFiscalDraft(db,{originType:'OS',originId:os.id,kind:'NFSE',requestId:'doc-1'});
 }
 
-test('Fiscal P0: configurações locais são opt-in, validadas e não contêm secrets',()=>{
+test('Fiscal P0: cadastro completo habilita homologação automaticamente sem ativação manual',()=>{
   const db=openDatabase(':memory:');
   try{
     migrate(db);migrateAssistencia(db);
     assert.equal(getFiscalSettings(db).enabled,0);
     assert.throws(()=>setFiscalSettings(db,{enabled:true}),/Complete/);
     assert.throws(()=>setFiscalSettings(db,{issuerCnpj:'00000000000000'}),/CNPJ/);
-    const active=setFiscalSettings(db,config);
+    const {enabled: _legacyEnabled, ...companyData}=config;
+    const active=setFiscalSettings(db,companyData);
     assert.equal(active.issuer_cnpj,'11222333000181');
     assert.equal(active.environment,'HOMOLOGACAO');
     assert.equal(active.enabled,1);
+    assert.equal(setFiscalSettings(db,{enabled:false}).enabled,1,'flag legada não bloqueia contribuinte configurado');
     assert.throws(()=>setFiscalSettings(db,{environment:'PRODUCAO'}),/Produção exige confirmação/);
     assert.equal(getFiscalSettings(db).environment,'HOMOLOGACAO');
     const production=setFiscalSettings(db,{environment:'PRODUCAO',productionConfirmed:true});
