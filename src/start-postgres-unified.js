@@ -102,6 +102,9 @@ function fiscalProviderForUnit(unit){
   if(!nfeLib&&!nfseLib)return null;
   return createAcbrLibFiscalProvider({
     nfeLib,nfseLib,workerExe:process.env.FISCAL_ACBR_WORKER_EXE,inputDir,
+    // A biblioteca NFSe integrada usa o canal nacional; rotas municipais exigem
+    // configuração isolada específica da empresa, nunca fallback silencioso.
+    ...(nfseLib?{nfseChannel:'NACIONAL'}:{}),
     ...(nfeLib?{nfeConfig:privateIni('ACBrLibNFe.ini')}:{}),
     ...(nfseLib?{nfseConfig:privateIni('ACBrLibNFSe.ini')}:{})
   });
