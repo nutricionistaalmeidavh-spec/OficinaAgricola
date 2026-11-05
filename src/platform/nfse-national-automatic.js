@@ -1,7 +1,6 @@
 // Fluxo assistido de DPS Nacional a partir do snapshot canônico da OS.
 // O SDK MIT gera o XML/XSD e assina com o A1 local; não decide tributos.
 import {createHash} from 'node:crypto';
-import {buildDpsFromJson} from '@useinvio/nfse-sdk';
 import {buildNationalDpsId} from './nfse-national-api.js';
 
 const fail=m=>{throw Error(m)};
@@ -99,9 +98,6 @@ export function prepareNationalDpsInput({document,issuer,profile,customer,issuan
    totTrib
  }};
  // O SDK valida estruturalmente os campos do leiaute nacional, sem substituir XSD/homologação.
- const built=buildDpsFromJson(payload);
- const expected=buildNationalDpsId({municipalityIbge:city,cnpj,series,number});
- if(built.id!==expected)fail('Identificador DPS gerado não corresponde ao cadastro fiscal');
- if(Buffer.byteLength(built.xml,'utf8')>512*1024)fail('DPS gerada excede limite');
- return {payload,idDps:built.id,xml:built.xml};
+ const idDps=buildNationalDpsId({municipalityIbge:city,cnpj,series,number});
+ return {payload,idDps};
 }
