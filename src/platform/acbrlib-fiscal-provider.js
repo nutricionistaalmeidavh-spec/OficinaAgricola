@@ -78,7 +78,7 @@ function executeWorker(data,{python,workerExe,timeoutMs=90000}){
     const timer=setTimeout(()=>stopError('ACBrLib excedeu o tempo seguro; consultar autorização antes de reenviar'),timeoutMs);
     proc.on('error',()=>stopError('Python 3 não instalado ou executor ACBrLib indisponível'));
     proc.stdout.setEncoding('utf8');
-    proc.stdout.on('data',chunk=>{out+=chunk;if(out.length>4*1024*1024)stopError('Resposta ACBrLib excede limite')});
+    proc.stdout.on('data',chunk=>{out+=chunk;if(out.length>9*1024*1024)stopError('Resposta ACBrLib excede limite')});
     proc.stderr.setEncoding('utf8');
     proc.stderr.on('data',chunk=>{err+=chunk.slice(0,2000);if(err.length>8000)err=err.slice(0,8000)});
     proc.on('close',code=>{
@@ -132,6 +132,27 @@ export function createAcbrLibFiscalProvider(opts={}){
     transmit:({document,attemptId})=>runner({...preflight({document}),operation:'transmit',
       attemptId,lot:Number(document.id)}),
     consult:({document,attemptId})=>runner({...preflight({document}),operation:'consult',
-      attemptId,lot:Number(document.id),accessKey:document.access_key||null})
+      attemptId,lot:Number(document.id),accessKey:document.access_key||null}),
+    prepareCancellation:({document,issuer})=>{
+      if(!document?.access_key||!document?.protocol||!document?.authorized_xml)
+        throw new Error('Cancelamento exige documento autorizado e XML original');
+      return preflight({document,issuer});
+    },
+    cancel:({document,attemptId,reason})=>runner({...preflight({document}),operation:'cancel',
+      attemptId,lot:Number(document.id),accessKey:document.access_key||null,
+      authorizedXml:document.authorized_xml,reason}),
+    consultCancellation:({document,attemptId})=>runner({
+      ...preflight({document}),operation:'consultCancellation',
+      attemptId,lot:Number(document.id),accessKey:document.access_key||null
+    }),
+    printPdf:async({document})=>{
+      const result=await runner({...preflight({document}),operation:'pdf',
+        accessKey:document.access_key||null,authorizedXml:document.authorized_xml});
+      if(result?.status!=='PDF'||typeof result.pdfBase64!=='string'||
+          result.pdfBase64.length>8*1024*1024||
+          !/^[A-Za-z0-9+/]+={0,2}$/.test(result.pdfBase64))
+        throw new Error('ACBrLib não retornou um PDF válido');
+      return Buffer.from(result.pdfBase64,'base64');
+    }
   };
 }
