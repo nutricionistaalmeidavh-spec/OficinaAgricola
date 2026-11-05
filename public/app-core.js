@@ -402,7 +402,7 @@ async function boot(){
     state.user=await api('/api/auth/me');
     if(window.OficinaTenant)await window.OficinaTenant.load();
     state.user=await api('/api/auth/me');
-    showApp();await navigate('dashboard');
+    showApp();await openInitialPage();
     void updatePendingCommands();
     void resumePendingCommands();
   }catch{showLogin()}
@@ -428,7 +428,7 @@ function pageRenderer(page){
   const fiscal=typeof renderFiscal==='function'?renderFiscal:async()=>{};
   const market=typeof renderMarketParity==='function'?renderMarketParity:async()=>{};
   return ({
-    dashboard,customers:renderCustomers,machines:renderMachines,
+    dashboard,onboarding:renderOnboarding,customers:renderCustomers,machines:renderMachines,
     'work-orders':renderWorkOrders,inventory:renderInventory,schedule:renderSchedule,
     finance:renderFinance,reports:renderReports,fiscal,technicians:renderTechnicians,
     settings:renderSettings,services:renderServices,sales:renderSales,market
