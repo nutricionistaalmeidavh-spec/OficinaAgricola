@@ -184,6 +184,8 @@ const TABLES=[
  ON inventory_movements(part_id,id)`,
 `CREATE INDEX IF NOT EXISTS idx_async_fiscal_status
  ON fiscal_documents(status,id)`,
+`CREATE UNIQUE INDEX IF NOT EXISTS idx_fiscal_goods_model_unique
+ ON fiscal_documents(origin_type,origin_id) WHERE kind IN ('NFE','NFCE')`,
 `CREATE INDEX IF NOT EXISTS idx_async_outbox_pending
  ON domain_outbox(delivered_at,id)`
 ];
