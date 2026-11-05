@@ -1,5 +1,6 @@
 import {createHash,randomUUID,randomBytes} from 'node:crypto';
 import {assertFiscalIssuerUf} from './fiscal-uf.js';
+import {assertNfseRouteForTransmission} from './nfse-routing.js';
 
 const validStates=new Set(['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']);
 const validRegimes=new Set(['MEI','SIMPLES','NORMAL']);
@@ -157,6 +158,9 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
    if(!provider||typeof provider.transmit!=='function')
      fail('Emissor fiscal não configurado; nenhuma nota enviada',503);
    const issuer=assertReady(await getFiscalSettings(),doc);
+   // O canal NFS-e deve ser declarado pelo emissor local antes da tentativa;
+   // falha de pré-validação mantém o rascunho intacto, sem transmissão.
+   assertNfseRouteForTransmission(doc,issuer,provider);
    if(typeof provider.prepare==='function')await provider.prepare({document:doc,issuer});
    const attemptId=randomUUID(),providerName=clean(provider.name)||'local',at=now();
    const update={sql:`UPDATE fiscal_documents SET
