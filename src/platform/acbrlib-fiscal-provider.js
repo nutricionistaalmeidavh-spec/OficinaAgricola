@@ -3,10 +3,11 @@
 // manifesto vinculado ao snapshot canônico e ACBrLib compilada/instalada pelo operador.
 // Segredos do certificado permanecem na configuração externa da própria ACBrLib.
 import {spawn} from 'node:child_process';
-import {readFileSync,realpathSync,statSync} from 'node:fs';
+import {createHash,randomBytes} from 'node:crypto';
+import {readFileSync,realpathSync,statSync,writeFileSync,existsSync,renameSync,rmSync} from 'node:fs';
 import {isAbsolute,join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {prepareReviewedFiscalIni} from './fiscal-ini-preparer.js';
+import {prepareReviewedFiscalIni,compileReviewedFiscalIni} from './fiscal-ini-preparer.js';
 
 function localFile(path,label){
   if(typeof path!=='string'||!isAbsolute(path))
@@ -140,6 +141,27 @@ export function createAcbrLibFiscalProvider(opts={}){
   };
   return {
     name:'acbrlib-local',
+    saveTaxReview:({document,issuer,sections}={})=>{
+      if(!document||document.kind!=='NFE'||document.status!=='RASCUNHO')
+        throw new Error('Revisão tributária permitida apenas para rascunho NF-e');
+      const review={kind:'NFE',documentId:Number(document.id),
+        snapshotHash:document.snapshot_hash,amountCents:Number(document.amount_cents),
+        issuerCnpj:issuer?.cnpj,environment:issuer?.environment,sections};
+      // Validação detalhada antes de persistir. Nenhum XML é assinado ou enviado aqui.
+      compileReviewedFiscalIni({document,issuer,review});
+      const filename='NFE-'+document.id+'-'+document.snapshot_hash;
+      const target=join(inputDir,filename+'.review.json');
+      if(existsSync(join(inputDir,filename+'.ini'))||
+         existsSync(join(inputDir,filename+'.json')))
+        throw new Error('Documento fiscal já preparado; não alterar tributação após preparo');
+      const tmp=target+'.new-'+randomBytes(8).toString('hex');
+      const raw=JSON.stringify(review);
+      try{
+        writeFileSync(tmp,raw,{flag:'wx',mode:0o600});
+        renameSync(tmp,target);
+      }finally{if(existsSync(tmp))rmSync(tmp,{force:true});}
+      return {reviewed:true,reviewHash:createHash('sha256').update(raw).digest('hex')};
+    },
     certificateStatus:()=>certificateStore?certificateStore.status():{configured:false},
     installCertificate:input=>{
       if(!certificateStore)throw new Error('Instalação de certificado disponível apenas no Oficina local');
