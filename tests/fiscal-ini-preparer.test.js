@@ -41,5 +41,5 @@ test('reviewed fiscal data fails closed on amount, XML injection and taxation ga
  const missing=reviewed();delete missing.sections.ICMS001;
  assert.throws(()=>compileReviewedFiscalIni({document,issuer,review:missing}),/ICMS|tribut/i);
  const injection=reviewed();injection.sections.Produto001.NCM='84212300\n[Emitente]';
- assert.throws(()=>compileReviewedFiscalIni({document,issuer,review:injection}),/INI|inválid|linha/i);
+ assert.throws(()=>compileReviewedFiscalIni({document,issuer,review:injection}),/NCM|CFOP|INI|inválid|linha/i);
 });
