@@ -38,7 +38,7 @@ $('#loginForm').addEventListener('submit',async e=>{
   try{
     const result=await api('/api/auth/login',{method:'POST',body:formObj(new FormData(form))});
     state.user=result.user;state.token='';if(window.OficinaTenant)await window.OficinaTenant.load();
-    state.user=await api('/api/auth/me');showApp();await navigate('dashboard');
+    state.user=await api('/api/auth/me');showApp();await openInitialPage();
     void updatePendingCommands();void resumePendingCommands();
   }catch(err){$('#loginError').textContent=friendlyUiMessage(err.message);}
   finally{button.disabled=false;button.textContent='Entrar';form.removeAttribute('aria-busy');}
