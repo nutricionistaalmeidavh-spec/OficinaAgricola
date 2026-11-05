@@ -62,10 +62,17 @@ test('primeiro acesso: certificado não libera produção nem equivale a homolog
     environment:'PRODUCAO',production_confirmed:true
   }});
   assert.equal(confirmOnly.fiscalProduction,false);
+  const inconsistent=evaluate({health,company,fiscal:{
+    ...fiscal,authorizationVerified:true,taxProfileVerified:true,productionReady:false
+  },settings:{environment:'PRODUCAO',production_confirmed:true}});
+  assert.equal(inconsistent.fiscalProduction,false);
   const authorized=evaluate({health,company,fiscal:{
-    ...fiscal,authorizationVerified:true,taxProfileVerified:true
+    ...fiscal,authorizationVerified:true,taxProfileVerified:true,productionReady:true,
+    models:{NFE:{productionReady:true,homologationVerified:true}}
   },settings:{environment:'PRODUCAO',production_confirmed:true}});
   assert.equal(authorized.fiscalProduction,true);
+  assert.equal(authorized.fiscalHomologationVerified,true);
+  assert.equal(authorized.fiscalModels.NFE.productionReady,true);
 });
 test('primeiro acesso: status indisponível nunca é considerado sucesso e retoma pelos dados reais',async()=>{
   let configured=false;
