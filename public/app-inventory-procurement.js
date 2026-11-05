@@ -166,3 +166,77 @@ async function showPurchaseOrdersList(){
  </div>`).join(''):'<p class="empty">Nenhum pedido registrado.</p>'}</div>`);
  $$('[data-order-id]').forEach(b=>b.onclick=()=>openPurchaseOrder(Number(b.dataset.orderId)).catch(e=>toast(e.message,true)));
 }
+
+// A physical count is a reviewable snapshot. Saving quantities does not affect stock.
+async function listStocktakesModal(visibleParts=[]){
+ const takes=await api('/api/inventory/stocktakes?limit=30');
+ showModal('Inventário físico',`<div class="form-stack">
+  <p class="muted">Conte as peças fisicamente. O saldo operacional permanece inalterado até a aprovação do administrador. Vendas e OS durante a contagem tornam o retrato anterior obsoleto.</p>
+  <label>Nome do inventário<input id="stocktakeName" maxlength="160" value="Conferência física de estoque" required></label>
+  <div class="action-row"><button type="button" class="btn primary" id="startStocktakeAll">Iniciar inventário completo (até 500 peças)</button>
+  <button type="button" class="btn soft" id="startStocktakePage">Inventariar peças desta página (${visibleParts.length})</button></div>
+  <div class="list">${takes.length?takes.map(t=>`<div class="list-item"><div>
+   <strong>${esc(t.name)}</strong> ${badge(t.status)}<br><small>${dt(t.created_at)}</small></div>
+   <button class="btn sm" type="button" data-open-stocktake="${t.id}">Conferir</button></div>`).join(''):'<p class="empty">Nenhuma contagem iniciada.</p>'}</div>
+ </div>`);
+ const start=async partIds=>{
+  const name=$('#stocktakeName').value.trim();
+  if(!name)throw Error('Informe o nome da contagem');
+  const created=await api('/api/inventory/stocktakes',{method:'POST',
+   body:{requestId:newCommandId(),name,...(partIds?{partIds}:{})}});
+  await openStocktakeModal(created.id);
+ };
+ $('#startStocktakeAll').onclick=()=>start(null).catch(e=>toast(e.message,true));
+ $('#startStocktakePage').disabled=!visibleParts.length;
+ $('#startStocktakePage').onclick=()=>start(visibleParts.map(p=>p.id)).catch(e=>toast(e.message,true));
+ $$('[data-open-stocktake]').forEach(b=>b.onclick=()=>openStocktakeModal(Number(b.dataset.openStocktake)).catch(e=>toast(e.message,true)));
+}
+async function openStocktakeModal(stocktakeId){
+ const result=await api('/api/inventory/stocktakes/'+stocktakeId);
+ const editable=result.status==='ABERTO',admin=state.user.role==='ADMIN';
+ showModal('Conferência — '+result.name,`<div class="form-stack">
+  <p class="muted">${badge(result.status)} · ${result.lines.length} peças · ${result.pending} sem contagem · ${result.discrepancies} divergências.
+  ${editable?'Apenas salvar a contagem não modifica o saldo.':'Inventário aplicado e encerrado; registros preservados.'}</p>
+  <form class="form-stack">
+   <div class="list">${result.lines.map(x=>{
+     const delta=x.difference==null?'Pendente':(x.difference>0?'+':'')+x.difference;
+     return `<div class="list-item" style="align-items:center"><div style="min-width:0;flex:1">
+      <strong>${esc(x.sku)} — ${esc(x.description)}</strong><br>
+      <small>Saldo de referência: ${x.expected_quantity} ${esc(x.unit||'UN')}
+       ${x.barcode?' · GTIN '+esc(x.barcode):''}</small><br>
+      <small>Diferença: ${esc(delta)} ${x.stale?'<strong> · Saldo alterado durante a contagem!</strong>':''}</small>
+     </div><label style="max-width:140px">Contado
+      <input data-stocktake-count="${x.part_id}" type="number" step="0.01" min="0" max="1000000"
+       ${editable?'':'disabled'} placeholder="Pendente"
+       value="${x.counted_quantity==null?'':x.counted_quantity}"></label></div>`;
+   }).join('')}</div>
+   ${editable?'<button type="submit" class="btn primary">Salvar contagem (não altera estoque)</button>':''}
+  </form>
+  ${editable&&admin?`<section class="card"><h3>Conferir e aplicar diferenças</h3>
+   <p class="muted">Somente o administrador pode aplicar o resultado. Todas as peças precisam ter sido contadas; saldos alterados após iniciar a contagem exigem recontagem.</p>
+   <label>Motivo da conferência<input id="stocktakeReason" minlength="5" maxlength="500" placeholder="Ex.: conferência mensal do almoxarifado"></label>
+   <button class="btn soft" type="button" id="applyStocktake">Aplicar divergências ao estoque</button></section>`:''}
+ </div>`,editable?async()=>{
+  const counts=$$('[data-stocktake-count]').filter(el=>el.value.trim()!=='').map(el=>({
+   partId:Number(el.dataset.stocktakeCount),quantity:Number(el.value)
+  }));
+  if(!counts.length)throw Error('Preencha ao menos uma contagem');
+  await api('/api/inventory/stocktakes/'+stocktakeId+'/counts',{method:'POST',
+    body:{requestId:newCommandId(),counts}});
+  toast('Contagem salva. Nenhuma quantidade de estoque foi alterada.');
+  await openStocktakeModal(stocktakeId);
+ }:null);
+ if($('#applyStocktake'))$('#applyStocktake').onclick=async()=>{
+  try{
+   const reason=$('#stocktakeReason').value.trim();
+   if(reason.length<5)throw Error('Informe o motivo da aplicação (mínimo 5 caracteres)');
+   if(result.pending)throw Error('Salve primeiro as contagens pendentes');
+   if(result.lines.some(x=>x.stale))throw Error('Saldo alterado após início: inicie uma nova contagem');
+   const applied=await api('/api/inventory/stocktakes/'+stocktakeId+'/apply',{method:'POST',
+    body:{requestId:newCommandId(),reason}});
+   toast('Inventário aplicado; diferenças registradas no histórico');
+   await refreshCurrentPage();
+   if(applied.status!=='APLICADO')throw Error('Confirmação não recebida');
+  }catch(e){toast(e.message,true)}
+ };
+}
