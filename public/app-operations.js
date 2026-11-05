@@ -29,7 +29,7 @@ async function renderInventory({cursor=null,loaded=[]}={}){
  $('#inventoryBarcodeFocus').onclick=()=>barcodeInput.focus();
  barcodeInput.onkeydown=async e=>{
   if(e.key!=='Enter')return;e.preventDefault();
-  const code=barcodeInput.value.replace(/[\\s-]/g,'');
+  const code=barcodeInput.value.replace(/[\s-]/g,'');
   if(!code){barcodeResult.textContent='Informe um EAN/GTIN.';return}
   barcodeResult.textContent='Consultando código…';
   try{
