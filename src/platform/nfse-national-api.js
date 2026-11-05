@@ -7,6 +7,11 @@ const URLS=Object.freeze({
  HOMOLOGACAO:'https://sefin.producaorestrita.nfse.gov.br/API/SefinNacional',
  PRODUCAO:'https://sefin.nfse.gov.br/SefinNacional'
 });
+const ADN_URLS=Object.freeze({
+ HOMOLOGACAO:'https://adn.producaorestrita.nfse.gov.br',
+ PRODUCAO:'https://adn.nfse.gov.br'
+});
+const MAX_PDF=6*1024*1024;
 const MAX_XML=1024*1024,MAX_JSON=3*1024*1024;
 const fail=message=>{throw new Error(message)};
 const numbers=(v,length,label)=>{
@@ -114,7 +119,30 @@ async function nativeTransport({method,url,body,identity}){
   req.end(body||undefined);
  });
 }
-export function createNationalNfseClient({certificateStore,transport=nativeTransport}={}){
+// DANFSe é recuperado exclusivamente do ADN oficial, nunca de URL vinda do cliente.
+async function nativePdfTransport({url,identity}){
+ const target=new URL(url);
+ if(target.protocol!=='https:'||!Object.values(ADN_URLS).some(base=>url.startsWith(base+'/danfse/')))
+   fail('Origem DANFSe não permitida');
+ return new Promise((resolve,reject)=>{
+   const req=httpsRequest({method:'GET',hostname:target.hostname,port:443,
+     path:target.pathname,timeout:30000,rejectUnauthorized:true,minVersion:'TLSv1.2',
+     pfx:identity.pfx,passphrase:identity.passphrase,
+     headers:{Accept:'application/pdf'}},res=>{
+       let length=0;const chunks=[];
+       res.on('data',chunk=>{
+         length+=chunk.length;
+         if(length>MAX_PDF){req.destroy(Error('DANFSe excede limite de 6 MiB'));return;}
+         chunks.push(chunk);
+       });
+       res.on('end',()=>resolve({status:res.statusCode,body:Buffer.concat(chunks)}));
+     });
+   req.on('timeout',()=>req.destroy(Error('ADN não respondeu ao download do DANFSe')));
+   req.on('error',reject);
+   req.end();
+ });
+}
+export function createNationalNfseClient({certificateStore,transport=nativeTransport,pdfTransport=nativePdfTransport}={}){
  if(typeof certificateStore?.withTlsIdentity!=='function'||typeof transport!=='function')
    fail('API Nacional exige cofre A1 local e transporte autenticado');
  async function call(issuer,method,path,body){
@@ -155,5 +183,19 @@ export function createNationalNfseClient({certificateStore,transport=nativeTrans
   return {status:r.status===201?'EVENTO_RECEBIDO_PENDENTE_CONFIRMACAO':'INDETERMINADO',
     httpStatus:r.status};
  }
- return Object.freeze({issue,queryNfse,reconcile,registerEvent});
+ async function downloadDanfse({issuer,accessKey:targetKey}={}){
+  const key=accessKey(targetKey);
+  const base=ADN_URLS[issuer?.environment];
+  if(!base)fail('Ambiente DANFSe inválido');
+  numbers(issuer?.cnpj,14,'CNPJ prestador');
+  const reply=await certificateStore.withTlsIdentity({cnpj:issuer.cnpj},identity=>
+    pdfTransport({url:base+'/danfse/'+key,identity}));
+  if(reply?.status!==200)fail('DANFSe oficial indisponível no ADN: HTTP '+(reply?.status??'desconhecido'));
+  const pdf=reply.body;
+  if(!Buffer.isBuffer(pdf)||pdf.length<8||pdf.length>MAX_PDF||
+      pdf.subarray(0,5).toString('ascii')!=='%PDF-')
+    fail('ADN não retornou DANFSe em PDF válido');
+  return pdf;
+ }
+ return Object.freeze({issue,queryNfse,reconcile,registerEvent,downloadDanfse});
 }
