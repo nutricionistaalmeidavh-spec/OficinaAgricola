@@ -111,8 +111,8 @@ function pdfWriter(){
   let t=safe(value);
   const cap=Math.min(max,Math.max(1,Math.floor(width/(size*.53))));
   if(t.length>cap)t=t.slice(0,Math.max(1,cap-3))+'...';
-  const colors=color==='red'?'1 0 0':'0 0 0',font=bold?'F2':arial?'F3':'F1';
-  ops.push(colors+' rg BT /'+font+' '+fmt(size)+' Tf 1 0 0 1 '+
+  const colors=color==='red'?'0 1 1 0 k':'0 0 0 1 k',font=bold?'F2':arial?'F3':'F1';
+  ops.push(colors+' BT /'+font+' '+fmt(size)+' Tf 1 0 0 1 '+
     fmt(x)+' '+fmt(Y(top+size))+' Tm ('+pdfString(t)+') Tj ET');
  };
  const paragraph=(value,x,y,{size=7,width=570,maxLines=7,lineHeight=9}={})=>{
