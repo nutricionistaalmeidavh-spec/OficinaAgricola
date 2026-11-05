@@ -4,7 +4,7 @@ import {request as httpsRequest} from 'node:https';
 import {gzipSync,gunzipSync} from 'node:zlib';
 
 const URLS=Object.freeze({
- HOMOLOGACAO:'https://sefin.producaorestrita.nfse.gov.br/SefinNacional',
+ HOMOLOGACAO:'https://sefin.producaorestrita.nfse.gov.br/API/SefinNacional',
  PRODUCAO:'https://sefin.nfse.gov.br/SefinNacional'
 });
 const MAX_XML=1024*1024,MAX_JSON=3*1024*1024;
@@ -78,7 +78,7 @@ function confirmReceipt(body,{issuer,idDps,expectedKey}={}){
    (idDps&&dps[1]!==idDps)||prest[1]!==issuer.cnpj)
    return {status:'INDETERMINADO',message:'NFS-e retornada não corresponde à DPS/CNPJ/chave esperados'};
  return {status:'AUTORIZADA',environment:issuer.environment,
-   accessKey:key,protocol:dps[1],number:num[1],series:String(Number(serie[1])),xml};
+   accessKey:key,protocol:key,number:num[1],series:String(Number(serie[1])),xml};
 }
 function rejection(body){
  const first=Array.isArray(body?.erros)?body.erros[0]||{}:{};
