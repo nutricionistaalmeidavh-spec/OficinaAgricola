@@ -10,7 +10,7 @@ test('cancelamento nacional usa PRE, motivo explícito, chave e autor corretos',
  const value=buildNationalCancelRequest({issuer,accessKey:key,
   reason:'Serviço não foi prestado por desistência do contratante',
   at:new Date('2026-11-05T15:00:00.000Z')});
- assert.equal(value.id,'PRE'+key+'101101');
+ assert.equal(value.id,'PRE'+key+'101101001');
  assert.match(value.xml,/<pedRegEvento/);
  assert.match(value.xml,/<tpAmb>2<\/tpAmb>/);
  assert.match(value.xml,/<CNPJAutor>11222333000181<\/CNPJAutor>/);
