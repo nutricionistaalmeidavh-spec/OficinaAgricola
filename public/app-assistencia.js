@@ -35,7 +35,7 @@ function serviceModal(service = {}) {
 }
 
 async function renderSales({cursor=null,loaded=[]}={}) {
-  pageTitle('Vendas & Caixa', 'BALCÃO');
+  pageTitle('Vendas e caixa', 'BALCÃO');
   if (!['ADMIN', 'ATENDIMENTO', 'FINANCEIRO'].includes(state.user.role)) {
     setContent('<div class="card"><div class="empty">Seu perfil não possui acesso a vendas e caixa.</div></div>');
     return;
@@ -51,7 +51,7 @@ async function renderSales({cursor=null,loaded=[]}={}) {
       ${stat('Esperado em dinheiro', money(cash.expectedCashCents || 0))}
       ${stat('Movimentos do caixa', money(cash.movementTotalCents || 0))}
     </div>
-    <div class="section-head" style="margin-top:20px"><div><h2>Operação de balcão</h2><span class="muted">Venda de peças e serviços com baixa de estoque e vínculo ao caixa</span></div><div class="action-row">
+    <div class="section-head" style="margin-top:20px"><div><h2>Operação de balcão</h2><span class="muted">1. Abra o caixa · 2. Inclua peças ou serviços · 3. Confira o pagamento antes de concluir</span></div><div class="action-row">
       ${!open && canCash ? '<button id="openCash" class="btn soft">Abrir caixa</button>' : ''}
       ${open ? '<button id="newSale" class="btn primary">+ Nova venda</button>' : ''}
       ${open && canCash ? '<button id="cashMove" class="btn soft">Movimentar caixa</button><button id="closeCash" class="btn">Fechar caixa</button>' : ''}
@@ -89,9 +89,17 @@ async function saleModal() {
     <div class="card-head"><strong>Itens</strong><button type="button" class="btn sm soft" id="addSaleItem">+ Item</button></div>
     <div id="saleItems"></div>
     <div class="field-row"><label>Desconto (R$)<input name="discount" type="number" min="0" step="0.01" value="0"></label><label>Pagamento<select name="paymentMethod"><option>DINHEIRO</option><option>PIX</option><option>CARTAO_DEBITO</option><option>CARTAO_CREDITO</option><option>TRANSFERENCIA</option></select></label></div>
-    <label>Observação<input name="note"></label><div id="salePreview" role="status" aria-live="polite"></div><p class="muted">Prévia dos preços consultados. Pix e cartão: confira o recebimento antes de concluir o registro manual. O servidor confirma valor e estoque.</p>
-    <button class="btn primary" type="submit">Concluir venda</button>
+    <label>Observação<input name="note"></label>
+    <div id="salePreview" class="sale-preview" role="status" aria-live="polite"></div>
+    <div id="salePaymentVerification" class="sales-payment-verification" role="group" aria-label="Conferência do pagamento" hidden>
+      <label class="sale-verify-label"><input type="checkbox" id="salePaymentVerified" name="paymentVerified"> <span>Conferi no banco ou na maquininha que o pagamento foi recebido</span></label>
+      <small>Pix e cartão sem integração automática: selecione somente após conferir o recebimento. A venda registra o pagamento informado pelo operador.</small>
+    </div>
+    <p class="muted">Confira os itens e o total. O sistema valida novamente os preços e o saldo antes de gravar.</p>
+    <button class="btn primary" type="submit">Conferir e concluir venda</button>
   </form>`, async fd => {
+    if (fd.get('paymentMethod') !== 'DINHEIRO' && fd.get('paymentVerified') !== 'on')
+      throw new Error('Pagamento não conferido. Confirme o recebimento no banco ou na maquininha antes de concluir.');
     const items = $$('.sale-item-row').map(row => {
       const kind=$('[data-sale-kind]',row).value;
       const select=kind==='P'?$('[data-sale-part]',row):$('[data-sale-service]',row);
@@ -141,6 +149,17 @@ async function saleModal() {
     }
   });
   attachPagedLookup($('#saleCustomer'),{resource:'customers',label:'cliente',empty:'Consumidor'});
+  const updateSalePaymentVerification = () => {
+    const method = $('#modalBody [name=paymentMethod]')?.value;
+    const check = $('#salePaymentVerified'),panel = $('#salePaymentVerification');
+    if(!check||!panel)return;
+    const external = method !== 'DINHEIRO';
+    panel.hidden = !external;
+    check.required = external;
+    if(!external)check.checked = false;
+  };
+  $('#modalBody [name=paymentMethod]')?.addEventListener('change',updateSalePaymentVerification);
+  updateSalePaymentVerification();
   const updatePreview=()=>{
     const rows=$$('.sale-item-row');let subtotal=0,valid=rows.length>0;
     for(const row of rows){
@@ -192,7 +211,13 @@ async function saleModal() {
 async function saleDetails(id) {
   const sale = await api(`/api/sales/${id}`);
   const canCancel = ['ADMIN', 'FINANCEIRO'].includes(state.user.role) && sale.status === 'CONCLUIDA';
-  showModal(`Venda #${sale.sale_number}`, `<div class="detail-grid"><div class="detail-block"><h3>Resumo</h3><p>${dt(sale.created_at)}<br>${esc(sale.customer_name || 'Consumidor')}<br>${esc(sale.payment_method)}</p>${badge(sale.status)}</div><div class="detail-block"><h3>Total</h3><strong>${money(sale.total_cents)}</strong><p class="muted">Subtotal ${money(sale.subtotal_cents)} · desconto ${money(sale.discount_cents)}</p></div></div><div class="list" style="margin-top:14px">${sale.items.map(item => `<div class="list-item"><div><strong>${esc(item.description)}</strong><br><small>${item.quantity} × ${money(item.unit_price_cents)}</small></div><strong>${money(item.total_cents)}</strong></div>`).join('')}</div>${canCancel ? '<button id="cancelSale" type="button" class="btn danger" style="margin-top:14px">Cancelar venda e estornar estoque</button>' : ''}`);
+  showModal(`Venda #${sale.sale_number}`, `<div class="detail-grid"><div class="detail-block"><h3>Resumo</h3><p>${dt(sale.created_at)}<br>${esc(sale.customer_name || 'Consumidor')}<br>${esc(sale.payment_method)}</p>${badge(sale.status)}</div><div class="detail-block"><h3>Total</h3><strong>${money(sale.total_cents)}</strong><p class="muted">Subtotal ${money(sale.subtotal_cents)} · desconto ${money(sale.discount_cents)}</p></div></div><div class="list" style="margin-top:14px">${sale.items.map(item => `<div class="list-item"><div><strong>${esc(item.description)}</strong><br><small>${item.quantity} × ${money(item.unit_price_cents)}</small></div><strong>${money(item.total_cents)}</strong></div>`).join('')}</div>${['ADMIN','FINANCEIRO'].includes(state.user.role)?'<button id="saleFiscalAction" type="button" class="btn soft" style="margin-top:14px">Preparar documento fiscal desta venda</button>':''}${canCancel ? '<button id="cancelSale" type="button" class="btn danger" style="margin-top:14px">Cancelar venda e estornar estoque</button>' : ''}`);
+  const fiscal = $('#saleFiscalAction');
+  if(fiscal)fiscal.onclick=async()=>{
+    closeModal();
+    await navigate('fiscal');
+    $('#fiscalNew')?.click();
+  };
   const cancel = $('#cancelSale');
   if (cancel) cancel.onclick = () => cancelSaleModal(sale);
 }

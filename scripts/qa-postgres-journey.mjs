@@ -75,6 +75,10 @@ try{
   await page.locator('[data-sale-part] option[value="'+part.id+'"]').waitFor({state:'attached'});
   await page.locator('[data-sale-part]').selectOption(String(part.id));
   await page.locator('[data-sale-qty]').fill('2');await page.locator('#modalBody [name=discount]').fill('1');
+  await page.locator('#modalBody [name=paymentMethod]').selectOption('PIX');
+  await page.locator('#salePaymentVerification').waitFor({state:'visible'});
+  assert.equal(await page.locator('#salePaymentVerified').isChecked(),false);
+  await page.locator('#salePaymentVerified').check();
   await page.locator('#salePreview').filter({hasText:'49,00'}).waitFor({state:'visible'});
   await screenshot('04-previa-venda');
   await page.evaluate(async id=>api('/api/parts/'+id,{method:'PATCH',body:{requestId:newCommandId(),salePriceCents:3000}}),part.id);
@@ -87,7 +91,7 @@ try{
   const result=await page.evaluate(async id=>({sales:await api('/api/sales'),part:await api('/api/parts/'+id)}),part.id);
   assert.equal(result.sales.length,1);assert.equal(Number(result.sales[0].total_cents),5900);assert.equal(Number(result.part.quantity),8);
   await screenshot('06-venda-confirmada');assert.deepEqual(errors,[]);
-  await writeFile(path.join(output,'summary.json'),JSON.stringify({status:'passed',engine:'postgres',viewport:viewportName,checks:['first-admin-ui','contextual-customer-machine-order','diagnosis-save-twice','sale-preview','price-conflict-no-write','sale-confirmed-stock-once']},null,2));
+  await writeFile(path.join(output,'summary.json'),JSON.stringify({status:'passed',engine:'postgres',viewport:viewportName,checks:['first-admin-ui','contextual-customer-machine-order','diagnosis-save-twice','sale-preview','price-conflict-no-write','sale-confirmed-stock-once','pix-explicit-manual-confirmation']},null,2));
 }catch(error){
   const diagnostic=logs.join('').split(/\r?\n/).filter(line=>line.includes('[qa-native-error]')).slice(-8);
   if(diagnostic.length)console.error('SQL QA trace:\n'+diagnostic.join('\n'));

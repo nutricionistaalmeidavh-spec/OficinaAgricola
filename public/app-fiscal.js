@@ -69,10 +69,30 @@ async function renderFiscal({cursor=null,loaded=[]}={}){
       '</ol><small class="muted">'+(released?'Pronta para tentar emitir; cada nota ainda será validada.':
         'A emissão em produção continua protegida até a validação do sistema.')+'</small></section>';
   }).join('');
+  const hasHomologation=Object.values(readiness.models||{}).some(model=>model?.homologationVerified===true);
+  const fiscalGuide=!settings.enabled
+    ?{title:'Complete o cadastro fiscal',detail:'Informe os dados da empresa e selecione o certificado. As notas continuam disponíveis para preparação.',target:state.user.role==='ADMIN'?'fiscalSettings':'fiscalNew'}
+    :!hasHomologation
+      ?{title:'Confira a configuração antes de emitir',detail:'Teste a SEFAZ e prepare uma nota de homologação. Uma consulta online não equivale à autorização fiscal.',target:state.user.role==='ADMIN'?'fiscalDiagnose':'fiscalNew'}
+      :{title:'Prepare o próximo documento',detail:'Selecione uma OS aprovada ou venda concluída. Revise os tributos antes de transmitir.',target:'fiscalNew'};
   setContent('<div class="section-head fiscal-head"><div><h2>Documentos fiscais</h2>'+
-    '<span class="muted">Rascunhos, notas e protocolos das ordens de serviço e vendas</span></div>'+
-    '<div class="action-row">'+(state.user.role==='ADMIN'?'<button id="fiscalSettings" class="btn">Configuração fiscal</button><button id="fiscalTaxProfiles" class="btn">Perfis tributários</button><button id="fiscalCertA1" class="btn">Certificado A1</button><button id="fiscalCertA3" class="btn">Token A3</button><button id="fiscalDiagnose" class="btn">Testar SEFAZ</button>':'')+
-    '<button id="fiscalNew" class="btn primary">+ Preparar documento</button></div></div>'+
+    '<span class="muted">Notas, rascunhos, autorizações e histórico em um só lugar</span></div>'+
+    '<div class="fiscal-actions" aria-label="Todas as ações fiscais">'+
+    '<div class="fiscal-action-group"><strong>Emissão e documentos</strong><div class="action-row">'+
+    '<button id="fiscalNew" class="btn primary">+ Preparar documento fiscal</button></div></div>'+
+    (state.user.role==='ADMIN'
+      ?'<div class="fiscal-action-group"><strong>Configuração e testes</strong><div class="action-row">'+
+       '<button id="fiscalSettings" class="btn">Dados fiscais</button>'+
+       '<button id="fiscalTaxProfiles" class="btn">Perfis tributários</button>'+
+       '<button id="fiscalCertA1" class="btn">Certificado A1</button>'+
+       '<button id="fiscalCertA3" class="btn">Token A3</button>'+
+       '<button id="fiscalDiagnose" class="btn">Testar SEFAZ</button></div></div>'
+      :'')+'</div></div>'+
+    '<section class="fiscal-quick-path" id="fiscalQuickPath" aria-label="Orientação para emissão fiscal">'+
+     '<div><small>PRÓXIMO PASSO</small><h3>'+esc(fiscalGuide.title)+'</h3>'+
+     '<p>'+esc(fiscalGuide.detail)+'</p></div>'+
+     '<button type="button" id="fiscalQuickAction" class="btn soft">Abrir etapa indicada</button>'+
+    '</section>'+
     '<div class="card"><p><strong>Cadastro fiscal:</strong> '+(settings.enabled?'Cadastro concluído':'Aguardando cadastro fiscal')+' · '+esc(settings.environment)+
     ' · CNPJ '+esc(settings.issuer_cnpj||'não informado')+'</p>'+
     '<div class="fiscal-model-steps">'+modelsSummary+'</div>'+
@@ -81,6 +101,7 @@ async function renderFiscal({cursor=null,loaded=[]}={}){
     '<div class="card"><div class="card-head"><h2>Registro fiscal</h2><small>'+docs.length+' documento(s) recente(s)</small></div>'+
     '<div class="list">'+(cards||'<div class="empty">Nenhum documento fiscal preparado.</div>')+'</div></div>');
   $('#fiscalNew').onclick=()=>fiscalDraftModal();
+  $('#fiscalQuickAction').onclick=()=>$('#'+fiscalGuide.target)?.click();
   if($('#fiscalSettings'))$('#fiscalSettings').onclick=()=>fiscalSettingsModal(settings);
   if($('#fiscalTaxProfiles'))$('#fiscalTaxProfiles').onclick=()=>fiscalTaxProfilesModal();
   $$('[data-fiscal-tax-review]').forEach(button=>button.onclick=()=>fiscalTaxReviewModal(Number(button.dataset.fiscalTaxReview)).catch(e=>toast(e.message,true)));
@@ -159,7 +180,7 @@ async function fiscalTaxProfilesModal(){
   kind.onchange=update;
   update();
   const form=$('#modalBody form');
-  $('[data-tax-edit]').forEach(button=>button.onclick=()=>{
+  $$('[data-tax-edit]').forEach(button=>button.onclick=()=>{
     const selected=profiles.find(p=>p.id===button.dataset.taxEdit);
     if(!selected||!form)return;
     for(const [key,value] of Object.entries(selected)){
