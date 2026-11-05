@@ -55,7 +55,7 @@ test('revisão NFC-e guiada salva INI com pagamento explícito, sem alterar valo
  mkdirSync(inputDir);
  try{
   const nfeLib=join(root,'ACBrNFe64.dll'),nfeConfig=join(root,'ACBrLibNFe.ini');
-  writeFileSync(nfeLib,'fixture');writeFileSync(nfeConfig,'[Principal]\\nLogNivel=0\\n');
+  writeFileSync(nfeLib,'fixture');writeFileSync(nfeConfig,'[Principal]\nLogNivel=0\n');
   const provider=createAcbrLibFiscalProvider({nfeLib,nfeConfig,inputDir,runner:async()=>({status:'INDETERMINADO'})});
   const snapshot_json=JSON.stringify({originType:'VENDA',lines:[{
    sourceItemId:5,kind:'PECA',description:'Óleo',quantity:1,
@@ -78,7 +78,7 @@ test('revisão NFC-e guiada salva INI com pagamento explícito, sem alterar valo
   provider.prepare({document,issuer});
   const ini=readFileSync(join(inputDir,'NFCE-16-'+document.snapshot_hash+'.ini'),'utf8');
   assert.match(ini,/mod=65/);
-  assert.match(ini,/\\[pag001\\]/);
-  assert.match(ini,/vPag=90\\.00/);
+  assert.match(ini,/\[pag001\]/);
+  assert.match(ini,/vPag=90\.00/);
  }finally{rmSync(root,{recursive:true,force:true});}
 });
