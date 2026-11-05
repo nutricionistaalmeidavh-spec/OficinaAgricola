@@ -71,3 +71,24 @@ test('fornecedor, pedido e recebimentos parciais são atômicos, idempotentes e 
   assert.equal((await service.listPurchaseOrders()).length,1);
  }finally{db.close()}
 });
+
+test('histórico ordena pela data canônica e pagina sem perda, mesmo com IDs aleatórios',async()=>{
+ const {db,service}=await setup();
+ try{
+  const part=await service.createPart({sku:'ORD-01',description:'Ordem de movimentos'});
+  const first=await service.postStockMovement({partId:part.id,type:'ENTRADA',quantity:5,actorId:11});
+  const second=await service.postStockMovement({partId:part.id,type:'SAIDA_MANUAL',quantity:1,actorId:11});
+  db.prepare('UPDATE inventory_movements SET created_at=? WHERE id=?')
+   .run('2026-11-05T08:00:00.000Z',first.id);
+  db.prepare('UPDATE inventory_movements SET created_at=? WHERE id=?')
+   .run('2026-11-05T09:00:00.000Z',second.id);
+  const one=await service.listStockMovements({partId:part.id,limit:1});
+  assert.equal(one.items[0].id,second.id);
+  assert.ok(one.nextCursor);
+  const two=await service.listStockMovements({partId:part.id,limit:1,cursor:one.nextCursor});
+  assert.equal(two.items.length,1);
+  assert.equal(two.items[0].id,first.id);
+  assert.equal(two.nextCursor,null);
+  await assert.rejects(service.listStockMovements({cursor:'***'}),/Cursor inválido/);
+ }finally{db.close()}
+});
