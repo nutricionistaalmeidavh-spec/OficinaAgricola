@@ -140,14 +140,15 @@ export function createAcbrLibFiscalProvider(opts={}){
     },
     cancel:({document,attemptId,reason})=>runner({...preflight({document}),operation:'cancel',
       attemptId,lot:Number(document.id),accessKey:document.access_key||null,
-      authorizedXml:document.authorized_xml,reason}),
+      authorizedXml:document.authorized_xml,originalProtocol:document.protocol,reason}),
     consultCancellation:({document,attemptId})=>runner({
       ...preflight({document}),operation:'consultCancellation',
       attemptId,lot:Number(document.id),accessKey:document.access_key||null
     }),
     printPdf:async({document})=>{
       const result=await runner({...preflight({document}),operation:'pdf',
-        accessKey:document.access_key||null,authorizedXml:document.authorized_xml});
+        accessKey:document.access_key||null,authorizedXml:document.authorized_xml,
+        originalProtocol:document.protocol});
       if(result?.status!=='PDF'||typeof result.pdfBase64!=='string'||
           result.pdfBase64.length>8*1024*1024||
           !/^[A-Za-z0-9+/]+={0,2}$/.test(result.pdfBase64))
