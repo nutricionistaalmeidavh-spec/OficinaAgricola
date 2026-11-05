@@ -71,15 +71,17 @@ export function createFiscalEvidence({document,result,providerName,certificateId
 
 export function buildFiscalReleaseStatus({
   settings={},certificate={configured:false},certificateIdentity=null,
-  providerName='',providerReady=false,proofs=[]
+  providerName='',providerNames={},providerReady=false,proofs=[]
 }={}){
   const companyConfigured=Boolean(settings.enabled);
   const certificateReady=certificate?.configured===true&&validDigest(certificateIdentity);
-  const localProvider=providerReady&&['acbrlib-local','sefin-nacional-direta'].includes(providerName);
+
   const issuerDigest=issuerEvidenceDigest(settings);
   const models={};
   for(const kind of allModels){
     const expectedProvider=kind==='NFSE'?'sefin-nacional-direta':'acbrlib-local';
+    const selectedProvider=providerNames?.[kind]||providerName;
+    const localProvider=providerReady&&['acbrlib-local','sefin-nacional-direta'].includes(selectedProvider);
     const proof=(Array.isArray(proofs)?proofs:[]).find(row=>
       row.kind===kind&&row.provider_name===expectedProvider&&
       row.status==='AUTORIZADA_HOMOLOGACAO'&&row.environment==='HOMOLOGACAO'&&
@@ -93,14 +95,14 @@ export function buildFiscalReleaseStatus({
         accessKey:row.access_key,protocol:row.protocol,cnpj:digits(settings.issuer_cnpj),kind}))
     );
     const homologationVerified=Boolean(proof);
-    const external=kind==='NFSE'&&providerName!=='sefin-nacional-direta'
+    const external=kind==='NFSE'&&selectedProvider!=='sefin-nacional-direta'
       ?'NFS-e Nacional exige emissor SEFIN direto desta empresa'
       :kind==='NFCE'&&settings.issuer_uf==='SC'
         ?'PAF-NFC-e de SC exige credenciamento e validação específica'
       :kind==='NFCE'&&settings.issuer_uf==='RS'
         ?'NFC-e no RS exige integração comprovada de pagamento eletrônico'
       :null;
-    const authorizedProvider=localProvider&&providerName===expectedProvider&&
+    const authorizedProvider=localProvider&&selectedProvider===expectedProvider&&
       (kind!=='NFSE'||certificate?.certificateType==='A1');
     const productionReady=companyConfigured&&certificateReady&&authorizedProvider&&
       homologationVerified&&!external&&settings.environment==='PRODUCAO'&&
