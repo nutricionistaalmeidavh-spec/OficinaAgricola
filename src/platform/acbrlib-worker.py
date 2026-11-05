@@ -35,9 +35,8 @@ def do(lib, name, *args, types=()):
         raise ACBrError("%s retornou código %s; situação fiscal precisa ser consultada" % (name, ret))
 
 
-def response(lib, name, args=(), types=()):
+def response(lib, name, args=(), types=(), limit=4 * 1024 * 1024):
     # Não repetir operações de rede para redimensionar buffer: isso poderia emitir duas vezes.
-    limit = 4 * 1024 * 1024
     buf = ct.create_string_buffer(limit)
     size = ct.c_int(limit)
     ret = functions(lib, name, list(types) + [ct.c_void_p, ct.POINTER(ct.c_int)])(
@@ -319,31 +318,49 @@ def nfe_cancel(lib, req):
     expected_amb = "2" if req["environment"] == "HOMOLOGACAO" else "1"
     protocol = fields.get("NPROT", "")
     xml = fields.get("XML", "")
+    # A resposta oficial ACBr pode fornecer XML vazio, ainda que a SEFAZ
+    # tenha devolvido cStat=101, protocolo, chave, ambiente e recibo datado.
+    # O recibo estruturado é persistido como prova do cancelamento.
+    received_at = fields.get("DHRECBTO", "")
     if (fields.get("CSTAT") != "101" or fields.get("TPAMB") != expected_amb or
-            (fields.get("CHDFE") or fields.get("CHNFE")) != key or not protocol or
-            not verified_event_xml(xml, key, protocol)):
+            (fields.get("CHDFE") or fields.get("CHNFE")) != key or
+            not protocol or len(received_at) < 10 or
+            (xml and not verified_event_xml(xml, key, protocol))):
         return {"status": "INDETERMINADO", "message": "Evento de cancelamento sem comprovante oficial íntegro"}
     return {"status": "CANCELADA", "environment": req["environment"],
-            "accessKey": key, "protocol": protocol, "xml": xml}
+            "accessKey": key, "protocol": protocol, "xml": xml,
+            "officialReceipt": {"cStat": 101, "accessKey": key,
+                                "protocol": protocol, "receivedAt": received_at,
+                                "environment": req["environment"]}}
 
 
 def nfe_consult_cancellation(lib, req):
     key = str(req.get("accessKey") or "")
     if not re.fullmatch(r"\\d{44}", key):
         raise ACBrError("Chave da NF-e inválida para consulta de cancelamento")
-    result = response(lib, "NFE_Consultar", (encoded(key), False),
+    signed_path = Path(req["iniPath"]).with_suffix(".signed.xml")
+    if not signed_path.is_file():
+        return {"status": "INDETERMINADO", "message": "XML assinado de recuperação não disponível"}
+    if nfe_identity(signed_path.read_text(encoding="utf-8-sig"))[0] != key:
+        raise ACBrError("XML assinado diverge da chave consultada")
+    result = response(lib, "NFE_Consultar", (encoded(str(signed_path)), True),
                       [ct.c_char_p, ct.c_bool])
     sections = parse_sections(result)
     fields = sections.get("CONSULTA", {})
     expected_amb = "2" if req["environment"] == "HOMOLOGACAO" else "1"
     xml = fields.get("XML", "") or candidate_xml(sections)
     protocol = fields.get("NPROT", "")
+    received_at = fields.get("DHRECBTO", "")
     if (fields.get("CSTAT") != "101" or fields.get("TPAMB") != expected_amb or
-            (fields.get("CHNFE") or fields.get("CHDFE")) != key or not protocol or
-            not verified_event_xml(xml, key, protocol)):
-        return {"status": "INDETERMINADO", "message": "Cancelamento ainda sem evento de retorno verificável"}
+            (fields.get("CHNFE") or fields.get("CHDFE")) != key or
+            not protocol or len(received_at) < 10 or
+            (xml and not verified_event_xml(xml, key, protocol))):
+        return {"status": "INDETERMINADO", "message": "Cancelamento ainda sem retorno oficial verificável"}
     return {"status": "CANCELADA", "environment": req["environment"],
-            "accessKey": key, "protocol": protocol, "xml": xml}
+            "accessKey": key, "protocol": protocol, "xml": xml,
+            "officialReceipt": {"cStat": 101, "accessKey": key,
+                                "protocol": protocol, "receivedAt": received_at,
+                                "environment": req["environment"]}}
 
 
 def document_pdf(lib, req):
@@ -363,7 +380,7 @@ def document_pdf(lib, req):
     prefix = req["kind"]
     do(lib, prefix + "_LimparLista")
     do(lib, prefix + "_CarregarXML", encoded(xml), types=[ct.c_char_p])
-    raw = response(lib, prefix + "_SalvarPDF").strip()
+    raw = response(lib, prefix + "_SalvarPDF", limit=9 * 1024 * 1024).strip()
     try:
         binary = base64.b64decode(raw, validate=True)
     except (ValueError, base64.binascii.Error):
@@ -475,8 +492,8 @@ def main():
         return
     # Nunca incluir dados de notas, INIs ou segredos em tracebacks ou stderr.
     try:
-        raw = sys.stdin.buffer.read(65536 + 1)
-        if len(raw) > 65536:
+        raw = sys.stdin.buffer.read(4 * 1024 * 1024 + 1)
+        if len(raw) > 4 * 1024 * 1024:
             raise ACBrError("Comando fiscal excede limite")
         request = json.loads(raw)
         result = execute(request)
