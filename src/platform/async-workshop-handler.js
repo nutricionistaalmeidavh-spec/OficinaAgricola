@@ -238,6 +238,12 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
    const checklist=path.match(/^\/v1\/checklists\/([1-9]\d*)$/);
    if(checklist&&method==='GET')
      return json(await services.getWorkOrderChecklist(Number(checklist[1])));
+   if(path==='/v1/fiscal/onboarding'&&method==='GET')
+     return json(await services.getFiscalOnboardingStatus());
+   if(path==='/v1/fiscal/certificate'&&method==='POST')
+     return json(await services.installFiscalCertificate(await dataFrom(request,5*1024*1024)));
+   if(path==='/v1/fiscal/diagnose'&&method==='POST')
+     return json(await services.diagnoseFiscal());
    if(path==='/v1/fiscal/settings'&&method==='GET')
      return json(await services.getFiscalSettings());
    if(path==='/v1/fiscal/settings'&&method==='PATCH')
@@ -251,6 +257,10 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
      return json(await services.listFiscalDocuments({
        status:u.searchParams.get('status')||'',limit:u.searchParams.get('limit')||100
      }));
+   const fiscalReview=path.match(/^\/v1\/fiscal\/([1-9]\d*)\/review$/);
+   if(fiscalReview&&method==='POST')
+     return json(await services.saveFiscalTaxReview(
+       Number(fiscalReview[1]),await dataFrom(request)));
    const fiscal=path.match(/^\/v1\/fiscal\/([1-9]\d*)$/);
    if(fiscal&&method==='GET')
      return json(await services.getFiscalDocument(Number(fiscal[1])));
