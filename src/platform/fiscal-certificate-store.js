@@ -161,5 +161,6 @@ export function createLocalFiscalCertificateStore({directory}={}){
      });
    }finally{content=null;}
  }
- return Object.freeze({status,install,selectA3,withConfig,withDiscoveryConfig});
+ return Object.freeze({status,install,selectA3,
+   activeSerial:()=>selectedA3()?.serial||null,withConfig,withDiscoveryConfig});
 }
