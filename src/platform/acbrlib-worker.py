@@ -6,6 +6,7 @@ as funções oficiais do ACBr e fecha a biblioteca. O certificado permanece
 no INI da ACBrLib, fora do banco de dados e do payload do Node.
 NENHUM retorno é marcado AUTORIZADA sem resposta e XML de autorização.
 """
+import base64
 import configparser
 import ctypes as ct
 from decimal import Decimal, InvalidOperation
@@ -286,6 +287,113 @@ def nfse_consult(lib, req):
             "accessKey": key, "protocol": code, "number": issued, "series": series, "xml": xml}
 
 
+
+def verified_event_xml(xml, key, protocol):
+    root = root_or_none(xml)
+    if root is None:
+        return False
+    for el in root.iter():
+        if local_tag(el) in ("retEvento", "infEvento") and (
+            find_text(el, "cStat") == "101" and
+            find_text(el, "chNFe") == key and
+            find_text(el, "nProt") == protocol
+        ):
+            return True
+    return False
+
+
+def nfe_cancel(lib, req):
+    key = str(req.get("accessKey") or "")
+    reason = str(req.get("reason") or "").strip()
+    if not re.fullmatch(r"\\d{44}", key) or not 15 <= len(reason) <= 255 or "\\n" in reason:
+        raise ACBrError("Chave ou justificativa de cancelamento da NF-e inválidas")
+    authorized = req.get("authorizedXml", "")
+    if not authorized_nfe_xml(authorized, str(req.get("originalProtocol") or "")):
+        raise ACBrError("Cancelamento requer XML da NF-e com protocolo original")
+    if nfe_identity(authorized)[0] != key:
+        raise ACBrError("Chave de cancelamento diverge do XML autorizado")
+    result = response(lib, "NFE_Cancelar",
+                      (encoded(key), encoded(reason), encoded(req["issuerCnpj"]), int(req["lot"])),
+                      [ct.c_char_p, ct.c_char_p, ct.c_char_p, ct.c_int])
+    fields = parse_sections(result).get("CANCELAMENTO", {})
+    expected_amb = "2" if req["environment"] == "HOMOLOGACAO" else "1"
+    protocol = fields.get("NPROT", "")
+    xml = fields.get("XML", "")
+    if (fields.get("CSTAT") != "101" or fields.get("TPAMB") != expected_amb or
+            (fields.get("CHDFE") or fields.get("CHNFE")) != key or not protocol or
+            not verified_event_xml(xml, key, protocol)):
+        return {"status": "INDETERMINADO", "message": "Evento de cancelamento sem comprovante oficial íntegro"}
+    return {"status": "CANCELADA", "environment": req["environment"],
+            "accessKey": key, "protocol": protocol, "xml": xml}
+
+
+def nfe_consult_cancellation(lib, req):
+    key = str(req.get("accessKey") or "")
+    if not re.fullmatch(r"\\d{44}", key):
+        raise ACBrError("Chave da NF-e inválida para consulta de cancelamento")
+    result = response(lib, "NFE_Consultar", (encoded(key), False),
+                      [ct.c_char_p, ct.c_bool])
+    sections = parse_sections(result)
+    fields = sections.get("CONSULTA", {})
+    expected_amb = "2" if req["environment"] == "HOMOLOGACAO" else "1"
+    xml = fields.get("XML", "") or candidate_xml(sections)
+    protocol = fields.get("NPROT", "")
+    if (fields.get("CSTAT") != "101" or fields.get("TPAMB") != expected_amb or
+            (fields.get("CHNFE") or fields.get("CHDFE")) != key or not protocol or
+            not verified_event_xml(xml, key, protocol)):
+        return {"status": "INDETERMINADO", "message": "Cancelamento ainda sem evento de retorno verificável"}
+    return {"status": "CANCELADA", "environment": req["environment"],
+            "accessKey": key, "protocol": protocol, "xml": xml}
+
+
+def document_pdf(lib, req):
+    xml = str(req.get("authorizedXml") or "")
+    root = root_or_none(xml)
+    if root is None or not req.get("accessKey"):
+        raise ACBrError("PDF fiscal exige XML autorizado")
+    if req["kind"] == "NFE":
+        if not authorized_nfe_xml(xml, str(req.get("originalProtocol") or "")):
+            raise ACBrError("DANFE sem protocolo de autorização válido")
+        if nfe_identity(xml)[0] != req["accessKey"]:
+            raise ACBrError("DANFE diverge da chave autorizada")
+    else:
+        details = nfse_details(xml)
+        if not details or details[2] != req["accessKey"]:
+            raise ACBrError("DANFSe diverge da nota autorizada")
+    prefix = req["kind"]
+    do(lib, prefix + "_LimparLista")
+    do(lib, prefix + "_CarregarXML", encoded(xml), types=[ct.c_char_p])
+    raw = response(lib, prefix + "_SalvarPDF").strip()
+    try:
+        binary = base64.b64decode(raw, validate=True)
+    except (ValueError, base64.binascii.Error):
+        raise ACBrError("ACBrLib devolveu PDF com codificação inválida")
+    if len(binary) < 8 or len(binary) > 6 * 1024 * 1024 or not binary.startswith(b"%PDF-"):
+        raise ACBrError("ACBrLib devolveu arquivo que não é PDF")
+    return {"status": "PDF", "pdfBase64": raw}
+
+
+def nfse_cancel(lib, req):
+    # Layout e confirmação de cancelamento de NFS-e dependem do município.
+    # Nunca supor deferimento baseado apenas no protocolo de solicitação.
+    cancellation_ini = Path(req["iniPath"]).with_suffix(".cancel.ini")
+    if not cancellation_ini.is_file() or cancellation_ini.stat().st_size > 65536:
+        raise ACBrError("Cancelamento NFS-e requer INI municipal revisado")
+    fields = parse_sections(cancellation_ini.read_text(encoding="utf-8-sig"))
+    metadata = fields.get("INFCANCELAMENTO", {})
+    if metadata.get("CHAVENFSE") != str(req.get("accessKey") or ""):
+        raise ACBrError("Chave de cancelamento NFS-e difere do documento")
+    result = response(lib, "NFSE_Cancelar", (encoded(str(cancellation_ini)),), [ct.c_char_p])
+    sections = parse_sections(result)
+    receipt = sections.get("RETCANCELAMENTO", {})
+    xml = sections.get("CANCELARNFSE", {}).get("XMLRETORNO", "")
+    if receipt.get("SUCESSO") != "1" or not root_or_none(xml):
+        return {"status": "INDETERMINADO", "message": "Município não confirmou cancelamento NFS-e verificável"}
+    # Um simples Sucesso=1 pode indicar somente recebimento, conforme provedor.
+    # Validar cancelamento final no XML municipal específico antes de liberar.
+    return {"status": "INDETERMINADO", "message": "NFS-e exige confirmação específica do provedor municipal"}
+
+
 _dll_directories = []
 
 
@@ -312,7 +420,7 @@ def probe_library(path):
 
 
 def execute(req):
-    if req.get("operation") not in ("transmit", "consult") or req.get("kind") not in ("NFE", "NFSE"):
+    if req.get("operation") not in ("transmit", "consult", "cancel", "consultCancellation", "pdf") or req.get("kind") not in ("NFE", "NFSE"):
         raise ACBrError("Operação fiscal inválida")
     if req.get("environment") not in ("HOMOLOGACAO", "PRODUCAO"):
         raise ACBrError("Ambiente fiscal não identificado")
@@ -328,9 +436,23 @@ def execute(req):
         do(lib, prefix + "_Inicializar", encoded(req["configPath"]), encoded(""),
            types=[ct.c_char_p, ct.c_char_p])
         initialized = True
+        if req["operation"] == "pdf":
+            return document_pdf(lib, req)
         if req["kind"] == "NFE":
-            return nfe_transmit(lib, req) if req["operation"] == "transmit" else nfe_consult(lib, req)
-        return nfse_transmit(lib, req) if req["operation"] == "transmit" else nfse_consult(lib, req)
+            if req["operation"] == "transmit":
+                return nfe_transmit(lib, req)
+            if req["operation"] == "consult":
+                return nfe_consult(lib, req)
+            if req["operation"] == "cancel":
+                return nfe_cancel(lib, req)
+            return nfe_consult_cancellation(lib, req)
+        if req["operation"] == "transmit":
+            return nfse_transmit(lib, req)
+        if req["operation"] == "consult":
+            return nfse_consult(lib, req)
+        if req["operation"] == "cancel":
+            return nfse_cancel(lib, req)
+        return {"status": "INDETERMINADO", "message": "Consulta de cancelamento municipal exige integração específica"}
     finally:
         if initialized:
             try:
