@@ -347,6 +347,7 @@ try{
   assert.equal((await s.reconcileStock(part.id)).difference,0);
   const part2=await s.createPart({sku:'QA-PG-RACE-VENDA',description:'Concorrência vendas',salePriceCents:500});
   await s.postStockMovement({partId:part2.id,type:'ENTRADA',quantity:1});
+  assert.equal(Number((await s.getPart(part2.id)).quantity),1,'a corrida de duas vendas parte de uma única peça');
   const sells=await Promise.all([1,2].map(n=>call('/api/sales',{method:'POST',token,unit,
    body:{requestId:'race-two-sales-'+n,paymentMethod:'PIX',expectedTotalCents:500,
     items:[{partId:part2.id,quantity:1,expectedUnitPriceCents:500}]}})));
