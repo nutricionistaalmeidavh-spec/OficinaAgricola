@@ -20,6 +20,7 @@ export function createNationalNfseProvider({certificateStore,inputDir,client}={}
   nfseChannel:'NACIONAL',
   nfseMunicipalityIbge:null,
   certificateStatus:()=>certificateStore.status(),
+  certificateIdentity:()=>certificateStore.identity?.()||null,
   installCertificate:input=>certificateStore.install(input),
   listTaxProfiles:({issuer})=>taxStore.listProfiles({issuer}),
   saveTaxProfile:({issuer,profile})=>taxStore.saveProfile({issuer,profile}),
