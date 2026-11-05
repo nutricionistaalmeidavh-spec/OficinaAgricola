@@ -1,6 +1,32 @@
 async function renderTechnicians(){pageTitle('Técnicos','EQUIPE');const techs=await api('/api/technicians');setContent(`<div class="section-head"><div><h2>Equipe técnica</h2><span class="muted">Responsáveis pelas OS</span></div>${state.user.role==='ADMIN'?'<button id="newTech" class="btn primary">+ Novo técnico</button>':''}</div>${table(['Nome','Telefone','Especialidade','Situação'],techs.map(t=>[`<strong>${esc(t.name)}</strong>`,esc(t.phone||'—'),esc(t.specialty||'—'),t.active?badge('ATIVO'):badge('INATIVO')]))}`);const b=$('#newTech');if(b)b.onclick=()=>techModal()}
 function techModal(){const requestId=newCommandId();showModal('Novo técnico',`<form class="form-stack"><label>Nome<input name="name" required></label><div class="field-row"><label>Telefone<input name="phone"></label><label>Especialidade<input name="specialty"></label></div><button class="btn primary" type="submit">Salvar</button></form>`,async fd=>{await api('/api/technicians',{method:'POST',body:{...formObj(fd),requestId}});toast('Técnico cadastrado');await refreshCurrentPage()})}
 
+function settingsUserEnabled(user){
+  return Number(user.active)===1&&(user.membershipActive===undefined||Number(user.membershipActive)===1);
+}
+function settingsUserIdentityEditable(user){
+  return user.identityEditable===undefined||user.identityEditable===true||user.identityEditable===1;
+}
+function settingsUserRow(user){
+  const id=Number(user.id),active=settingsUserEnabled(user);
+  const myself=id===Number(state.user.id);
+  return `<div class="list-item settings-user-row">
+    <div class="settings-user-info"><strong>${esc(user.name)}</strong>
+      <small>${esc(user.username)}</small>
+      <div class="settings-user-badges">${badge(userRoleLabel(user.role))}
+        <span class="pill ${active?'green':'orange'}">${active?'Ativo':'Inativo'}</span>
+      </div>
+    </div>
+    <div class="settings-user-actions">
+      <button type="button" class="btn sm" data-user-action="edit" data-user-id="${id}" aria-label="Editar ${esc(user.name)}">Editar</button>
+      <button type="button" class="btn sm" data-user-action="reset" data-user-id="${id}"
+        ${settingsUserIdentityEditable(user)?'':'disabled title="Conta compartilhada: apenas o administrador da plataforma pode redefinir esta senha"'}>Redefinir senha</button>
+      <button type="button" class="btn sm" data-user-action="toggle" data-user-id="${id}"
+        ${myself?'disabled title="Não é possível desativar seu próprio acesso nesta tela"':''}>${active?'Desativar':'Reativar'}</button>
+    </div>
+  </div>`;
+}
+
 async function renderSettings(){
   pageTitle('Configurações','ADMINISTRAÇÃO');
   const company=await api('/api/company');
@@ -36,7 +62,7 @@ async function renderSettings(){
       </form></section>
     <section class="card" id="settings-users"><div class="card-head"><h2>Equipe e acessos</h2>${isAdmin?'<button id="newUser" class="btn sm">+ Novo usuário</button>':''}</div>
       <p class="muted">Administrador gerencia a oficina; Atendimento registra operações; Técnico executa serviços; Financeiro acompanha as finanças.</p>
-      ${isAdmin?(users.length?users.map(u=>`<div class="list-item"><div><strong>${esc(u.name)}</strong><br><small>${esc(u.username)}</small></div>${badge(userRoleLabel(u.role))}</div>`).join(''):'<div class="empty">Nenhum usuário cadastrado.</div>'):'<p class="muted">A lista de usuários é restrita aos administradores.</p>'}
+      ${isAdmin?(users.length?users.map(settingsUserRow).join(''):'<div class="empty">Nenhum usuário cadastrado.</div>'):'<p class="muted">A lista de usuários é restrita aos administradores.</p>'}
     </section>
     ${fiscalAllowed?'<section class="card" id="settings-fiscal"><h2>Configuração fiscal</h2><p class="muted">Cadastre o emissor, configure certificados e consulte os testes de homologação na área Fiscal.</p><button class="btn" type="button" id="settingsFiscalOpen">Abrir área Fiscal</button></section>':''}
     <section class="card" id="settings-setup"><h2>Preparação do sistema</h2><p class="muted">O checklist de primeiro acesso mostra o que falta configurar para começar a operar.</p><button class="btn" type="button" id="settingsSetupOpen">Ver preparação do sistema</button></section>
@@ -44,6 +70,16 @@ async function renderSettings(){
   const f=$('#companyForm');
   if(isAdmin)f.onsubmit=async e=>{e.preventDefault();if(state.pageSaving)return;state.pageSaving=true;const button=$('button[type=submit]',f);button.disabled=true;try{await api('/api/company',{method:'PATCH',body:formObj(new FormData(f))});state.pageDirty=false;toast('Empresa atualizada');await refreshCurrentPage()}catch(error){toast(error.message,true)}finally{state.pageSaving=false;button.disabled=false}};
   const nu=$('#newUser');if(nu)nu.onclick=userModal;
+  if(isAdmin)document.querySelectorAll('#settings-users [data-user-action]').forEach(button=>{
+    const user=users.find(item=>Number(item.id)===Number(button.dataset.userId));
+    if(!user)return;
+    button.onclick=()=>{
+      if(button.dataset.userAction==='edit')return editSettingsUser(user);
+      if(button.dataset.userAction==='reset')return resetSettingsUserPassword(user);
+      if(button.dataset.userAction==='toggle')return void toggleSettingsUser(user,button);
+    };
+  });
+
   const fiscal=$('#settingsFiscalOpen');if(fiscal)fiscal.onclick=()=>navigate('fiscal');
   const setup=$('#settingsSetupOpen');if(setup)setup.onclick=()=>navigate('dashboard');
   $$('.settings-jump').forEach(button=>button.onclick=()=>{
@@ -61,6 +97,68 @@ async function renderSettings(){
   }
 }
 function userModal(){const requestId=newCommandId();showModal('Novo usuário',`<form class="form-stack"><p class="muted">Administrador gerencia a oficina; Atendimento registra operações; Técnico executa serviços; Financeiro acompanha as finanças.</p><div class="field-row"><label>Nome<input name="name" required></label><label>Usuário<input name="username" required></label></div><div class="field-row"><label>Perfil<select name="role"><option value="ATENDIMENTO">Atendimento</option><option value="TECNICO">Técnico</option><option value="FINANCEIRO">Financeiro</option><option value="ADMIN">Administrador</option></select></label><label>Senha<input name="password" type="password" minlength="${window.OficinaTenant?.enabled?12:8}" required></label></div><button class="btn primary" type="submit">Criar usuário</button></form>`,async fd=>{await api('/api/users',{method:'POST',body:{...formObj(fd),requestId}});toast('Usuário criado');await refreshCurrentPage()})}
+
+
+function editSettingsUser(user){
+  const canEditName=settingsUserIdentityEditable(user);
+  const roles=[['ADMIN','Administrador'],['ATENDIMENTO','Atendimento'],['TECNICO','Técnico'],['FINANCEIRO','Financeiro']];
+  const choices=roles.map(([value,label])=>`<option value="${value}" ${user.role===value?'selected':''}>${label}</option>`).join('');
+  showModal('Editar usuário',`<form class="form-stack">
+    <p class="muted">Edite o perfil de acesso à unidade. O nome de usuário usado para entrar não pode ser alterado aqui.</p>
+    <label>Usuário<input value="${esc(user.username)}" readonly aria-readonly="true"></label>
+    <label>Nome<input name="name" value="${esc(user.name)}" maxlength="100" minlength="2" required
+      ${canEditName?'':'readonly aria-readonly="true"'}></label>
+    ${canEditName?'':'<p class="muted">Conta usada em outras unidades. Somente a administração da plataforma pode alterar o nome e a senha.</p>'}
+    <label>Perfil nesta unidade<select name="role">${choices}</select></label>
+    <button class="btn primary" type="submit">Salvar alterações</button>
+  </form>`,async fd=>{
+    const body={role:String(fd.get('role')),active:settingsUserEnabled(user)};
+    if(canEditName)body.name=String(fd.get('name')||'').trim();
+    await api('/api/users/'+Number(user.id),{method:'PATCH',body});
+    toast('Usuário atualizado');await refreshCurrentPage();
+  },{entityKey:'edit-user-'+Number(user.id)});
+}
+function resetSettingsUserPassword(user){
+  if(!settingsUserIdentityEditable(user)){
+    toast('Conta compartilhada: somente a administração da plataforma pode redefinir a senha.',true);return;
+  }
+  const minimum=window.OficinaTenant?.enabled?12:8;
+  showModal('Redefinir senha',`<form class="form-stack">
+    <p class="muted">Defina uma nova senha para ${esc(user.name)}. As sessões anteriores deste usuário serão encerradas.</p>
+    <label>Nova senha<input name="newPassword" type="password" autocomplete="new-password"
+      minlength="${minimum}" maxlength="256" required></label>
+    <label>Confirmar nova senha<input name="confirmNewPassword" type="password"
+      autocomplete="new-password" minlength="${minimum}" maxlength="256" required></label>
+    <button class="btn primary" type="submit">Confirmar nova senha</button>
+  </form>`,async fd=>{
+    const password=String(fd.get('newPassword')||'');
+    if(password!==String(fd.get('confirmNewPassword')||''))throw new Error('As senhas não coincidem');
+    if(password.length<minimum||password.length>256)throw new Error('Senha fora do tamanho permitido');
+    await api('/api/users/'+Number(user.id),{method:'PATCH',
+      body:{role:user.role,active:settingsUserEnabled(user),password}});
+    if(Number(user.id)===Number(state.user.id)){
+      toast('Senha alterada. Entre novamente com a nova senha.');logout();
+    }else{
+      toast('Senha redefinida. As sessões anteriores foram encerradas.');
+      await refreshCurrentPage();
+    }
+  },{entityKey:'reset-user-'+Number(user.id)});
+}
+async function toggleSettingsUser(user,button){
+  if(Number(user.id)===Number(state.user.id)){
+    toast('Você não pode desativar seu próprio acesso por esta tela.',true);return;
+  }
+  const active=settingsUserEnabled(user);
+  if(!confirm(active?`Desativar o acesso de ${user.name} nesta unidade?`:
+    `Reativar o acesso de ${user.name} nesta unidade?`))return;
+  button.disabled=true;
+  try{
+    await api('/api/users/'+Number(user.id),{method:'PATCH',body:{role:user.role,active:!active}});
+    toast(active?'Acesso desativado':'Acesso reativado');
+    await refreshCurrentPage();
+  }catch(error){toast(error.message,true)}
+  finally{button.disabled=false}
+}
 
 function table(headers,rows){return `<div class="table-wrap"><table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.length?rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join(''):`<tr><td colspan="${headers.length}" class="empty">Nenhum registro.</td></tr>`}</tbody></table></div>`}
 

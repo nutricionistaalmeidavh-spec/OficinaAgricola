@@ -44,6 +44,15 @@ try{
    assert.equal(company.unitId>1,true);
    const tech=await registry.grantMembership(actor,{unitId:unit.id,username:'tecnico-a',name:'Tecnico A',password:'StrongPass2026##',role:'TECNICO'});
    assert.equal((await registry.requireUnitMembership(tech.id,unit.id)).role,'TECNICO');
+   const oldPass=adminCredentials.password,newPass=oldPass+'-new';
+   const before=await registry.login({username:'tecnico-a',password:oldPass});
+   const profile=await registry.changeMembership(actor,{unitId:unit.id,userId:tech.id,
+     role:'TECNICO',active:true,name:'Tecnico Atualizado',password:newPass});
+   assert.equal(profile.active,true);
+   await assert.rejects(registry.validateSession(before.token),/Sessão|sessão/i);
+   await assert.rejects(registry.login({username:'tecnico-a',password:oldPass}),/Credenciais/i);
+   const after=await registry.login({username:'tecnico-a',password:newPass});
+   assert.equal(after.user.name,'Tecnico Atualizado');
    await assert.rejects(registry.requireUnitMembership(tech.id,company.unitId),/Permissão/i);
    await assert.rejects(registry.createCompany(tech.id,{slug:'intruso',name:'Intruso'}),/Permissão/i);
    await assert.rejects(registry.listUnitMembers(tech.id,unit.id),/Permissão/i);

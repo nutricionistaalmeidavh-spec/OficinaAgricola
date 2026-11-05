@@ -333,6 +333,7 @@ function showModal(title,html,onSubmit,{entityKey=null}={}){
   };
 }
 function closeModal(){
+  window.OficinaBarcode?.stopCamera();
   const session=modalSession;modalSession=null;
   state.modalToken=null;state.modalKey=null;
   $('#modal').classList.add('hidden');$('#modalBody').innerHTML='';
@@ -430,6 +431,7 @@ function showApp(){
  }
 }
 function logout(){
+  window.OficinaBarcode?.stopCamera();
   if(modalSession)closeModal();
   state.pageController?.abort();state.pageEpoch++;state.pageReady=false;
   state.token='';state.user=null;
@@ -471,6 +473,7 @@ async function refreshCurrentPage(){
 async function navigate(page,{force=false}={}){
  if(!canViewModule(page)){toast('Seu perfil não tem acesso a este módulo.',true);return;}
   if(page!==state.page&&!allowLeaveWorkshop())return;
+  if(page!==state.page)window.OficinaBarcode?.stopCamera();
   $('#mobileMorePanel')?.classList.add('hidden');
   $('#mobileMoreBtn')?.setAttribute?.('aria-expanded','false');
   if(state.page===page&&state.pageReady){
