@@ -50,8 +50,27 @@ jobs:
                   print('OFFICIAL_SCRIPTS',re.findall(r'<script[^>]+src=["\\x27]([^"\\x27]+)',html,re.I)[-30:])
                   for key in ['ExportarJSON','ExportarCsv','csv','json','Download','ClassTrib','classTrib']:
                     print('FOUND_KEY',key,[html[max(0,i-150):i+150] for i in [html.find(key)] if i>=0][:1])
-                else: print('RFB_PREFIX',data[:90])
+                else:
+                  import json
+                  payload=json.loads(data)
+                  rows=payload.get('Nomenclaturas',[])
+                  print('RFB_COUNTS',len(rows),'8_DIGITS',sum(1 for x in rows if len(str(x.get('Codigo','')))==8),'FIELDS',list(rows[0])[:10])
+                  print('RFB_EXAMPLES',[x.get('Codigo') for x in rows[:3]])
+
             except Exception as e:print('OFFICIAL_SOURCE_ERROR',type(e).__name__,str(e)[:300])
+          from urllib.parse import quote
+          import io,zipfile
+          file='Tabela IT 2025.002 v.1.71 - cClassTrib.xlsx'
+          url='https://dfe-portal.svrs.rs.gov.br/DFE/DownloadArquivoEstatico/?sistema=DFE&tipoArquivo=12&nomeArquivo='+quote(file)
+          try:
+            with urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'Mozilla/5.0'}),timeout=25) as r:
+              data=r.read(8000000)
+              print('SVRS_XLSX_DOWNLOAD',r.status,len(data),r.headers.get('Content-Type'),'PREFIX',data[:14])
+              if data.startswith(b'PK'):
+                with zipfile.ZipFile(io.BytesIO(data)) as z:
+                  print('SVRS_ZIP_MEMBERS',z.namelist()[:22])
+          except Exception as e:print('SVRS_XLSX_ERROR',type(e).__name__,str(e)[:400])
+
       - name: Lint
         run: npm run lint
       - name: ACBrLib Python syntax and offline unit tests
