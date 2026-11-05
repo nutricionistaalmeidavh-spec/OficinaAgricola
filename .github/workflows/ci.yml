@@ -100,6 +100,10 @@ jobs:
                 with redirect.open(req,timeout=12) as r:
                   data=r.read(1000000)
                   print('NF_PORTAL_OK',r.status,len(data),r.geturl()[:140])
+                  html=data.decode('utf-8','replace')
+                  for key in ['Tabela de CFOP','04/09/2026','CFOP','2023.002']:
+                    i=html.lower().find(key.lower())
+                    print('CFOP_HTML',key,'AT',i,html[max(0,i-600):i+850].replace('\\n',' ') if i>=0 else '')
               except Exception as e:print('NF_PORTAL_RESULT',type(e).__name__,str(e)[:120])
 
       - name: Lint
