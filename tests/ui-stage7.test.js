@@ -38,7 +38,7 @@ test('ArtiSys QA fica configurado como consumidor opcional da assistência', asy
   assert.ok(manifest.flows['stage7-shell']);
   assert.ok(pkg.dependencies && typeof pkg.dependencies.pg==='string' && /^\^8\./.test(pkg.dependencies.pg),
     'PostgreSQL OSS é dependência local empacotada, não SaaS');
-  assert.deepEqual(Object.keys(pkg.dependencies),['pg','@useinvio/nfse-sdk']);
+  assert.deepEqual(Object.keys(pkg.dependencies),['pg','@useinvio/nfse-sdk','qrcode-generator']);
   assert.equal(pkg.dependencies['@useinvio/nfse-sdk'],'3.0.0', 'SDK MIT da NFS-e deve estar empacotado localmente');
   assert.equal(pkg.devDependencies?.['@useinvio/nfse-sdk'],undefined);
 });
