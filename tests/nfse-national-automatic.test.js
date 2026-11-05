@@ -18,7 +18,7 @@ const customer={document:'12345678909',name:'Cliente Teste',municipalityIbge:'31
  zip:'30110010',street:'Rua Teste',number:'10',district:'Centro'};
 const issuance={series:'101',number:'54',opSimpNac:'3',regEspTrib:'0',regApTribSN:'1',
  tribISSQN:'1',tpRetISSQN:'1',cstPisCofins:'07',percentFederal:'0.00',
- percentState:'0.00',percentMunicipal:'2.00',issuedAt:'2026-11-05T12:00:00-03:00'};
+ percentState:'0.00',percentMunicipal:'2.00',percentSimples:'2.00',issuedAt:'2026-11-05T12:00:00-03:00'};
 const prep=(more={})=>prepareNationalDpsInput({document:doc,issuer,profile,customer,issuance,...more});
 test('gera dados determinísticos da DPS a partir do snapshot canônico sem impostos inferidos',()=>{
  const result=prep();
