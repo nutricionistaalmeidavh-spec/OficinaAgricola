@@ -1,6 +1,58 @@
-async function renderInventory({cursor=null,loaded=[]}={}){pageTitle('Peças e Estoque','OPERAÇÃO');const page=await api('/api/parts/page?includeInactive=1&limit=50'+(cursor?'&cursor='+encodeURIComponent(cursor):''));const parts=loaded.concat(page.items);setContent(`${window.OficinaBarcode?.markup('inventory')||''}<div class="section-head"><div><h2>Estoque</h2><span class="muted">Movimentações auditáveis</span></div>${['ADMIN','ATENDIMENTO'].includes(state.user.role)?'<button id="newPart" class="btn primary">+ Nova peça</button>':''}</div>${table(['SKU','Descrição','Saldo','Mínimo','Preço',''],parts.map(p=>[esc(p.sku),`<strong>${esc(p.description)}</strong><br><small>${esc(p.category||'')}</small>`,p.quantity,p.min_stock,money(p.sale_price_cents),`${['ADMIN','ATENDIMENTO'].includes(state.user.role)?`<button class="btn sm" data-entry="${p.id}">Movimentar</button> <button class="btn sm" data-fitments="${p.id}">Aplicações</button>`:""}`]))}`);window.OficinaBarcode?.attach($('#content [data-barcode-panel]'),async code=>{const part=await window.OficinaBarcode.findPartBySku(code,api,{includeInactive:true});if(!part)return {state:'error',message:'Código '+code+' não localizado entre os SKUs cadastrados. Pesquise ou cadastre a peça.'};return 'Peça '+part.sku+' — '+part.description+' identificada. Saldo: '+part.quantity+'. Nenhum estoque foi movimentado.';});if($('#newPart'))$('#newPart').onclick=()=>partCreateModal();document.querySelectorAll('[data-entry]').forEach(b=>b.onclick=()=>stockMoveModal(Number(b.dataset.entry),parts.find(p=>p.id===Number(b.dataset.entry))));document.querySelectorAll('[data-fitments]').forEach(b=>b.onclick=()=>partFitmentsModal(parts.find(p=>p.id===Number(b.dataset.fitments))));showPagedLoadMore({cursor:page.nextCursor,loaded:parts.length,total:page.total,onMore:()=>renderInventory({cursor:page.nextCursor,loaded:parts})})}
+async function renderInventory({cursor=null,loaded=[]}={}){
+ pageTitle('Peças e Estoque','OPERAÇÃO');
+ const office=['ADMIN','ATENDIMENTO'].includes(state.user.role);
+ const [page,orders]=await Promise.all([
+  api('/api/parts/page?includeInactive=1&limit=50'+(cursor?'&cursor='+encodeURIComponent(cursor):'')),
+  office?api('/api/purchases/orders?limit=12'):Promise.resolve([])
+ ]);
+ const parts=loaded.concat(page.items);
+ setContent(`${window.OficinaBarcode?.markup('inventory')||''}<div class="section-head"><div><h2>Estoque</h2><span class="muted">Saldos por peça e movimentações auditáveis</span></div>
+  <div class="action-row">
+   <button id="stockHistory" type="button" class="btn soft">Histórico de movimentos</button>
+   ${office?'<button id="suppliersManage" type="button" class="btn soft">Fornecedores</button><button id="purchaseNew" type="button" class="btn soft">+ Pedido de compra</button><button id="newPart" type="button" class="btn primary">+ Nova peça</button>':''}
+  </div></div>
+  ${table(['SKU','Descrição','Saldo','Mínimo','Preço',''],parts.map(p=>[
+   esc(p.sku),`<strong>${esc(p.description)}</strong><br><small>${esc(p.category||'')}</small>`,
+   Number(p.quantity)<=Number(p.min_stock)?`<span class="pill orange">${p.quantity}</span>`:p.quantity,
+   p.min_stock,money(p.sale_price_cents),
+   office?`<button class="btn sm" data-entry="${p.id}">Movimentar</button> <button class="btn sm" data-fitments="${p.id}">Aplicações</button>`:''
+  ]))}
+  ${office?`<section class="card" style="margin-top:18px"><div class="section-head"><div><h2>Pedidos de compra</h2><span class="muted">Receba por etapas sem duplicar saldos</span></div><button type="button" id="allPurchaseOrders" class="btn sm">Ver todos</button></div>
+   <div class="list">${orders.length?orders.map(o=>`<div class="list-item"><div><strong>${esc(o.reference||'Pedido '+String(o.id).slice(-6))}</strong> ${badge(o.status)}
+    <br><small>${esc(o.supplier_name)} · ${dt(o.created_at)}</small></div>
+    <button type="button" class="btn sm" data-purchase-open="${o.id}">Ver pedido</button></div>`).join(''):'<p class="empty">Nenhum pedido de compra cadastrado.</p>'}</div></section>`:''}`);
+ window.OficinaBarcode?.attach($('#content [data-barcode-panel]'),async code=>{const part=await window.OficinaBarcode.findPartBySku(code,api,{includeInactive:true});if(!part)return {state:'error',message:'Código '+code+' não localizado entre os SKUs cadastrados. Pesquise ou cadastre a peça.'};return {state:'success',message:'Peça '+part.sku+' — '+part.description+' identificada. Saldo: '+part.quantity+'. Nenhum estoque foi movimentado.'};});
+ if($('#newPart'))$('#newPart').onclick=()=>partCreateModal();
+ $('#stockHistory').onclick=()=>openInventoryHistory().catch(e=>toast(e.message,true));
+ if($('#suppliersManage'))$('#suppliersManage').onclick=()=>showSuppliersModal().catch(e=>toast(e.message,true));
+ if($('#purchaseNew'))$('#purchaseNew').onclick=()=>newPurchaseOrderModal().catch(e=>toast(e.message,true));
+ if($('#allPurchaseOrders'))$('#allPurchaseOrders').onclick=()=>showPurchaseOrdersList().catch(e=>toast(e.message,true));
+ $$('[data-entry]').forEach(b=>b.onclick=()=>stockMoveModal(Number(b.dataset.entry),parts.find(p=>p.id===Number(b.dataset.entry))));
+ $$('[data-fitments]').forEach(b=>b.onclick=()=>partFitmentsModal(parts.find(p=>p.id===Number(b.dataset.fitments))));
+ $$('[data-purchase-open]').forEach(b=>b.onclick=()=>openPurchaseOrder(Number(b.dataset.purchaseOpen)).catch(e=>toast(e.message,true)));
+ showPagedLoadMore({cursor:page.nextCursor,loaded:parts.length,total:page.total,onMore:()=>renderInventory({cursor:page.nextCursor,loaded:parts})});
+}
 function partCreateModal(){const requestId=newCommandId();showModal('Nova peça',`<form class="form-stack"><div class="field-row"><label>SKU<input name="sku" required></label><label>Descrição<input name="description" required></label></div><div class="field-row three"><label>Categoria<input name="category"></label><label>Unidade<input name="unit" value="UN"></label><label>Localização<input name="location"></label></div><div class="field-row three"><label>Custo (R$)<input name="cost" type="number" step="0.01" value="0"></label><label>Venda (R$)<input name="sale" type="number" step="0.01" value="0"></label><label>Estoque mínimo<input name="minStock" type="number" step="0.01" value="0"></label></div><button class="btn primary" type="submit">Salvar peça</button></form>`,async fd=>{const o=formObj(fd);await api('/api/parts',{method:'POST',body:{requestId,sku:o.sku,description:o.description,category:o.category,unit:o.unit,location:o.location,costCents:Math.round(Number(o.cost)*100),salePriceCents:Math.round(Number(o.sale)*100),minStock:Number(o.minStock)}});toast('Peça cadastrada');await refreshCurrentPage()})}
-function stockMoveModal(id,p){const requestId=newCommandId();showModal(`Movimentar — ${p.description}`,`<form class="form-stack"><label>Tipo<select name="type"><option value="ENTRADA">Entrada</option><option value="SAIDA_MANUAL">Saída manual</option><option value="AJUSTE">Ajuste (+/-)</option></select></label><label>Quantidade<input name="quantity" type="number" step="0.01" required></label><label>Observação<input name="note"></label><button class="btn primary" type="submit">Registrar movimentação</button></form>`,async fd=>{const o=formObj(fd);await api('/api/inventory/movements',{method:'POST',body:{requestId,partId:id,type:o.type,quantity:Number(o.quantity),note:o.note}});toast('Movimentação registrada');await refreshCurrentPage()})}
+function stockMoveModal(id,p){
+ const requestId=newCommandId(),admin=state.user.role==='ADMIN';
+ showModal('Movimentar — '+p.description,`<form class="form-stack">
+  <p class="muted">Saldo atual: <strong>${p.quantity} ${esc(p.unit)}</strong>. Movimentações ficam registradas no histórico.</p>
+  <label>Tipo<select name="type" id="stockMoveType"><option value="ENTRADA">Entrada manual</option><option value="SAIDA_MANUAL">Saída manual</option>${admin?'<option value="AJUSTE">Ajuste de inventário (+/-)</option>':''}</select></label>
+  <label>Quantidade<input name="quantity" type="number" step="0.01" required></label>
+  <label>Motivo / observação<input name="note" id="stockMoveNote" maxlength="500"></label>
+  <p class="muted" id="stockMoveHint">Para ajuste negativo, informe uma quantidade com sinal de menos. O motivo é obrigatório.</p>
+  <button class="btn primary" type="submit">Registrar movimentação</button>
+ </form>`,async fd=>{
+  const o=formObj(fd);
+  await api('/api/inventory/movements',{method:'POST',body:{
+   requestId,partId:id,type:o.type,quantity:Number(o.quantity),note:o.note
+  }});
+  toast('Movimentação registrada');await refreshCurrentPage();
+ });
+ const type=$('#stockMoveType'),note=$('#stockMoveNote'),hint=$('#stockMoveHint');
+ const sync=()=>{const adjust=type.value==='AJUSTE';note.required=adjust;note.minLength=adjust?5:0;hint.hidden=!adjust};
+ type.addEventListener('change',sync);sync();
+}
 
 async function renderSchedule({cursor=null,loaded=[],period=null}={}){pageTitle('Agenda','PLANEJAMENTO');const from=period?new Date(period.from):new Date();if(!period)from.setDate(from.getDate()-7);const to=period?new Date(period.to):new Date();if(!period)to.setDate(to.getDate()+60);const currentPeriod={from:from.toISOString(),to:to.toISOString()};const [page,maintenanceAlerts]=await Promise.all([api(`/api/schedule/page?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}&limit=50${cursor?'&cursor='+encodeURIComponent(cursor):''}`),api('/api/maintenance-alerts')]);const events=loaded.concat(page.items);setContent(`<div class="section-head"><div><h2>Agenda da oficina</h2><span class="muted">Diagnósticos, execuções, visitas e entregas</span></div>${['ADMIN','ATENDIMENTO','TECNICO'].includes(state.user.role)?`<button id="newEvent" class="btn primary">+ Novo evento</button>`:''}</div><div class="card"><div class="list">${events.length?events.map(e=>`<div class="list-item"><div><strong>${esc(e.title)}</strong> ${badge(e.type)}<br><small>${esc(e.customer_name||'')} ${e.os_number?`· OS #${e.os_number}`:''} ${e.technician_name?`· ${esc(e.technician_name)}`:''}</small></div><strong>${dt(e.starts_at)}</strong></div>`).join(''):'<div class="empty">Nenhum evento no período.</div>'}</div></div><div class="card"><h3>Manutenções preventivas a vencer ou atrasadas</h3><div class="list">${maintenanceAlerts.length?maintenanceAlerts.map(p=>`<div class="list-item"><div><strong>${esc(p.name)}</strong> · ${esc(p.brand||'')} ${esc(p.model||'')} <br><small>${esc(p.customer_name)} · ${esc(p.next_due_date||'Sem data')} · ${p.next_due_km??'—'} km · ${p.next_due_hours??'—'} h</small></div>${badge(p.status)}</div>`).join(''):'<div class="empty">Nenhuma manutenção próxima do vencimento.</div>'}</div></div>`);if($('#newEvent'))$('#newEvent').onclick=async()=>{
  try{
