@@ -27,6 +27,8 @@ jobs:
           cache: npm
       - name: Install
         run: npm ci
+      - name: Validate packaged national NFS-e SDK
+        run: node scripts/stage-nfse-national.mjs
       - name: Lint
         run: npm run lint
       - name: ACBrLib Python syntax and offline unit tests
@@ -41,3 +43,19 @@ jobs:
         run: node scripts/assert-fiscal-data-bundle.mjs --dist
       - name: Critical E2E
         run: npm run test:e2e
+
+  windows-nfse-bundle:
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+          cache: npm
+      - name: Install OSS dependencies
+        run: npm ci
+      - name: Validate Windows NFS-e offline bundle
+        run: node scripts/stage-nfse-national.mjs
