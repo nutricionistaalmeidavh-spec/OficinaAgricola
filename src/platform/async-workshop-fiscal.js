@@ -242,11 +242,11 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
    const doc=await getFiscalDocument(documentId);
    if(!['AUTORIZADA','AUTORIZADA_HOMOLOGACAO'].includes(doc.status))
      fail('Somente nota autorizada pode ser cancelada; operação indeterminada exige consulta',409);
+   const justification=clean(reason);
+   if(justification.length<15||justification.length>255||/[\r\n]/.test(justification))
+     fail('Justificativa de cancelamento deve ter 15 a 255 caracteres, em uma linha');
    if(!provider||typeof provider.cancel!=='function'||typeof provider.consultCancellation!=='function')
      fail('Cancelamento fiscal indisponível no emissor configurado',503);
-   const justification=clean(reason);
-   if(justification.length<15||justification.length>255||/[\\r\\n]/.test(justification))
-     fail('Justificativa de cancelamento deve ter 15 a 255 caracteres, em uma linha');
    const issuer=JSON.parse(doc.issuer_snapshot_json||'{}');
    if(!issuer?.cnpj||!doc.access_key||!doc.protocol||!doc.authorized_xml)
      fail('Documento sem identificação fiscal autorizada',409);
