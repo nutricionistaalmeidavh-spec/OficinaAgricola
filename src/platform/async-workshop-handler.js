@@ -483,8 +483,37 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
      }));
    if(path==='/v1/parts'&&method==='POST')
      return json(await services.createPart(await dataFrom(request)),201);
+   if(path==='/v1/stock/history'&&method==='GET')
+     return json(await services.listStockMovements({
+       partId:u.searchParams.get('partId'),type:u.searchParams.get('type')||'',
+       from:u.searchParams.get('from')||'',to:u.searchParams.get('to')||'',
+       search:u.searchParams.get('search')||'',cursor:u.searchParams.get('cursor'),
+       limit:u.searchParams.get('limit')||50
+     }));
+   if(path==='/v1/suppliers'&&method==='GET')
+     return json(await services.listSuppliers({search:u.searchParams.get('search')||''}));
+   if(path==='/v1/suppliers'&&method==='POST')
+     return json(await services.createSupplier(await dataFrom(request)),201);
+   if(path==='/v1/purchases/orders'&&method==='GET')
+     return json(await services.listPurchaseOrders({
+       status:u.searchParams.get('status')||'',limit:u.searchParams.get('limit')||50
+     }));
+   if(path==='/v1/purchases/orders'&&method==='POST')
+     return json(await services.createPurchaseOrder({
+       ...await dataFrom(request),actorId:actor.id
+     }),201);
+   const purchaseOrder=path.match(/^\/v1\/purchases\/orders\/([1-9]\d*)$/);
+   if(purchaseOrder&&method==='GET')
+     return json(await services.getPurchaseOrder(Number(purchaseOrder[1])));
+   const purchaseReceive=path.match(/^\/v1\/purchases\/orders\/([1-9]\d*)\/receipts$/);
+   if(purchaseReceive&&method==='POST')
+     return json(await services.receivePurchaseOrder({
+       ...await dataFrom(request),orderId:Number(purchaseReceive[1]),actorId:actor.id
+     }),201);
    if(path==='/v1/stock'&&method==='POST')
-     return json(await services.postStockMovement(await dataFrom(request)),201);
+     return json(await services.postStockMovement({
+       ...await dataFrom(request),actorId:actor.id,actorRole:actor.role
+     }),201);
    if(path==='/v1/billing/capabilities'&&method==='GET')return json(services.capabilities());
    if(path==='/v1/billing/plans'&&method==='POST')
      return json(await services.createPlan(await dataFrom(request,16384)),201);
