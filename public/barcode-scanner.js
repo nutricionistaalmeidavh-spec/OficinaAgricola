@@ -181,6 +181,9 @@
         if(video.readyState>=2){
           const results=await detector.detect(video);
           if(expectedGeneration!==generation)return;
+          if(!panel.isConnected||panel.closest?.('.modal-backdrop.hidden')){
+            stopCamera();return;
+          }
           const found=results?.find(item=>item.rawValue&&CAMERA_FORMATS.includes(item.format));
           if(found){
             stopCamera();
@@ -213,11 +216,16 @@
         acquired=await navigator.mediaDevices.getUserMedia({
           audio:false,video:{facingMode:{ideal:'environment'}}
         });
-        if(sequence!==generation||!panel.isConnected){releaseStream(acquired);return;}
+        if(sequence!==generation||!panel.isConnected||panel.closest?.('.modal-backdrop.hidden')){
+          releaseStream(acquired);stopCamera();return;
+        }
         stream=acquired;video.srcObject=stream;video.hidden=false;stopButton.hidden=false;
         await video.play();
         detector=await makeDetector();
         if(sequence!==generation)return;
+        if(!panel.isConnected||panel.closest?.('.modal-backdrop.hidden')){
+          stopCamera();return;
+        }
         failures=0;
         report('Aponte a câmera para o código de barras.','scanning');
         void scanFrame(sequence);
