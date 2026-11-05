@@ -126,8 +126,45 @@
             return new native({formats:Array.isArray(supported)?CAMERA_FORMATS.filter(format=>supported.includes(format)):CAMERA_FORMATS});
         }catch{/* Usar alternativa local gratuita. */}
       }
-      const polyfill=await import('/vendor/barcode-detector-zbar.min.js');
-      return new polyfill.default({formats:CAMERA_FORMATS});
+      if(!window.Quagga){
+        await new Promise((resolve,reject)=>{
+          const script=document.createElement('script');
+          script.src='/vendor/quagga.min.js';
+          script.async=true;
+          script.onload=()=>window.Quagga?resolve():reject(new Error('Biblioteca de câmera indisponível'));
+          script.onerror=()=>reject(new Error('Biblioteca de câmera local não encontrada'));
+          document.head.appendChild(script);
+        });
+      }
+      const canvas=document.createElement('canvas');
+      const context=canvas.getContext('2d',{willReadFrequently:true});
+      if(!context)throw new Error('Canvas indisponível para leitura');
+      return {detect(source){
+        const width=source.videoWidth||source.width,height=source.videoHeight||source.height;
+        if(!width||!height)return Promise.resolve([]);
+        const ratio=Math.min(1,640/width);
+        canvas.width=Math.max(1,Math.round(width*ratio));
+        canvas.height=Math.max(1,Math.round(height*ratio));
+        context.drawImage(source,0,0,canvas.width,canvas.height);
+        return new Promise((resolve,reject)=>{
+          let finished=false;
+          const timeout=setTimeout(()=>finish(new Error('Tempo excedido na leitura.')),5000);
+          function finish(error,result){
+            if(finished)return;finished=true;clearTimeout(timeout);
+            if(error)return reject(error);
+            const item=result?.codeResult;
+            resolve(item?.code?[{rawValue:item.code,format:item.format}]:[]);
+          }
+          try{
+            window.Quagga.decodeSingle({
+              src:canvas.toDataURL('image/jpeg',0.85),
+              numOfWorkers:0,locate:true,
+              inputStream:{size:640},
+              decoder:{readers:['ean_reader','ean_8_reader','code_128_reader','code_39_reader','upc_reader']}
+            },result=>finish(null,result));
+          }catch(error){finish(error);}
+        });
+      }};
     }
 
     async function scanFrame(expectedGeneration){
