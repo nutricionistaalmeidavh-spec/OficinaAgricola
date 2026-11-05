@@ -16,6 +16,8 @@ test('cabeçalho normativo contém recursos Arial/MS Sans Serif e logo em XObjec
  assert.match(text,/\/BaseFont \/Arial/);
  assert.match(text,/\/BaseFont \/MicrosoftSansSerif/);
  assert.match(text,/\/Subtype \/Image/);
+ assert.match(text,/\/FontFile2/);
+ assert.match(text,/\/FontDescriptor/);
  assert.match(text,/\/ImLogo Do/);
  assert.match(text,/\/MediaBox \[0 0 595\.28 841\.89\]/);
  assert.match(text,/\/Count 1\b/);
@@ -25,7 +27,7 @@ test('QR tem origem oficial 17,48 x 1,67 cm e nota de homologação vermelha',()
  const content=pdf.toString('latin1');
  assert.match(content,/495\.5[0-9]* /);
  assert.match(content,/NFS-e SEM VALIDADE JUR/);
- assert.match(content,/1 0 0 rg/);
+ assert.match(content,/0 1 1 0 k/);
  assert.match(content,/ConsultaPublica/);
 });
 test('logomarca oficial é requisito de distribuição, sem substituição silenciosa por texto',()=>{
