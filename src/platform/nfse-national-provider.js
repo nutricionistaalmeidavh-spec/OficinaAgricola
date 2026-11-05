@@ -10,6 +10,15 @@ import {existsSync} from 'node:fs';
 import {prepareNationalDpsInput} from './nfse-national-automatic.js';
 import {buildNationalCancelRequest} from './nfse-national-cancellation.js';
 
+async function loadNationalSdk(){
+ try{
+  const packaged=process.resourcesPath?join(process.resourcesPath,'nfse-national',
+    'node_modules','@useinvio','nfse-sdk','dist','index.js'):null;
+  return packaged&&existsSync(packaged)
+    ?await import(pathToFileURL(packaged).href)
+    :await import('@useinvio/nfse-sdk');
+ }catch{throw Error('Módulo OSS NFS-e Nacional não disponível no instalador')}
+}
 export function createNationalNfseProvider({certificateStore,inputDir,client,danfseLogoPng}={}){
  if(!certificateStore||typeof certificateStore.withTlsIdentity!=='function')
    throw Error('NFS-e Nacional exige cofre de certificado A1 local');
@@ -35,15 +44,7 @@ export function createNationalNfseProvider({certificateStore,inputDir,client,dan
    const profile=profiles.find(x=>x.id===profileId&&x.kind==='SERVICE');
    if(!profile)throw Error('Selecione perfil tributário de serviço cadastrado nesta empresa');
    const prepared=prepareNationalDpsInput({document,issuer,profile,customer,issuance});
-   // SDK fiscal open source é opcional: carregado só quando a empresa utiliza NFS-e direta.
-   let sdk;
-   try{
-     const packaged=process.resourcesPath?join(process.resourcesPath,'nfse-national','node_modules',
-       '@useinvio','nfse-sdk','dist','index.js'):null;
-     sdk=packaged&&existsSync(packaged)
-       ?await import(pathToFileURL(packaged).href)
-       :await import('@useinvio/nfse-sdk');
-   }catch{throw Error('Módulo opcional OSS NFS-e Nacional não instalado neste servidor')}
+   const sdk=await loadNationalSdk();
    const built=sdk.buildDpsFromJson(prepared.payload);
    if(built.id!==prepared.idDps)throw Error('DPS gerada tem identificação divergente');
    const xmlSigned=await certificateStore.withTlsIdentity({cnpj:issuer.cnpj},identity=>{
@@ -87,9 +88,7 @@ export function createNationalNfseProvider({certificateStore,inputDir,client,dan
    const issuer=issuerFor(document);
    const request=buildNationalCancelRequest({issuer,accessKey:document.access_key,reason});
    if(certificateStore.status().certificateType!=='A1')throw Error('A1 local obrigatório');
-   let sdk;
-   try{sdk=await import('@useinvio/nfse-sdk')}
-   catch{throw Error('SDK local de assinatura nacional indisponível')}
+   const sdk=await loadNationalSdk();
    const signed=await certificateStore.withTlsIdentity({cnpj:issuer.cnpj},identity=>{
     const material=sdk.loadPfxFromBuffer(identity.pfx,identity.passphrase);
     return sdk.signEnveloped(request.xml,request.id,'infPedReg',material);
