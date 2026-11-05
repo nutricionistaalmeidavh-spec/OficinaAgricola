@@ -17,7 +17,7 @@ async function renderFiscal({cursor=null,loaded=[]}={}){
   const [page,settings]=await Promise.all([api('/api/fiscal/page?limit=50'+(cursor?'&cursor='+encodeURIComponent(cursor):'')),api('/api/fiscal/settings')]);const docs=loaded.concat(page.items);
   const cards=docs.map(d=>{
     const origin=d.origin_type==='OS'?'OS':'Venda';
-    const tax=d.status==='RASCUNHO'&&d.kind==='NFE'&&state.user.role==='ADMIN'
+    const tax=d.status==='RASCUNHO'&&['NFE','NFCE'].includes(d.kind)&&state.user.role==='ADMIN'
       ?'<button class="btn sm soft" data-fiscal-tax="'+d.id+'">Revisar tributação</button>':'';
     const actions=d.status==='RASCUNHO'&&settings.enabled
       ? '<button class="btn sm" data-fiscal-submit="'+d.id+'">Transmitir</button>'
@@ -100,8 +100,8 @@ async function fiscalTaxReviewModal(documentId){
   const [doc,settings,company]=await Promise.all([
     api('/api/fiscal/'+documentId),api('/api/fiscal/settings'),api('/api/company')
   ]);
-  if(doc.kind!=='NFE'||doc.status!=='RASCUNHO')
-    throw Error('Revisão disponível somente para rascunho NF-e');
+  if(!['NFE','NFCE'].includes(doc.kind)||doc.status!=='RASCUNHO')
+    throw Error('Revisão disponível somente para rascunho NF-e/NFC-e');
   const snapshot=fiscalSnapshot(doc),lines=snapshot.lines||[],customer=snapshot.customer||{};
   if(!lines.length||lines.length>100)throw Error('Itens fiscais inválidos');
   const safe=v=>esc(String(v??''));
@@ -112,7 +112,7 @@ async function fiscalTaxReviewModal(documentId){
     field('Logradouro','emitStreet')+field('Número','emitNumber')+
     field('Bairro','emitDistrict')+field('Município','emitCity')+
     field('CEP (8 dígitos)','emitCep');
-  const recipient='<h3>Destinatário</h3>'+
+  const recipient=doc.kind==='NFCE'?'':'<h3>Destinatário</h3>'+
     field('Nome/razão social','destName',customer.name)+
     field('CPF/CNPJ','destDocument',customer.document||'')+
     field('UF','destUf',settings.issuer_uf)+
@@ -148,13 +148,21 @@ async function fiscalTaxReviewModal(documentId){
     field('Alíquota IBS municipal (%)','ibsMunRate'+index,'',false)+
     field('Alíquota CBS (%)','cbsRate'+index,'',false)+'</details></div>'
   ).join('');
-  showModal('Revisão tributária NF-e',
+  showModal('Revisão tributária '+(doc.kind==='NFCE'?'NFC-e':'NF-e'),
     '<form class="form-stack"><p class="muted">As classificações devem corresponder à operação e às orientações contábeis. Valores e produtos vêm da OS e não são editáveis aqui. Homologação não tem valor fiscal.</p>'+
-    '<h3>Identificação da NF-e</h3>'+
-    field('Número da NF-e (sequência fiscal da empresa)','number')+
+    '<h3>Identificação do documento</h3>'+
+    field('Número fiscal (sequência da empresa)','number')+
     field('Série','series','1')+field('Natureza da operação','nature','Venda de peças')+
     '<h3>Emitente</h3>'+field('Razão social','emitName',company.name)+
     field('Inscrição estadual','emitIe',settings.state_registration)+adr+recipient+
+    (doc.kind==='NFCE'?
+      '<h3>Pagamento NFC-e</h3><p class="muted">Valor total vem da venda; informe a forma real de pagamento, sem inventar identificadores de autorização.</p>'+
+      field('Código tPag (ex.: 01 dinheiro, 03 crédito, 04 débito, 17 Pix)','payCode')+
+      '<details><summary>Dados de integração eletrônica (quando exigidos)</summary>'+
+      field('tpIntegra (1 integração própria)','payIntegration','',false)+
+      field('CNPJ da credenciadora','payCnpj','',false)+
+      field('Bandeira tBand','payBrand','',false)+
+      field('Código de autorização cAut','payAuth','',false)+'</details>':'')+
     '<h3>Classificação dos itens</h3>'+items+
     '<button class="btn primary" type="submit">Validar e salvar revisão</button></form>',
     async form=>{
@@ -178,10 +186,10 @@ async function fiscalTaxReviewModal(documentId){
       const sections={
         infNFe:{versao:'4.00'},
         Identificacao:{
-          mod:'55',serie:v.series,nNF:v.number,tpAmb:settings.environment==='HOMOLOGACAO'?'2':'1',
+          mod:doc.kind==='NFCE'?'65':'55',serie:v.series,nNF:v.number,tpAmb:settings.environment==='HOMOLOGACAO'?'2':'1',
           natOp:v.nature,cUF:settings.municipality_ibge.slice(0,2),
           cMunFG:settings.municipality_ibge,tpNF:'1',
-          idDest:v.destUf.toUpperCase()===settings.issuer_uf?'1':'2',
+          idDest:doc.kind==='NFCE'?'1':v.destUf.toUpperCase()===settings.issuer_uf?'1':'2',
           tpImp:'1',tpEmis:'1',finNFe:'1',indFinal:'1',indPres:'1',
           procEmi:'0',verProc:'ArtiSys Oficina'},
         Emitente:{
@@ -190,14 +198,21 @@ async function fiscalTaxReviewModal(documentId){
           xLgr:v.emitStreet,nro:v.emitNumber,xBairro:v.emitDistrict,
           cMun:settings.municipality_ibge,xMun:v.emitCity,UF:settings.issuer_uf,
           CEP:digits(v.emitCep),cPais:'1058',xPais:'BRASIL'},
-        Destinatario:{
+        ...(doc.kind==='NFE'?{Destinatario:{
           CNPJCPF:digits(v.destDocument),xNome:v.destName,indIEDest:v.destIeIndicator,
           xLgr:v.destStreet,nro:v.destNumber,xBairro:v.destDistrict,
           cMun:digits(v.destIbge),xMun:v.destCity,UF:v.destUf.toUpperCase(),
-          CEP:digits(v.destCep),cPais:'1058',xPais:'BRASIL'},
+          CEP:digits(v.destCep),cPais:'1058',xPais:'BRASIL'}}:{}),
         Total:{vProd:fullMoney(totals.gross),vDesc:fullMoney(totals.discount),
           vNF:fullMoney(doc.amount_cents)}
       };
+      if(doc.kind==='NFCE'){
+        sections.pag001={tPag:String(v.payCode||'').trim(),vPag:fullMoney(doc.amount_cents)};
+        const cnpj=digits(v.payCnpj),auth=String(v.payAuth||'').trim(),
+          brand=String(v.payBrand||'').trim(),tp=String(v.payIntegration||'').trim();
+        if([cnpj,auth,brand,tp].some(Boolean))
+          sections.card001={CNPJ:cnpj,cAut:auth,tBand:brand,tpIntegra:tp};
+      }
       lines.forEach((_,index)=>{
         const suffix=String(index+1).padStart(3,'0');
         sections['Produto'+suffix]={NCM:digits(v['ncm'+index]),
