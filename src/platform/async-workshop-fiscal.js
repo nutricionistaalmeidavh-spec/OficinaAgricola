@@ -72,6 +72,8 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
    const route=resolveNfseRoute({municipalityIbge:settings.municipality_ibge,
      taxRegime:settings.tax_regime,competenceDate});
    if(route.channel==='PENDENTE')fail('Regra municipal NFS-e pendente: revise o canal antes de alterar o rascunho',409);
+   if(sha(doc.snapshot_json)!==doc.snapshot_hash)
+     fail('Snapshot fiscal canônico divergiu do hash; revisão manual necessária',409);
    let original;
    try{original=JSON.parse(doc.snapshot_json)}catch{fail('Snapshot fiscal legado inválido',409)}
    const json=JSON.stringify({...original,nfseRoute:route});
