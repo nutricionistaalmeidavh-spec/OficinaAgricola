@@ -257,7 +257,7 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
    const fiscalXml=path.match(/^\/v1\/fiscal\/([1-9][0-9]*)\/xml$/);
    if(fiscalXml&&method==='GET'){
      const doc=await services.getFiscalDocument(Number(fiscalXml[1]));
-     if(!['AUTORIZADA','AUTORIZADA_HOMOLOGACAO'].includes(doc.status)||
+     if(!['AUTORIZADA','AUTORIZADA_HOMOLOGACAO','CANCELADA'].includes(doc.status)||
         typeof doc.authorized_xml!=='string'||!doc.authorized_xml)
        throw Object.assign(new Error('Documento sem XML fiscal autorizado'),{status:409});
      return new Response(new TextEncoder().encode(doc.authorized_xml),{
