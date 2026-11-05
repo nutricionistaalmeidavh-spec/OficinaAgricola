@@ -75,7 +75,7 @@ export function createNationalNfseProvider({certificateStore,inputDir,client}={}
   printPdf:async({document}={})=>{
    if(document?.kind!=='NFSE'||!['AUTORIZADA','AUTORIZADA_HOMOLOGACAO'].includes(document.status))
      throw Error('DANFSe exige NFS-e autorizada e não cancelada');
-   if(!/^\\d{50}$/.test(String(document.access_key||'')))
+   if(!/^\d{50}$/.test(String(document.access_key||'')))
      throw Error('DANFSe exige chave oficial de acesso íntegra');
    return api.downloadDanfse({issuer:issuerFor(document),accessKey:document.access_key});
   }
