@@ -92,7 +92,7 @@ export function createFiscalDraft(db,input){
         throw new Error('Operação já possui documento de mercadorias no outro modelo (NF-e/NFC-e)');
     } // Uma emissão por espécie e operação, inclusive após perda de resposta.
     const origin=originSnapshot(db,originType,originId);
-    const selected=origin.lines.filter(line=>kind==='NFSE'?line.kind==='MAO_DE_OBRA':line.kind==='PECA');
+    const selected=origin.lines.filter(line=>kind==='NFSE'?['MAO_DE_OBRA','SERVICO'].includes(line.kind):line.kind==='PECA');
     if(!selected.length)throw new Error('Nenhum item compatível com o documento solicitado');
     const amount=selected.reduce((sum,item)=>sum+item.totalCents,0);
     if(!positive(amount))throw new Error('Valor fiscal líquido deve ser positivo');
