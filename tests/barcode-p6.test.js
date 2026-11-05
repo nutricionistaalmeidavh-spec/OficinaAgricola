@@ -175,3 +175,85 @@ test('P6: integração do scanner é somente consulta ou prévia, nunca grava mo
   assert.match(pwa,/\/barcode-scanner\.js/);
   assert.match(readFileSync('public/vendor/LICENSE-quagga2','utf8'),/MIT/i);
 });
+
+
+test('P6: câmera não interpreta código depois que painel é removido durante decode',async()=>{
+  let finish,stops=0;
+  const stream={getTracks:()=>[{stop(){stops++}}]};
+  class Detector{
+    static async getSupportedFormats(){return ['ean_13']}
+    async detect(){return new Promise(resolve=>{finish=resolve})}
+  }
+  const ui=setup({
+    window:{BarcodeDetector:Detector},
+    navigator:{mediaDevices:{getUserMedia:async()=>stream}}
+  });
+  const scans=[];
+  ui.barcode.attach(ui.panel,async code=>{scans.push(code)});
+  ui.elements.camera.handlers.click();
+  await new Promise(resolve=>setTimeout(resolve,30));
+  assert.equal(typeof finish,'function');
+  ui.panel.isConnected=false;
+  finish([{rawValue:'7891234567895',format:'ean_13'}]);
+  await new Promise(resolve=>setTimeout(resolve,30));
+  assert.deepEqual(scans,[],'Não selecionar peça de outro modal ou página após fechar a câmera');
+  assert.equal(stops,1);
+});
+
+test('P6: permissão tardia não inicia câmera se modal foi ocultado antes de resposta',async()=>{
+  let allow,stops=0;
+  const stream={getTracks:()=>[{stop(){stops++}}]};
+  const permission=new Promise(resolve=>{allow=resolve});
+  const ui=setup({
+    navigator:{mediaDevices:{getUserMedia:()=>permission}}
+  });
+  ui.barcode.attach(ui.panel,async()=>{throw Error('Não chamar')});
+  ui.elements.camera.handlers.click();
+  ui.panel.isHidden=true;
+  allow(stream);
+  await ui.flush();
+  assert.equal(stops,1);
+  assert.equal(ui.elements.video.srcObject??null,null);
+  assert.equal(ui.elements.video.hidden,true);
+});
+
+test('P6: SKU não encontrado permite nova tentativa e mantém código digitado',async()=>{
+  const ui=setup();
+  let calls=0;
+  ui.barcode.attach(ui.panel,async()=>{
+    calls++;
+    return {state:'error',message:'Peça não localizada'};
+  });
+  ui.press('SKU-NAO-CADASTRADO');
+  await ui.flush();
+  assert.equal(ui.elements.status.textContent,'Peça não localizada');
+  assert.equal(ui.elements.input.value,'SKU-NAO-CADASTRADO');
+  ui.press('SKU-NAO-CADASTRADO');
+  await ui.flush();
+  assert.equal(calls,2);
+});
+
+test('P6: pesquisas sequenciais não compartilham resultado entre unidades',async()=>{
+  const ui=setup();
+  let activeUnit='A';
+  const api=async path=>{
+    assert.match(path,/search=SKU-123/);
+    return {items:[{id:activeUnit==='A'?101:202,sku:'SKU-123'}],nextCursor:null};
+  };
+  const a=await ui.barcode.findPartBySku('SKU-123',api);
+  activeUnit='B';
+  const b=await ui.barcode.findPartBySku('SKU-123',api);
+  assert.equal(a.id,101);
+  assert.equal(b.id,202);
+});
+
+test('P6: entrada inválida não faz chamadas à API e mostra instrução de recuperação',async()=>{
+  const ui=setup();
+  let writes=0;
+  ui.barcode.attach(ui.panel,async()=>{writes++});
+  ui.press('  \n \t');
+  await ui.flush();
+  assert.equal(writes,0);
+  assert.match(ui.elements.status.textContent,/Código vazio/i);
+  assert.equal(ui.elements.camera.disabled,false);
+});
