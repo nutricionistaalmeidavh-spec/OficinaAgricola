@@ -122,15 +122,30 @@
           if(action==='a1'){await fiscalCertificateA1Modal();return;}
           if(action==='a3'){await fiscalCertificateA3Modal();return;}
           if(action==='diagnose'){
-            button.disabled=true;button.textContent='Testando…';
-            const response=await api('/api/fiscal/diagnose',{method:'POST',body:{}});
-            const result=response?.nfe?.status||'INDETERMINADO';
+            button.disabled=true;button.textContent='Verificando…';
+            const current=await readStatus();
+            const lines=[
+              'PostgreSQL e API local: '+(current.db?'OK':'PENDENTE'),
+              'Permissão ADMIN: '+(state.user?.role==='ADMIN'?'OK':'PENDENTE'),
+              'Dados da empresa: '+(current.companyReady?'OK':'PENDENTE'),
+              'Cadastro fiscal: '+(current.fiscalRegistration?'OK':'PENDENTE'),
+              'Certificado A1/A3: '+(current.cert?'CONFIGURADO':'PENDENTE'),
+              'ACBr local: '+(current.provider?'DISPONÍVEL':'PENDENTE')
+            ];
+            let sefaz='NÃO TESTADA';
+            if(current.fiscalTestEligible){
+              try{
+                const response=await api('/api/fiscal/diagnose',{method:'POST',body:{}});
+                sefaz=String(response?.nfe?.status||'INDETERMINADO');
+              }catch(error){sefaz='FALHA: '+String(error.message||'comunicação indisponível');}
+            }
+            lines.push('Comunicação SEFAZ NF-e: '+sefaz);
+            lines.push('Emissão real em homologação e NFS-e municipal: exigem validação separada');
+            lines.push('Autorização de produção: '+(current.fiscalProduction?'VERIFICADA':'PENDENTE'));
             const host=document.querySelector('#firstAccessDiagnostics');
-            if(host)host.textContent='Resultado SEFAZ NF-e: '+result+
-              '. Este diagnóstico não comprova emissão, não libera produção nem valida NFS-e municipal.';
-            toast(result==='ONLINE'?'SEFAZ acessível; pendente emissão homologada real':
-              'Diagnóstico: '+result,result!=='ONLINE');
-            button.textContent='Repetir diagnóstico';button.disabled=false;
+            if(host)host.textContent=lines.join(' · ');
+            toast('Pré-verificação concluída. Revise os resultados; comunicação não autoriza produção.',sefaz!=='ONLINE');
+            button.textContent='Repetir verificação';button.disabled=false;
             return;
           }
         }catch(error){
