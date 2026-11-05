@@ -2,6 +2,13 @@
 // este módulo valida consistência, jamais escolhe NCM/CFOP/CST ou alíquotas.
 const fail=message=>{throw new Error(message);};
 const string=v=>String(v??'').trim();
+const CSOSN_CODES=new Set(['101','102','103','201','202','203','300','400','500','900']);
+const ICMS_CST_CODES=new Set(['00','10','20','30','40','41','50','51','60','70','90']);
+const PIS_COFINS_CODES=new Set([
+ '01','02','03','04','05','06','07','08','09','49',
+ '50','51','52','53','54','55','56','60','61','62','63','64','65','66','67',
+ '70','71','72','73','74','75','98','99'
+]);
 const amount=(value,label)=>{
  const s=string(value);
  if(!/^(?:0|[1-9]\d{0,11})\.\d{2}$/.test(s))fail(label+' deve estar em reais com duas casas');
@@ -60,11 +67,17 @@ export function validateReviewedTaxItems({issuer={},sections={},lines=[]}={}){
   if(regime==='NORMAL'&&string(icms.CST)==='00'&&
     ['vBC','pICMS','vICMS'].some(k=>string(icms[k])===''))
     fail('ICMS do item '+suffix+' exige base, alíquota e valor completos');
+  if(icms.CSOSN!==undefined&&!CSOSN_CODES.has(string(icms.CSOSN)))
+    fail('CSOSN ICMS não reconhecido no item '+suffix);
+  if(icms.CST!==undefined&&!ICMS_CST_CODES.has(string(icms.CST)))
+    fail('CST ICMS não reconhecido no item '+suffix);
   calculation(icms,'vBC','pICMS','vICMS','ICMS do item '+suffix);
   for(const [name,part,rateKey,valueKey] of [
    ['PIS',pis,'pPIS','vPIS'],['COFINS',cofins,'pCOFINS','vCOFINS']
   ]){
    const cstValue=whole(part.CST,name+' CST do item '+suffix,/^\d{2}$/);
+   if(!PIS_COFINS_CODES.has(cstValue))
+     fail(name+' CST não reconhecido no item '+suffix);
    if(['01','02'].includes(cstValue)&&
       ['vBC',rateKey,valueKey].some(k=>string(part[k])===''))
      fail(name+' do item '+suffix+' requer base, alíquota e valor completos');
