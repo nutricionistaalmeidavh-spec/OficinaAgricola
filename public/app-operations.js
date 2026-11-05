@@ -6,15 +6,14 @@ async function renderInventory({cursor=null,loaded=[]}={}){
   office?api('/api/purchases/orders?limit=12'):Promise.resolve([])
  ]);
  const parts=loaded.concat(page.items);
- setContent(`<div class="section-head"><div><h2>Estoque</h2><span class="muted">Saldos por peça e movimentações auditáveis</span></div>
+ setContent(`${window.OficinaBarcode?.markup('inventory')||''}<div class="section-head"><div><h2>Estoque</h2><span class="muted">Saldos por peça e movimentações auditáveis</span></div>
   <div class="action-row">
    <button id="stockHistory" type="button" class="btn soft">Histórico de movimentos</button>
    ${office?'<button id="stocktakeOpen" type="button" class="btn soft">Inventário físico</button>':''}
    ${office?'<button id="suppliersManage" type="button" class="btn soft">Fornecedores</button><button id="purchaseNew" type="button" class="btn soft">+ Pedido de compra</button><button id="newPart" type="button" class="btn primary">+ Nova peça</button>':''}
   </div></div>
-  <div class="card" style="margin-bottom:14px"><label for="inventoryBarcodeSearch">Código de barras EAN/GTIN (leitor USB ou digitação)</label><div class="field-row"><input id="inventoryBarcodeSearch" inputmode="numeric" type="search" autocomplete="off" maxlength="24" placeholder="Bipe o código e pressione Enter"><button id="inventoryBarcodeFocus" type="button" class="btn soft">Ler código</button></div><div id="inventoryBarcodeResult" aria-live="polite" class="muted">O leitor USB funciona como teclado; não exige driver ou serviço pago.</div></div>
   ${table(['SKU','Descrição','Saldo','Mínimo','Preço',''],parts.map(p=>[
-   esc(p.sku),`<strong>${esc(p.description)}</strong><br><small>${esc(p.category||'')} ${p.barcode?' · GTIN: '+esc(p.barcode):''}</small>`,
+   esc(p.sku),`<strong>${esc(p.description)}</strong><br><small>${esc(p.category||'')}${p.barcode?' · GTIN: '+esc(p.barcode):''}</small>`,
    Number(p.quantity)<=Number(p.min_stock)?`<span class="pill orange">${p.quantity}</span>`:p.quantity,
    p.min_stock,money(p.sale_price_cents),
    office?`<button class="btn sm" data-entry="${p.id}">Movimentar</button> <button class="btn sm" data-part-edit="${p.id}">Editar</button> <button class="btn sm" data-fitments="${p.id}">Aplicações</button>`:''
@@ -23,21 +22,9 @@ async function renderInventory({cursor=null,loaded=[]}={}){
    <div class="list">${orders.length?orders.map(o=>`<div class="list-item"><div><strong>${esc(o.reference||'Pedido '+String(o.id).slice(-6))}</strong> ${badge(o.status)}
     <br><small>${esc(o.supplier_name)} · ${dt(o.created_at)}</small></div>
     <button type="button" class="btn sm" data-purchase-open="${o.id}">Ver pedido</button></div>`).join(''):'<p class="empty">Nenhum pedido de compra cadastrado.</p>'}</div></section>`:''}`);
+ window.OficinaBarcode?.attach($('#content [data-barcode-panel]'),async code=>{const part=await window.OficinaBarcode.findPartByCode(code,api,{includeInactive:true});if(!part)return {state:'error',message:'Código '+code+' não localizado entre os SKUs e GTINs cadastrados. Pesquise ou cadastre a peça.'};return {state:'success',message:'Peça '+part.sku+' — '+part.description+' identificada. Saldo: '+part.quantity+'. Nenhum estoque foi movimentado.'};});
  if($('#newPart'))$('#newPart').onclick=()=>partCreateModal();
  if($('#stocktakeOpen'))$('#stocktakeOpen').onclick=()=>listStocktakesModal(parts.filter(p=>Number(p.active)===1)).catch(e=>toast(e.message,true));
- const barcodeInput=$('#inventoryBarcodeSearch'),barcodeResult=$('#inventoryBarcodeResult');
- $('#inventoryBarcodeFocus').onclick=()=>barcodeInput.focus();
- barcodeInput.onkeydown=async e=>{
-  if(e.key!=='Enter')return;e.preventDefault();
-  const code=barcodeInput.value.replace(/[\s-]/g,'');
-  if(!code){barcodeResult.textContent='Informe um EAN/GTIN.';return}
-  barcodeResult.textContent='Consultando código…';
-  try{
-   const part=await api('/api/parts/barcode/'+encodeURIComponent(code));
-   barcodeResult.textContent=part.sku+' · '+part.description+' · Saldo: '+part.quantity;
-   if(office)stockMoveModal(Number(part.id),part);
-  }catch(error){barcodeResult.textContent='Nenhuma peça encontrada para este código.';toast(error.message,true)}
- };
  $('#stockHistory').onclick=()=>openInventoryHistory().catch(e=>toast(e.message,true));
  if($('#suppliersManage'))$('#suppliersManage').onclick=()=>showSuppliersModal().catch(e=>toast(e.message,true));
  if($('#purchaseNew'))$('#purchaseNew').onclick=()=>newPurchaseOrderModal().catch(e=>toast(e.message,true));
