@@ -12,10 +12,12 @@
 
   function createDeduper(interval=800){
     let lastCode='',lastAt=-Infinity;
-    return (code,at=Date.now())=>{
+    const dedupe=(code,at=Date.now())=>{
       if(code===lastCode && at-lastAt<interval)return false;
       lastCode=code;lastAt=at;return true;
     };
+    dedupe.reset=()=>{lastCode='';lastAt=-Infinity;};
+    return dedupe;
   }
 
   async function findPartBySku(code,fetchPage,{includeInactive=false}={}){
@@ -101,8 +103,10 @@
         const message=typeof result==='string'?result:result?.message;
         const status=typeof result==='object'&&['success','warning','error'].includes(result?.state)?result.state:'success';
         report(message||'Código '+code+' capturado.',status);
-        input.value='';
+        if(status==='error')accept.reset();
+        else input.value='';
       }catch(error){
+        accept.reset();
         report('Não foi possível consultar '+code+': '+(error?.message||'tente novamente')+'.','error');
       }finally{
         busy=false;input.disabled=false;
