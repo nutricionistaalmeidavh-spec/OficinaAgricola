@@ -6,7 +6,7 @@ test('as seis UFs têm cUF, município compatível e fonte oficial',()=>{
   assert.deepEqual(Object.keys(FISCAL_UFS).sort(),Object.keys(ibges).sort());
   for(const [uf,municipalityIbge] of Object.entries(ibges)){
     const profile=assertFiscalIssuerUf({uf,municipalityIbge});
-    assert.match(profile.code,/^\\d{2}$/);
+    assert.match(profile.code,/^\d{2}$/);
     assert.ok(profile.official.startsWith('https://'));
     assert.throws(()=>assertFiscalIssuerUf({uf,municipalityIbge:'9999999'}),/IBGE/);
   }
@@ -19,7 +19,7 @@ test('modelo, ambiente e parâmetros NFC-e são vinculados ao emitente',()=>{
     assertReviewedFiscalUf({kind:'NFCE',issuer,sections:{Identificacao:base,pag001:{tPag:'01',vPag:'1.00'}}});
     assert.throws(()=>assertReviewedFiscalUf({kind:'NFE',issuer,sections:{Identificacao:base}}),/Modelo/);
     assert.throws(()=>assertReviewedFiscalUf({kind:'NFCE',issuer,sections:{Identificacao:{...base,tpEmis:'9'},pag001:{tPag:'01',vPag:'1.00'}}}),/Contingência/);
-    assert.throws(()=>assertReviewedFiscalUf({kind:'NFCE',issuer,sections:{Identificacao:base}}),/pagamento/);
+    assert.throws(()=>assertReviewedFiscalUf({kind:'NFCE',issuer,sections:{Identificacao:base}}),/pag001/);
   }
 });
 
