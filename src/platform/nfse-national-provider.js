@@ -4,7 +4,6 @@ import {createNationalNfseClient} from './nfse-national-api.js';
 import {createLocalNationalDpsStore} from './nfse-national-dps-store.js';
 import {createLocalFiscalTaxStore} from './local-fiscal-tax-store.js';
 import {join} from 'node:path';
-import {loadPfxFromBuffer,signDps,verifyDps} from '@useinvio/nfse-sdk';
 import {prepareNationalDpsInput} from './nfse-national-automatic.js';
 
 export function createNationalNfseProvider({certificateStore,inputDir,client}={}){
@@ -31,10 +30,15 @@ export function createNationalNfseProvider({certificateStore,inputDir,client}={}
    const profile=profiles.find(x=>x.id===profileId&&x.kind==='SERVICE');
    if(!profile)throw Error('Selecione perfil tributário de serviço cadastrado nesta empresa');
    const prepared=prepareNationalDpsInput({document,issuer,profile,customer,issuance});
+   // SDK fiscal open source é opcional: carregado só quando a empresa utiliza NFS-e direta.
+   let sdk;
+   try{sdk=await import('@useinvio/nfse-sdk')}catch{throw Error('Módulo opcional OSS NFS-e Nacional não instalado neste servidor')}
+   const built=sdk.buildDpsFromJson(prepared.payload);
+   if(built.id!==prepared.idDps)throw Error('DPS gerada tem identificação divergente');
    const xmlSigned=await certificateStore.withTlsIdentity({cnpj:issuer.cnpj},identity=>{
-     const material=loadPfxFromBuffer(identity.pfx,identity.passphrase);
-     const signed=signDps(prepared.xml,prepared.idDps,material);
-     if(!verifyDps(signed,material.certPem))
+     const material=sdk.loadPfxFromBuffer(identity.pfx,identity.passphrase);
+     const signed=sdk.signDps(built.xml,prepared.idDps,material);
+     if(!sdk.verifyDps(signed,material.certPem))
        throw Error('Assinatura XMLDSig local inválida: DPS não armazenada');
      return signed;
    });
