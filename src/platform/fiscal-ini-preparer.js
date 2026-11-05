@@ -5,6 +5,7 @@ import {createHash,randomInt} from 'node:crypto';
 import {readFileSync,statSync,writeFileSync,existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {assertReviewedFiscalUf} from './fiscal-uf.js';
+import {validateReviewedTaxItems} from './fiscal-tax-assist.js';
 
 const fail=message=>{throw new Error(message)};
 const money=value=>{
@@ -75,6 +76,8 @@ export function compileReviewedFiscalIni({document,issuer,review}={}){
  const customer=String(snapshot.customer?.document||'').replace(/\D/g,'');
  if(customer&&customer!==String(sections.Destinatario?.CNPJCPF||'').replace(/\D/g,''))
    fail('Destinatário diverge do snapshot');
+ // Verificação do enquadramento informado antes de gerar XML/INI.
+ validateReviewedTaxItems({issuer,sections,lines:snapshot.lines});
  let gross=0,discount=0,net=0;
  snapshot.lines.forEach((line,index)=>{
    const suffix=String(index+1).padStart(3,'0');
