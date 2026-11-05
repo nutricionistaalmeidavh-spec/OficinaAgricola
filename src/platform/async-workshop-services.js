@@ -120,13 +120,18 @@ export function createAsyncWorkshopServices(port,{fiscalProvider=null,objectStor
    const sku=text(input.sku),description=text(input.description);
    if(!sku||!description)fail('SKU e descrição são obrigatórios');
    const partId=id(),at=iso(),barcode=normalizeGtin(input.barcode);
-   await port.run(`INSERT INTO parts(
+   const supportsBarcode=port.engine==='postgres'||port.engine==='sqlite'&&Boolean(await port.first("SELECT 1 FROM pragma_table_info('parts') WHERE name='barcode'"));
+   if(barcode&&!supportsBarcode)fail('GTIN indisponível neste backend sem migração',501);
+   await port.run(supportsBarcode?`INSERT INTO parts(
      id,sku,description,category,unit,cost_cents,sale_price_cents,
      quantity,min_stock,location,barcode,active,created_at,updated_at
-   ) VALUES(?,?,?,?,?,?,?,0,?,?,?,1,?,?)`,[
+   ) VALUES(?,?,?,?,?,?,?,0,?,?,?,1,?,?)`:`INSERT INTO parts(
+     id,sku,description,category,unit,cost_cents,sale_price_cents,
+     quantity,min_stock,location,active,created_at,updated_at
+   ) VALUES(?,?,?,?,?,?,?,0,?,?,1,?,?)`,[
      partId,sku,description,text(input.category),text(input.unit)||'UN',
      cents(input.costCents??0),cents(input.salePriceCents??0),
-     Number(input.minStock??0),text(input.location),barcode??null,at,at
+     Number(input.minStock??0),text(input.location),...(supportsBarcode?[barcode??null]:[]),at,at
    ]);
    return port.first('SELECT * FROM parts WHERE id=?',[partId]);
  }
