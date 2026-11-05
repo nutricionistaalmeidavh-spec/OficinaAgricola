@@ -27,10 +27,14 @@ function reviewed(){
 test('reviewed fiscal document is compiled from immutable financial snapshot',()=>{
  const result=compileReviewedFiscalIni({document,issuer,review:reviewed()});
  assert.match(result.ini,/\[Produto001\]/);
- assert.match(result.ini,/Quantidade=2/);
- assert.match(result.ini,/ValorTotal=90\.00/);
- assert.match(result.ini,/ValorDesconto=10\.00/);
- assert.match(result.ini,/Descricao=Filtro de óleo/);
+ assert.match(result.ini,/qCom=2/);
+ assert.match(result.ini,/vProd=90\.00/);
+ assert.match(result.ini,/vDesc=10\.00/);
+ assert.match(result.ini,/xProd=Filtro de óleo/);
+ assert.match(result.ini,/cProd=9/);
+ assert.match(result.ini,/vUnCom=45\\.00/);
+ assert.match(result.ini,/vNF=80\\.00/);
+ assert.doesNotMatch(result.ini,/ValorProduto=|ValorNota=|ValorTotal=/);
  assert.deepEqual(result.manifest,{kind:'NFE',documentId:4,
   snapshotHash:document.snapshot_hash,amountCents:8000,
   issuerCnpj:issuer.cnpj,environment:'HOMOLOGACAO'});
@@ -42,4 +46,14 @@ test('reviewed fiscal data fails closed on amount, XML injection and taxation ga
  assert.throws(()=>compileReviewedFiscalIni({document,issuer,review:missing}),/ICMS|tribut/i);
  const injection=reviewed();injection.sections.Produto001.NCM='84212300\n[Emitente]';
  assert.throws(()=>compileReviewedFiscalIni({document,issuer,review:injection}),/NCM|CFOP|INI|inválid|linha/i);
+});
+
+test('official ACBr NFe fields come from immutable item snapshot',()=>{
+ const data=reviewed();
+ data.sections.Produto001.xProd='Produto indevido';
+ data.sections.Produto001.vProd='1.00';
+ const {ini}=compileReviewedFiscalIni({document,issuer,review:data});
+ assert.match(ini,/xProd=Filtro de óleo/);
+ assert.match(ini,/vProd=90\\.00/);
+ assert.doesNotMatch(ini,/Produto indevido/);
 });
