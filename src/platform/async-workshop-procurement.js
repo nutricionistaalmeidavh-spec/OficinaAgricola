@@ -32,12 +32,26 @@ export function createAsyncWorkshopProcurement(port){
    where.push('(LOWER(p.sku) LIKE LOWER(?) OR LOWER(p.description) LIKE LOWER(?) OR LOWER(m.note) LIKE LOWER(?))');
    params.push(q,q,q);
   }
-  if(cursor!=null&&cursor!==''){where.push('m.id<?');params.push(key(cursor));}
+  if(cursor!=null&&cursor!==''){
+   if(typeof cursor!=='string'||cursor.length>512||!/^[A-Za-z0-9_-]+$/.test(cursor))
+    fail('Cursor inválido');
+   let last;
+   try{last=JSON.parse(Buffer.from(cursor,'base64url').toString('utf8'));}
+   catch{fail('Cursor inválido');}
+   if(!last||!Number.isSafeInteger(last.i)||last.i<1||
+      typeof last.t!=='string'||!Number.isFinite(Date.parse(last.t))||
+      new Date(last.t).toISOString()!==last.t)fail('Cursor inválido');
+   where.push('(m.created_at<? OR (m.created_at=? AND m.id<?))');
+   params.push(last.t,last.t,last.i);
+  }
   const size=maxLimit(limit);
   const items=await port.all(`SELECT m.*,p.sku,p.description,u.name author_name FROM inventory_movements m
    JOIN parts p ON p.id=m.part_id LEFT JOIN users u ON u.id=m.created_by ${where.length?'WHERE '+where.join(' AND '):''}
-   ORDER BY m.id DESC LIMIT ?`,[...params,size+1]);
-  return {items:items.slice(0,size),nextCursor:items.length>size?items[size-1].id:null};
+   ORDER BY m.created_at DESC,m.id DESC LIMIT ?`,[...params,size+1]);
+  const returned=items.slice(0,size);
+  const last=returned.at(-1);
+  return {items:returned,nextCursor:items.length>size?Buffer.from(
+   JSON.stringify({t:last.created_at,i:Number(last.id)})).toString('base64url'):null};
  }
  async function listSuppliers({search='',limit=100}={}){
   const q='%'+clean(search).slice(0,100)+'%';
