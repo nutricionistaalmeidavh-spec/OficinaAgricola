@@ -48,5 +48,5 @@ test('the OS modal skips payment ledger reads for non-finance employees',()=>{
  const source=readFileSync('public/app-orders.js','utf8');
  assert.match(source,/canFinance\?api\(\x60\/api\/work-orders\/\$\{id\}\/payment\x60\):Promise\.resolve\(null\)/);
  assert.match(source,/canFinance\?api\(\x60\/api\/work-orders\/\$\{id\}\/receipts\x60\):Promise\.resolve\(\[\]\)/);
- assert.match(source,/\$\{canFinance\?\x60<div class="detail-block"><h3>Financeiro/);
+ assert.match(source,/\$\{canFinance\?\x60\s*<div class="detail-block"><h3>Financeiro/);
 });
