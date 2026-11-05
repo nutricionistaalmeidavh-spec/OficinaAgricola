@@ -6,6 +6,7 @@ import {spawn} from 'node:child_process';
 import {readFileSync,realpathSync,statSync} from 'node:fs';
 import {isAbsolute,join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {prepareReviewedFiscalIni} from './fiscal-ini-preparer.js';
 
 function localFile(path,label){
   if(typeof path!=='string'||!isAbsolute(path))
@@ -120,6 +121,9 @@ export function createAcbrLibFiscalProvider(opts={}){
     const safeIssuer=issuer||(document.issuer_snapshot_json?JSON.parse(document.issuer_snapshot_json):null);
     if(!safeIssuer?.cnpj||!safeIssuer?.environment)
       throw new Error('Emitente fiscal ausente; configure antes do envio ACBr');
+    // Se houver revisão tributária do documento, gerar INI e manifesto vinculados
+    // ao snapshot. Nunca inferir impostos, NCM, CFOP ou condições de produção.
+    prepareReviewedFiscalIni({inputDir,document,issuer:safeIssuer});
     const iniPath=resolveInputs(inputDir,document,safeIssuer);
     return {kind,documentId:Number(document.id),iniPath,
       snapshotHash:document.snapshot_hash,amountCents:Number(document.amount_cents),environment:safeIssuer.environment,
