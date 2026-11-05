@@ -98,3 +98,21 @@ test('NFS-e não transmite em canal errado nem em município sem regra validada'
    competenceDate:'2026-11-05',requestId:'nfse-route-3'}),/regra municipal|pendente/i);
  }finally{db.close();}
 });
+
+test('rascunho NFS-e permite corrigir competência sem transmissões e preserva auditoria',async()=>{
+ const {db,ws,os,calls}=await setup();
+ try{
+   const draft=await ws.createFiscalDraft({originType:'OS',originId:os.id,kind:'NFSE',
+     competenceDate:'2026-11-05',requestId:'nfse-revise-1'});
+   const corrected=await ws.reviseNfseDraftRoute(draft.id,{competenceDate:'2026-10-31'});
+   assert.equal(corrected.status,'RASCUNHO');
+   assert.notEqual(corrected.snapshot_hash,draft.snapshot_hash);
+   assert.equal(JSON.parse(corrected.snapshot_json).nfseRoute.channel,'MUNICIPAL');
+   assert.equal(JSON.parse(corrected.snapshot_json).nfseRoute.competenceDate,'2026-10-31');
+   assert.equal((await ws.getFiscalEvents(draft.id)).at(-1).event_type,'COMPETENCIA_REVISADA');
+   await assert.rejects(ws.submitFiscalDocument(draft.id),/canal|emissor/i);
+   assert.equal(calls.length,0);
+   await ws.reviseNfseDraftRoute(draft.id,{competenceDate:'2026-11-05'});
+   assert.equal(JSON.parse((await ws.getFiscalDocument(draft.id)).snapshot_json).nfseRoute.channel,'NACIONAL');
+ }finally{db.close()}
+});
