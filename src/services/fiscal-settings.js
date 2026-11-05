@@ -38,7 +38,7 @@ export function setFiscalSettings(db,input={}){
     if(municipalityIbge&&!/^\d{7}$/.test(municipalityIbge))throw new Error('Município IBGE inválido');
     if(taxRegime&&!REGIMES.has(taxRegime))throw new Error('Regime tributário inválido');
     if(!['HOMOLOGACAO','PRODUCAO'].includes(environment))throw new Error('Ambiente fiscal inválido');
-    if(enabled&&(!validCnpj(issuerCnpj)||!STATES.has(issuerUf)||!/^\d{7}$/.test(municipalityIbge)||!REGIMES.has(taxRegime)))
+    if(input.enabled===true&&!configured)
       throw new Error('Complete CNPJ, UF, município IBGE e regime tributário antes de habilitar o fiscal');
     if(enabled&&environment==='PRODUCAO'&&!productionConfirmed)
       throw new Error('Produção exige confirmação administrativa explícita');
