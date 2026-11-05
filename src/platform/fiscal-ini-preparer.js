@@ -89,9 +89,9 @@ export function compileReviewedFiscalIni({document,issuer,review}={}){
    net+=Number(line.totalCents);
  });
  if(net!==Number(document.amount_cents)||
-     money(sections.Total.ValorProduto)!==gross||
-     money(sections.Total.ValorDesconto)!==discount||
-     money(sections.Total.ValorNota)!==net)
+     money(sections.Total.vProd??sections.Total.ValorProduto)!==gross||
+     money(sections.Total.vDesc??sections.Total.ValorDesconto)!==discount||
+     money(sections.Total.vNF??sections.Total.ValorNota)!==net)
    fail('Totais tributários divergem dos lançamentos canônicos');
  for(const [section,fields] of Object.entries(sections)){
    if(!/^[A-Za-z][A-Za-z0-9_]{0,55}$/.test(section)||
