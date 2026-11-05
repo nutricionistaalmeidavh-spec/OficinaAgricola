@@ -16,6 +16,7 @@ import {loadTenantPaymentConfigs,resolveTenantPaymentOptions} from './platform/t
 import {loadTenantReminderSenders} from './platform/tenant-reminder-smtp.js';
 import {loadTenantFiscalConfigs,resolveTenantFiscalProvider} from './platform/tenant-fiscal.js';
 import {createAcbrLibFiscalProvider} from './platform/acbrlib-fiscal-provider.js';
+import {createLocalFiscalCertificateStore} from './platform/fiscal-certificate-store.js';
 
 const registryUrl=process.env.OFICINA_POSTGRES_REGISTRY_URL;
 const operationsUrl=process.env.OFICINA_POSTGRES_OPERATIONS_URL;
@@ -104,6 +105,7 @@ function fiscalProviderForUnit(unit){
   if(!nfeLib&&!nfseLib)return null;
   return createAcbrLibFiscalProvider({
     nfeLib,nfseLib,workerExe:process.env.FISCAL_ACBR_WORKER_EXE,inputDir,
+    certificateStore:createLocalFiscalCertificateStore({directory:join(privateRoot,'segredos')}),
     ...(nfeLib?{nfeConfig:privateIni('ACBrLibNFe.ini')}:{}),
     ...(nfseLib?{nfseConfig:privateIni('ACBrLibNFSe.ini')}:{})
   });
