@@ -96,6 +96,7 @@ const pdfString=s=>safe(s).replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\
 const fmt=x=>Number(x).toFixed(2).replace(/\.00$/,'');
 function pdfWriter(){
  const ops=[];
+ const fonts=loadDanfseFonts();
  const Y=t=>HEIGHT-t;
  const fill=(r,g,b)=>ops.push(r+' '+g+' '+b+' rg');
  const stroke=(r,g,b)=>ops.push(r+' '+g+' '+b+' RG');
@@ -106,13 +107,23 @@ function pdfWriter(){
   if(shade){fill(.95,.95,.95);ops.push(fmt(x)+' '+fmt(Y(top+h))+' '+fmt(w)+' '+fmt(h)+' re f');}
   if(border){stroke(0,0,0);ops.push('1 w '+fmt(x)+' '+fmt(Y(top+h))+' '+fmt(w)+' '+fmt(h)+' re S');}
  };
- const text=(value,x,top,{size=7,bold=false,max=95,color='black',arial=false,width=575-x}={})=>{
+ const text=(value,x,top,{size=7,bold=false,max=95,color='black',
+  arial=false,width=575-x,squeezeToWidth=false}={})=>{
   if(!value)return;
+  const fontKey=bold?'label':arial?'arial':'content',fontData=fonts[fontKey];
+  const measure=t=>[...t].reduce((sum,c)=>{
+   const code=c.charCodeAt(0);
+   return sum+(fontData.widths[Math.max(0,Math.min(223,code-32))]||500)*size/1000;
+  },0);
   let t=safe(value);
-  const cap=Math.min(max,Math.max(1,Math.floor(width/(size*.53))));
-  if(t.length>cap)t=t.slice(0,Math.max(1,cap-3))+'...';
+  if(t.length>max)t=t.slice(0,Math.max(1,max-3))+'...';
+  let hscale=squeezeToWidth?Math.min(100,Math.max(85,width*100/Math.max(1,measure(t)))):100;
+  if(measure(t)*hscale/100>width){
+   while(t.length>4&&measure(t+'...')*hscale/100>width)t=t.slice(0,-1);
+   t=t.slice(0,-3)+'...';
+  }
   const colors=color==='red'?'0 1 1 0 k':'0 0 0 1 k',font=bold?'F2':arial?'F3':'F1';
-  ops.push(colors+' BT /'+font+' '+fmt(size)+' Tf 1 0 0 1 '+
+  ops.push(colors+' BT /'+font+' '+fmt(size)+' Tf '+fmt(hscale)+' Tz 1 0 0 1 '+
     fmt(x)+' '+fmt(Y(top+size))+' Tm ('+pdfString(t)+') Tj ET');
  };
  const paragraph=(value,x,y,{size=7,width=570,maxLines=7,lineHeight=9}={})=>{
@@ -160,10 +171,9 @@ function pdfWriter(){
   }
   line(8.5,y+h,586.8,y+h,.5);
  };
- return {ops,line,rectangle,text,paragraph,group,header,block};
+ return {ops,fonts,line,rectangle,text,paragraph,group,header,block};
 }
-function toPdf(commands,url,logo){
- const fonts=loadDanfseFonts();
+function toPdf(commands,url,logo,fonts){
  const out=[];let position=0;const offsets=[0];
  const put=b=>{const bytes=Buffer.isBuffer(b)?b:Buffer.from(b,'latin1');out.push(bytes);position+=bytes.length;};
  const obj=(n,body)=>{offsets[n]=position;put(n+' 0 obj\n'+body+'\nendobj\n');};
@@ -258,9 +268,14 @@ export function renderNationalDanfse({xml,accessKey,environment,issuerCnpj,logoP
  p.group('Situação da NFS-e',156,105,data.status,142,ident);
  p.group('Finalidade',301,105,data.purpose,144,ident);
  const url=drawQr(p.ops,data.key);
- p.text('A autenticidade desta NFS-e pode ser',451,96,{size:6,max:61,width:132});
- p.text('verificada pela leitura deste código QR ou',451,104,{size:6,max:61,width:132});
- p.text('pela consulta da chave no portal da NFS-e',451,112,{size:6,max:61,width:132});
+ // Texto integral em três linhas conforme 2.4.3; ajustar apenas escala horizontal,
+ // preservando tamanho nominal 6pt e a fonte Microsoft Sans Serif.
+ p.text('A autenticidade desta NFS-e pode ser verificada',450,96,
+   {size:6,max:200,width:134,squeezeToWidth:true});
+ p.text('pela leitura deste código QR ou pela consulta',450,104,
+   {size:6,max:200,width:134,squeezeToWidth:true});
+ p.text('da chave de acesso no portal nacional da NFS-e',450,112,
+   {size:6,max:200,width:134,squeezeToWidth:true});
  p.line(8.5,123,586.8,123);
  p.block('Prestador / Fornecedor',124,data.issuer,73);
  const tax=data.issuer.tax;
@@ -327,7 +342,7 @@ export function renderNationalDanfse({xml,accessKey,environment,issuerCnpj,logoP
  p.paragraph(data.extra,12,783,{size:7,width:568,maxLines:4,lineHeight:9});
  p.line(8.5,826,586.8,826);
  p.text('NFS-e '+data.number+' / '+data.key,12,827,{size:6,max:105,width:570});
- const pdf=toPdf(p.ops,url,logo);
+ const pdf=toPdf(p.ops,url,logo,p.fonts);
  if(pdf.length>6*1024*1024)error('DANFSe local excede o limite de 6 MiB');
  return pdf;
 }
