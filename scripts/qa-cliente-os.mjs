@@ -120,6 +120,7 @@ try {
   await page.locator('#approvalBackOrder').click();
   await page.locator('#approveQuote').waitFor({ state: 'visible' });
   await page.locator('#approveQuote').click();
+  await page.locator('#receivePaymentBtn').waitFor({ state: 'visible' });
   await page.locator('#payBtn').waitFor({ state: 'visible' });
   await page.screenshot({ path: path.join(outputDir, '04-orcamento-aprovado.png'), fullPage: true });
 
@@ -127,6 +128,7 @@ try {
   await page.locator('#payBtn').click();
   await page.locator('#modalBody input[name="amount"]').fill('220');
   await page.locator('#modalBody select[name="method"]').selectOption('PIX');
+  await page.locator('#verifiedManualReceipt').check();
   await page.locator('#modalBody button[type="submit"]').click();
   await page.locator('#modalBody').filter({ hasText: 'PAGO' }).waitFor({ state: 'visible' });
   await page.locator('[data-status="EM_SERVICO"]').click();
@@ -199,21 +201,22 @@ try {
   await page.locator('#modalBody input[name="quantity"]').fill('1');
   await page.locator('#modalBody button[type="submit"]').click();
   await page.locator('[data-reverse-part]').waitFor({ state: 'visible' });
-  page.once('dialog', dialog => dialog.accept('Peca devolvida ao estoque'));
   await page.locator('[data-reverse-part]').click();
+  await page.locator('#modalBody textarea[name="note"]').fill('Peça devolvida ao estoque');
+  await page.locator('#modalBody button[type="submit"]').click();
   await page.locator('[data-reverse-part]').waitFor({ state: 'hidden' });
   await page.locator('#modalBody').filter({ hasText: 'ESTORNADO' }).waitFor({ state: 'visible' });
 
   await page.locator('#payBtn').click();
   await page.locator('#modalBody input[name="amount"]').fill('10');
   await page.locator('#modalBody select[name="method"]').selectOption('PIX');
+  await page.locator('#verifiedManualReceipt').check();
   await page.locator('#modalBody button[type="submit"]').click();
   await page.locator('[data-reverse-receipt]').waitFor({ state: 'visible' });
-  const reverseDialogs = dialog => dialog.accept(dialog.type() === 'prompt' ? 'Pagamento devolvido ao cliente' : undefined);
-  page.on('dialog', reverseDialogs);
   await page.locator('[data-reverse-receipt]').click();
+  await page.locator('#modalBody textarea[name="note"]').fill('Pagamento devolvido ao cliente');
+  await page.locator('#modalBody button[type="submit"]').click();
   await page.locator('[data-reverse-receipt]').waitFor({ state: 'hidden' });
-  page.off('dialog', reverseDialogs);
   await page.screenshot({ path: path.join(outputDir, '08-estoque-e-financeiro-estornados.png'), fullPage: true });
 
   // Etapa 9: interrupcao real da rede do navegador, seguida de replay da mesma acao.
