@@ -72,3 +72,8 @@ jobs:
         run: npm ci
       - name: Validate Windows NFS-e offline bundle
         run: node scripts/stage-nfse-national.mjs
+      - name: Verificar fontes originais Arial e Microsoft Sans Serif do Windows
+        run: |
+          node scripts/qa-danfse-windows-fonts.mjs
+          node --test tests/nfse-danfse-layout-nt008.test.js tests/nfse-national-danfse.test.js
+
