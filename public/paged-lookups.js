@@ -19,14 +19,14 @@ function attachPagedLookup(select,{resource,placeholder='Pesquisar por nome...',
   search.setAttribute('aria-label','Pesquisar '+(label||resource));
   search.className='paged-lookup-search';
   select.before(search);
-  let retained=selected?.id?{id:String(selected.id),label:String(selected.label||'Registro selecionado')}:null;
+  let retained=selected?.id?{id:String(selected.id),priceCents:selected.priceCents,label:String(selected.label||'Registro selecionado')}:null;
   let generation=0,debounce=null;
   function render(items=[],message=empty){
     const prev=retained?.id||select.value||'';
     select.replaceChildren();
     const blank=new Option(message,'');select.add(blank);
     const combined=[...(retained?[retained]:[]),...items.map(item=>({
-      id:String(item.id),
+      id:String(item.id),priceCents:resource==='parts'?Number(item.sale_price_cents):undefined,
       label: resource==='customers'?item.name:resource==='parts'?item.sku+' — '+item.description+' · '+(typeof money==='function'?money(item.sale_price_cents):'R$ '+(Number(item.sale_price_cents||0)/100).toFixed(2))+' · saldo '+Number(item.quantity||0):
         resource==='work-orders'?'OS #'+item.os_number+' · '+(item.customer_name||'Cliente'):
         [item.brand,item.model,item.type,item.license_plate].filter(Boolean).join(' ')
@@ -35,7 +35,9 @@ function attachPagedLookup(select,{resource,placeholder='Pesquisar por nome...',
     for(const item of combined){
       if(!item.id||seen.has(item.id))continue;
       seen.add(item.id);
-      select.add(new Option(item.label,item.id));
+      const option=new Option(item.label,item.id);
+      if(item.priceCents!==undefined)option.dataset.priceCents=String(item.priceCents);
+      select.add(option);
     }
     select.value=seen.has(prev)?prev:'';
   }
@@ -54,7 +56,7 @@ function attachPagedLookup(select,{resource,placeholder='Pesquisar por nome...',
   }
   select.addEventListener('change',()=>{
     const option=select.selectedOptions[0];
-    retained=select.value?{id:select.value,label:option.textContent}:null;
+    retained=select.value?{id:select.value,label:option.textContent,priceCents:option.dataset.priceCents}:null;
   });
   search.addEventListener('input',()=>{
     clearTimeout(debounce);

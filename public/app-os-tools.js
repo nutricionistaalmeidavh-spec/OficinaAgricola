@@ -4,10 +4,11 @@ async function enhanceWorkOrderModal(id,os){
   const bar=document.createElement('div'); bar.className='detail-block'; bar.style.marginBottom='14px';
   const canEdit=['ADMIN','ATENDIMENTO','TECNICO'].includes(state.user?.role);
   const canDuplicate=['ADMIN','ATENDIMENTO'].includes(state.user?.role);
-  bar.innerHTML=`<div class="card-head"><div><h3 style="margin:0">Ações da OS</h3><small class="muted">Correções ficam registradas no histórico</small></div><div class="action-row">${canEdit?'<button class="btn sm primary" id="editFullOS">Editar OS</button>':''}${canDuplicate?'<button class="btn sm" id="duplicateOS">Duplicar OS</button>':''}<button class="btn sm" id="historyOS">Histórico</button><button class="btn sm soft" id="pdfOS">Gerar PDF</button></div></div>`;
+  bar.innerHTML=`<div class="card-head"><div><h3 style="margin:0">Ações da OS</h3><small class="muted">Correções ficam registradas no histórico</small></div><div class="action-row">${canEdit?'<button class="btn sm primary" id="editFullOS">Editar OS</button>':''}${canDuplicate?'<button class="btn sm" id="duplicateOS">Duplicar OS</button>':''}${canDuplicate&&os.status==='AGUARDANDO_APROVACAO'?'<button class="btn sm" id="approvalLinkOS">Link de aprovação</button>':''}<button class="btn sm" id="historyOS">Histórico</button><button class="btn sm soft" id="pdfOS">Gerar PDF</button></div></div>`;
   host.prepend(bar);
   if($('#editFullOS'))$('#editFullOS').onclick=()=>editFullWorkOrder(id);
   if($('#duplicateOS'))$('#duplicateOS').onclick=()=>duplicateWorkOrderUi(id);
+  if($('#approvalLinkOS'))$('#approvalLinkOS').onclick=()=>openQuoteApproval(id,os.os_number);
   $('#historyOS').onclick=()=>showWorkOrderHistory(id);
   $('#pdfOS').onclick=()=>downloadWorkOrderPdf(id,os.os_number);
 }
@@ -61,7 +62,7 @@ async function downloadWorkOrderPdf(id,number){
 
 async function duplicateWorkOrderUi(id){
   const requestId=newCommandId();
-  const safe=async p=>{try{return await api(p)}catch{return null}};
+  const safe=async p=>{try{return await api(p)}catch(error){if(error.status===404)return null;throw error;}};
   const [os,quote]=await Promise.all([api(`/api/work-orders/${id}`),safe(`/api/work-orders/${id}/quote`)]);
   showModal(`Duplicar OS #${os.os_number}`,`<form class="form-stack">
     <div class="card"><strong>Será criada uma nova OS independente, com novo número.</strong><br><small>Pagamentos, recebimentos, peças baixadas e movimentações de estoque não serão copiados.</small></div>

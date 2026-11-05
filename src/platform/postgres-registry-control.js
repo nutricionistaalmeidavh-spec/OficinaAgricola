@@ -41,6 +41,7 @@ export function createPostgresRegistryControlHandler({registry,allowAdminBootstr
    if(path==='/api/setup/status'&&method==='GET')
      return json({required:await registry.setupRequired()});
    if(path==='/api/setup/initialize'&&method==='POST'){
+     if(!['localhost','127.0.0.1','[::1]'].includes(url.hostname))fail('Configure o primeiro administrador na máquina principal',403);
      if(!allowAdminBootstrap)fail('Inicialização administrativa não autorizada no processo',403);
      const input=await parseJson(request);
      return json(await registry.bootstrapAdmin(input));

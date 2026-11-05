@@ -72,13 +72,13 @@ async function renderSales({cursor=null,loaded=[]}={}) {
 
 async function saleModal() {
   // A chave é estável em todos os reenvios desta venda (inclusive em timeout).
-  const requestId = globalThis.crypto?.randomUUID?.() || `sale-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  let requestId = globalThis.crypto?.randomUUID?.() || `sale-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   // Nunca descarregar estoque ou clientes inteiros no formulário: usa pesquisa remota.
   const [partPage, services] = await Promise.all([
     api('/api/parts/page?limit=1'), api('/api/services')
   ]);
-  const serviceOptions=services.filter(s=>s.active).map(s=>({
-    id:Number(s.id), label:`Serviço · ${s.code} — ${s.name} · ${money(s.price_cents)}`
+  let serviceOptions=services.filter(s=>s.active).map(s=>({
+    id:Number(s.id),priceCents:Number(s.price_cents), label:`Serviço · ${s.code} — ${s.name} · ${money(s.price_cents)}`
   }));
   if (!partPage.total && !serviceOptions.length) {
     toast('Cadastre uma peça ou serviço antes da venda.', true); return;
@@ -89,7 +89,7 @@ async function saleModal() {
     <div class="card-head"><strong>Itens</strong><button type="button" class="btn sm soft" id="addSaleItem">+ Item</button></div>
     <div id="saleItems"></div>
     <div class="field-row"><label>Desconto (R$)<input name="discount" type="number" min="0" step="0.01" value="0"></label><label>Pagamento<select name="paymentMethod"><option>DINHEIRO</option><option>PIX</option><option>CARTAO_DEBITO</option><option>CARTAO_CREDITO</option><option>TRANSFERENCIA</option></select></label></div>
-    <label>Observação<input name="note"></label>
+    <label>Observação<input name="note"></label><div id="salePreview" role="status" aria-live="polite"></div><p class="muted">Prévia dos preços consultados. Pix e cartão: confira o recebimento antes de concluir o registro manual. O servidor confirma valor e estoque.</p>
     <button class="btn primary" type="submit">Concluir venda</button>
   </form>`, async fd => {
     const items = $$('.sale-item-row').map(row => {
@@ -99,22 +99,63 @@ async function saleModal() {
       const quantity=Number($('[data-sale-qty]',row).value);
       if(!Number.isSafeInteger(id)||id<=0||!Number.isFinite(quantity)||quantity<=0)
         throw new Error('Selecione um item válido e quantidade positiva.');
-      return kind==='P'?{partId:id,quantity}:{serviceId:id,quantity};
+      const price=Number(select.selectedOptions[0]?.dataset.priceCents);
+      if(!Number.isSafeInteger(price)||price<0)throw new Error('Pesquise e selecione o item para conferir seu preço.');
+      return {...(kind==='P'?{partId:id}:{serviceId:id}),quantity,expectedUnitPriceCents:price};
     });
     if (!items.length) throw new Error('Inclua ao menos um item');
     const customerId = fd.get('customerId');
-    await api('/api/sales', { method: 'POST', body: {
-      requestId,
+    const preview=updatePreview();
+    if(!preview.valid)throw new Error('Confira itens, quantidades e desconto.');
+    try{
+    const saved=await api('/api/sales', { method: 'POST', body: {
+      requestId,expectedTotalCents:preview.total,
       customerId: customerId ? Number(customerId) : null,
       discountCents: Math.round(Number(fd.get('discount') || 0) * 100),
       paymentMethod: fd.get('paymentMethod'),
       note: fd.get('note'),
       items,
     }});
-    toast('Venda concluída e estoque atualizado');
+    toast(`Venda #${saved.sale_number} concluída · ${money(saved.total_cents)} · ${saved.payment_method}`);
     await refreshCurrentPage();
+    }catch(error){
+      if(error.status===409&&/preço|prévia/i.test(error.message)){
+        const currentServices=await api('/api/services');
+        serviceOptions=currentServices.filter(s=>s.active).map(s=>({id:Number(s.id),priceCents:Number(s.price_cents),label:`Serviço · ${s.code} — ${s.name} · ${money(s.price_cents)}`}));
+        for(const row of $$('.sale-item-row')){
+          const serviceSelect=$('[data-sale-service]',row),chosen=serviceSelect.value;
+          serviceSelect.innerHTML='<option value="">Selecione serviço</option>'+serviceOptions.map(s=>`<option value="${s.id}" data-price-cents="${s.priceCents}">${esc(s.label)}</option>`).join('');
+          serviceSelect.value=chosen;
+          const select=$('[data-sale-part]',row);
+          if(!select.value)continue;
+          const item=await api('/api/parts/'+Number(select.value));
+          const option=select.selectedOptions[0];
+          option.dataset.priceCents=String(item.sale_price_cents);
+          option.textContent=item.sku+' — '+item.description+' · '+money(item.sale_price_cents)+' · saldo '+item.quantity;
+          select.dispatchEvent(new Event('change',{bubbles:true}));
+        }
+        requestId=newCommandId();updatePreview();
+        throw new Error('Preços alterados. Nenhuma venda foi registrada. Confira a nova prévia antes de concluir novamente.');
+      }
+      throw error;
+    }
   });
   attachPagedLookup($('#saleCustomer'),{resource:'customers',label:'cliente',empty:'Consumidor'});
+  const updatePreview=()=>{
+    const rows=$$('.sale-item-row');let subtotal=0,valid=rows.length>0;
+    for(const row of rows){
+      const select=$($('[data-sale-kind]',row).value==='P'?'[data-sale-part]':'[data-sale-service]',row);
+      const price=Number(select.selectedOptions[0]?.dataset.priceCents),quantity=Number($('[data-sale-qty]',row).value);
+      if(!select.value||!Number.isSafeInteger(price)||price<0||!Number.isFinite(quantity)||quantity<=0){valid=false;continue;}
+      subtotal+=Math.round(price*quantity);
+    }
+    const discount=Math.round(Number($('#modalBody [name=discount]').value)*100),total=subtotal-discount;
+    valid=valid&&Number.isSafeInteger(discount)&&discount>=0&&total>=0&&Number.isSafeInteger(total);
+    $('#salePreview').textContent=valid?`Subtotal: ${money(subtotal)} · Desconto: ${money(discount)} · Total: ${money(total)}`:'Selecione itens e confira quantidades e desconto para calcular o total.';
+    return {valid,total};
+  };
+  $('#modalBody form').addEventListener('input',updatePreview);
+  $('#modalBody form').addEventListener('change',updatePreview);
   const addRow = () => {
     const row = document.createElement('div');
     row.className = 'field-row sale-item-row';
@@ -123,7 +164,7 @@ async function saleModal() {
       <option value="S" ${defaultKind==='S'?'selected':''}>Serviço</option>
     </select></label><label data-sale-part-label>Peça<select data-sale-part required><option value="">Pesquisar peça</option></select></label>
     <label data-sale-service-label>Serviço<select data-sale-service><option value="">Selecione serviço</option>
-      ${serviceOptions.map(s=>`<option value="${s.id}">${esc(s.label)}</option>`).join('')}
+      ${serviceOptions.map(s=>`<option value="${s.id}" data-price-cents="${s.priceCents}">${esc(s.label)}</option>`).join('')}
     </select></label>
     <label>Quantidade<input data-sale-qty type="number" min="0.01" step="0.01" value="1" required></label>
     <button type="button" class="btn danger sm" data-remove-sale>Remover</button>`;
@@ -141,7 +182,8 @@ async function saleModal() {
     };
     selectKind.addEventListener('change',synchronizeKind);
     synchronizeKind();
-    $('[data-remove-sale]',row).onclick = () => row.remove();
+    $('[data-remove-sale]',row).onclick = () => {row.remove();if(modalSession)modalSession.dirty=true;updatePreview();};
+    updatePreview();
   };
   addRow();
   $('#addSaleItem').onclick = addRow;

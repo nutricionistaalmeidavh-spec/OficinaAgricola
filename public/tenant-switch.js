@@ -39,6 +39,7 @@
       }
       picker.onchange=()=>{
         if(!units.some(u=>String(u.id)===picker.value))return;
+        if(!window.OficinaDrafts?.allowLeave()){picker.value=selected;return;}
         selected=picker.value;sessionStorage.setItem(storageKey,selected);
         // Recreate page data under the new authorized unit.
         location.reload();

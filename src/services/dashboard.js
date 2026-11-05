@@ -1,3 +1,4 @@
+import {OS_FLOW} from '../domain.js';
 import { lowStockParts } from './inventory.js';
 import { listSchedule } from './operations.js';
 import { financeSummary } from './finance.js';
@@ -8,10 +9,7 @@ export function dashboardData(db,{now=new Date(),role='ADMIN'}={}){
   for(const status of statuses) counts[status]=Number(db.prepare('SELECT COUNT(*) n FROM work_orders WHERE status=?').get(status).n);
   counts.ABERTAS=Number(db.prepare("SELECT COUNT(*) n FROM work_orders WHERE status NOT IN ('ENTREGUE','CANCELADA','REPROVADA','TRANSFERIDA')").get().n);
   const board={};
-  const groups={
-    entrada:['ENTRADA'],diagnostico:['DIAGNOSTICO','ORCAMENTO'],
-    aprovacao:['AGUARDANDO_APROVACAO','APROVADA'],servico:['EM_SERVICO'],pronta:['PRONTA']
-  };
+  const groups=Object.fromEntries(OS_FLOW.map(group=>[group.key,group.statuses]));
   for(const [key,group] of Object.entries(groups)){
     const where=group.map(()=>'?').join(',');
     const count=Number(db.prepare('SELECT COUNT(*) n FROM work_orders WHERE status IN ('+where+')').get(...group).n);
@@ -27,5 +25,5 @@ export function dashboardData(db,{now=new Date(),role='ADMIN'}={}){
   const upcoming=listSchedule(db,{from:now.toISOString(),to:new Date(now.getTime()+30*24*60*60*1000).toISOString(),limit:8});
   const lowStock=lowStockParts(db);
   counts.ESTOQUE_CRITICO=lowStock.length;
-  return {...(finance?{finance}:{}),counts,board,upcoming,lowStock,maintenanceAlerts:listMaintenanceAlerts(db,{limit:8})};
+  return {...(finance?{finance}:{}),counts,board,upcoming,lowStock,flow:OS_FLOW,maintenanceAlerts:listMaintenanceAlerts(db,{limit:8})};
 }

@@ -1,10 +1,3 @@
-const OA_PIPELINE=[
-  {key:'entrada',label:'Entrada',statuses:['ENTRADA']},
-  {key:'diagnostico',label:'Diagnóstico',statuses:['DIAGNOSTICO','ORCAMENTO']},
-  {key:'aprovacao',label:'Aguard. aprovação',statuses:['AGUARDANDO_APROVACAO','APROVADA']},
-  {key:'servico',label:'Em serviço',statuses:['EM_SERVICO']},
-  {key:'pronta',label:'Pronta',statuses:['PRONTA']},
-];
 
 function oaKpi(label,value,kind=''){
   return `<div class="oa-kpi-card ${kind}"><div class="oa-kpi-label"><span>${esc(label)}</span><i class="oa-kpi-dot"></i></div><strong>${value}</strong></div>`;
@@ -19,20 +12,22 @@ async function renderDashboard(){
   pageTitle('Visão Geral','OPERAÇÃO EM TEMPO REAL');
   const d=await api('/api/dashboard');
   const f=d.finance||null;
-  const pipeline=OA_PIPELINE.map(column=>{
+  const pipeline=d.flow.map(column=>{
     const group=d.board?.[column.key]||{count:0,items:[]};
     const items=group.items;
     return `<div class="oa-board-col"><div class="oa-board-title"><span>${column.label}</span><b>${group.count}</b></div>${items.map(oaOrderCard).join('')||'<div class="empty" style="padding:24px 8px;font-size:11px">Nenhuma OS nesta etapa.</div>'}${group.count>items.length?`<small class="muted">${group.count-items.length} outras OS · Ver todas</small>`:''}</div>`;
   }).join('');
 
+  const firstUse=!d.counts.ABERTAS&&!d.counts.ENTREGUE&&!d.counts.CANCELADA&&!d.counts.REPROVADA&&!d.counts.TRANSFERIDA;
   setContent(`
+    ${firstUse&&['ADMIN','ATENDIMENTO'].includes(state.user.role)?`<section class="card"><h2>Comece pelo primeiro atendimento</h2><p>Cadastre o cliente e o veículo durante a abertura da OS. Depois registre diagnóstico, orçamento, execução, pagamento e entrega.</p><div class="action-row"><button class="btn primary" id="startFirstOrder">Abrir primeiro atendimento</button>${state.user.role==='ADMIN'?'<button class="btn" data-go="settings">Conferir dados da empresa</button>':''}</div><p class="muted">Estoque, caixa e fiscal podem ser preparados quando forem necessários. Nenhuma integração paga é obrigatória.</p></section>`:''}
     <div class="oa-kpi-grid">
       ${oaKpi('OS abertas',d.counts.ABERTAS,'active')}
       ${oaKpi('Em diagnóstico',d.counts.DIAGNOSTICO)}
       ${oaKpi('Aguard. aprovação',d.counts.AGUARDANDO_APROVACAO,'warn')}
       ${oaKpi('Em serviço',d.counts.EM_SERVICO,'active')}
       ${oaKpi('Prontas',d.counts.PRONTA,'ready')}
-      ${f?oaKpi('Faturamento do período',money(f.invoicedCents),'accent'):''}
+      ${f?oaKpi('Aprovado/vendido no mês',money(f.invoicedCents),'accent'):''}
     </div>
     <section class="oa-board-card">
       <div class="oa-board-head"><div><h2>Ordens por status</h2><small>Acompanhamento rápido do fluxo da oficina</small></div><button class="btn sm" data-go="work-orders">Ver todas</button></div>
@@ -47,15 +42,9 @@ async function renderDashboard(){
       </div>
     </div>`);
 
+  if($('#startFirstOrder'))$('#startFirstOrder').onclick=openNewWorkOrder;
   $$('[data-go]').forEach(button=>button.onclick=()=>navigate(button.dataset.go));
   $$('[data-oa-os]').forEach(card=>card.onclick=()=>openWorkOrder(card.dataset.oaOs));
-}
-
-function oaStatusCounts(orders){
-  return OA_PIPELINE.map(column=>({
-    label:column.label,
-    count:orders.filter(order=>column.statuses.includes(order.status)).length,
-  }));
 }
 
 async function renderReports(){
@@ -67,7 +56,7 @@ async function renderReports(){
   const financeAllowed=['ADMIN','FINANCEIRO'].includes(state.user.role);
   const report=await api('/api/reports?'+qs);
   const finance=report.finance;
-  const status=OA_PIPELINE.map(column=>({label:column.label,count:column.statuses.reduce((n,key)=>n+(report.statusCounts[key]||0),0)}));
+  const status=report.flow.map(column=>({label:column.label,count:column.statuses.reduce((n,key)=>n+(report.statusCounts[key]||0),0)}));
   const max=Math.max(1,...status.map(item=>item.count));
   const completed=report.deliveredCount;
   const active=report.openCount;
@@ -84,8 +73,8 @@ async function renderReports(){
       <div class="card"><div class="card-head"><h2>Distribuição das ordens</h2><span class="muted">Fluxo atual</span></div><div class="oa-bars">
         ${status.map(item=>`<div class="oa-bar-row"><span>${esc(item.label)}</span><div class="oa-bar-track"><i style="width:${Math.round(item.count/max*100)}%"></i></div><b>${item.count}</b></div>`).join('')}
       </div></div>
-      <div class="card"><div class="card-head"><h2>Financeiro</h2><span class="muted">Período atual</span></div>
-        ${financeAllowed?`<div class="list"><div class="list-item"><span>Faturado</span><strong>${money(finance.invoicedCents)}</strong></div><div class="list-item"><span>Recebido</span><strong>${money(finance.receivedCents)}</strong></div><div class="list-item"><span>Pendente</span><strong>${money(finance.pendingCents)}</strong></div><div class="list-item"><span>Despesas</span><strong>${money(finance.expensesCents)}</strong></div></div>`:'<div class="oa-report-note">Seu perfil não possui acesso aos indicadores financeiros. Os dados operacionais continuam disponíveis.</div>'}
+      <div class="card"><div class="card-head"><h2>Financeiro</h2><span class="muted">Recebimentos e despesas pela data do evento; aprovações pela data de aprovação. Valores comerciais não significam notas emitidas.</span></div>
+        ${financeAllowed?`<div class="list"><div class="list-item"><span>Aprovado/vendido no período</span><strong>${money(finance.invoicedCents)}</strong></div><div class="list-item"><span>Recebido</span><strong>${money(finance.receivedCents)}</strong></div><div class="list-item"><span>A receber das aprovações do período</span><strong>${money(finance.pendingCents)}</strong></div><div class="list-item"><span>Despesas</span><strong>${money(finance.expensesCents)}</strong></div></div>`:'<div class="oa-report-note">Seu perfil não possui acesso aos indicadores financeiros. Os dados operacionais continuam disponíveis.</div>'}
       </div>
     </div>`);
 }
@@ -95,25 +84,48 @@ function oaMatch(query,...values){const q=oaSearchText(query);return values.some
 
 let globalSearchEpoch=0;
 async function runGlobalSearch(query){
-  const epoch=++globalSearchEpoch;
-  const q=query.trim();
-  if(q.length<2){toast('Digite pelo menos 2 caracteres.',true);return}
-  const [customers,machines,orders]=await Promise.all([api('/api/customers'),api('/api/machines'),api('/api/work-orders')]);
+  const epoch=++globalSearchEpoch,q=query.trim();
+  if(q.length<2){toast('Digite pelo menos 2 caracteres.',true);return;}
+  const term=encodeURIComponent(q);
+  const [customers,machines,orders]=await Promise.all([
+    api('/api/customers/page?includeInactive=1&limit=20&search='+term),
+    api('/api/machines/page?includeInactive=1&limit=20&search='+term),
+    api('/api/work-orders/page?limit=20&search='+term)
+  ]);
   if(epoch!==globalSearchEpoch)return;
-  const customerResults=customers.filter(item=>oaMatch(q,item.name,item.document,item.phone)).slice(0,6);
-  const machineResults=machines.filter(item=>oaMatch(q,item.brand,item.model,item.type,item.serial_number,item.internal_id)).slice(0,6);
-  const orderResults=orders.filter(item=>oaMatch(q,item.os_number,item.customer_name,item.machine_brand,item.machine_model,item.problem_reported)).slice(0,8);
-  const total=customerResults.length+machineResults.length+orderResults.length;
-  const group=(title,items,render)=>items.length?`<section class="oa-search-group"><h3>${title}</h3>${items.map(render).join('')}</section>`:'';
-
-  showModal(`Busca — ${q}`,total?`<div class="oa-search-results">
-    ${group('Ordens de Serviço',orderResults,item=>`<div class="oa-search-result"><div><strong>OS #${item.os_number} · ${esc(item.customer_name)}</strong><small>${esc([item.machine_brand,item.machine_model].filter(Boolean).join(' '))}</small></div><button class="btn sm" data-search-os="${item.id}">Abrir</button></div>`)}
-    ${group('Clientes',customerResults,item=>`<div class="oa-search-result"><div><strong>${esc(item.name)}</strong><small>${esc(item.document||item.phone||'')}</small></div><button class="btn sm" data-search-go="customers">Ver clientes</button></div>`)}
-    ${group('Máquinas',machineResults,item=>`<div class="oa-search-result"><div><strong>${esc([item.brand,item.model].filter(Boolean).join(' ')||item.type)}</strong><small>${esc(item.serial_number||item.internal_id||'')}</small></div><button class="btn sm" data-search-go="machines">Ver máquinas</button></div>`)}
-  </div>`:'<div class="empty">Nenhum cliente, máquina ou OS encontrado.</div>');
-
-  $$('[data-search-os]').forEach(button=>button.onclick=()=>{closeModal();openWorkOrder(button.dataset.searchOs)});
-  $$('[data-search-go]').forEach(button=>button.onclick=()=>{closeModal();navigate(button.dataset.searchGo)});
+  const groups=[
+    {key:'orders',title:'Ordens de Serviço',path:'/api/work-orders/page',page:orders,
+      render:item=>`<strong>OS #${item.os_number} · ${esc(item.customer_name)}</strong><small>${esc([item.machine_brand,item.machine_model].filter(Boolean).join(' '))}</small>`,
+      open:item=>openWorkOrder(item.id)},
+    {key:'customers',title:'Clientes',path:'/api/customers/page',page:customers,
+      render:item=>`<strong>${esc(item.name)}</strong><small>${esc(item.document||item.phone||'')}</small>`,
+      open:item=>['ADMIN','ATENDIMENTO'].includes(state.user.role)?customerModal(item):showModal(item.name,`<p>${esc(item.phone||'Sem telefone')}</p>`)},
+    {key:'machines',title:'Veículos e equipamentos',path:'/api/machines/page',page:machines,
+      render:item=>`<strong>${esc([item.brand,item.model].filter(Boolean).join(' ')||item.type)}</strong><small>${esc(item.license_plate||item.vin||item.serial_number||item.internal_id||'')}</small>`,
+      open:item=>machineHistoryModal(item.id)}
+  ];
+  showModal(`Busca — ${q}`,groups.map(g=>`<section id="search-${g.key}"></section>`).join(''));
+  const modalToken=state.modalToken;
+  for(const group of groups){
+    let rows=[...group.page.items],cursor=group.page.nextCursor;
+    const paint=()=>{
+      const host=$('#search-'+group.key);if(!host)return;
+      renderRegion(host,`<h3>${group.title}</h3><p role="status">${rows.length} de ${group.page.total} resultado(s)</p>`+
+        (rows.length?rows.map(item=>`<div class="oa-search-result"><div>${group.render(item)}</div><button class="btn sm" type="button" data-result="${item.id}">Abrir</button></div>`).join(''):'<p class="muted">Nenhum resultado para esta busca.</p>')+
+        (cursor?'<button class="btn sm" type="button" data-search-more>Carregar mais resultados</button>':''));
+      $$('[data-result]',host).forEach(button=>button.onclick=()=>Promise.resolve(group.open(rows.find(item=>String(item.id)===button.dataset.result))).catch(error=>toast(error.message,true)));
+      const more=$('[data-search-more]',host);
+      if(more)more.onclick=async()=>{
+        more.disabled=true;
+        try{
+          const page=await api(group.path+'?includeInactive=1&limit=20&search='+term+'&cursor='+encodeURIComponent(cursor));
+          if(epoch!==globalSearchEpoch||state.modalToken!==modalToken)return;
+          rows=rows.concat(page.items);cursor=page.nextCursor;paint();
+        }catch(error){toast(error.message,true);more.textContent='Tentar novamente';more.disabled=false;}
+      };
+    };
+    paint();
+  }
 }
 
 function bindGlobalSearch(){
