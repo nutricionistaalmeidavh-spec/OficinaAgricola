@@ -133,6 +133,8 @@ export function createAcbrLibFiscalProvider(opts={}){
   };
   return {
     name:'acbrlib-local',
+    nfseChannel:opts.nfseChannel||null,
+    nfseMunicipalityIbge:opts.nfseMunicipalityIbge||null,
     prepare:preflight,
     transmit:({document,attemptId})=>runner({...preflight({document}),operation:'transmit',
       attemptId,lot:Number(document.id)}),
