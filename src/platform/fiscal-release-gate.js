@@ -76,7 +76,8 @@ export function buildFiscalReleaseStatus({
       row.status==='AUTORIZADA_HOMOLOGACAO'&&row.environment==='HOMOLOGACAO'&&
       row.issuer_digest===issuerDigest&&
       row.certificate_digest===certificateIdentity&&
-      validDigest(row.xml_digest)&&digest(clean(row.authorized_xml))===row.xml_digest&&
+      validDigest(row.xml_digest)&&typeof row.authorized_xml==='string'&&
+      digest(row.authorized_xml)===row.xml_digest&&
       officialNfeXml({xml:row.authorized_xml,
         accessKey:row.access_key,protocol:row.protocol,cnpj:digits(settings.issuer_cnpj),kind})
     );
