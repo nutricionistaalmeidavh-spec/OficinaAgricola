@@ -11,26 +11,23 @@
 - Modelo INI ACBr Reforma Tributária: https://acbr.sourceforge.io/ACBrLib/ModeloNFeINIReformaTributaria.html
 - NFS-e Nacional, manuais e layouts: https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/documentacao-atual
 
-## Importação offline na máquina de build
+## Catálogo integral já incluído no código e no instalador
 
-O script scripts/import-fiscal-catalog.mjs recebe três CSVs normalizados a partir dos anexos oficiais:
+Em 05/11/2026 foi gerado o snapshot **src/platform/fiscal-data/catalog.json** diretamente a partir dos endpoints públicos governamentais. Contém:
 
-- ncm.csv: cabeçalho NCM, seguido de todos os NCM ativos com oito dígitos.
-- cfop.csv: cabeçalho CFOP, seguido dos CFOP de saída ativos (5, 6 e 7).
-- ibscbs.csv: cabeçalho CST,cClassTrib,regime,reduction,deferral e as linhas revisadas. Regimes: REGULAR/REDUCAO/DIFERIMENTO/ESPECIAL, flags true/false. Não classificar tratamento não comprovado como REGULAR.
-- source.json: chaves ncm, cfop, ibscbs, cada uma com url (HTTPS oficial), version e publishedAt (YYYY-MM-DD).
+- **10.516 NCM** vigentes do JSON oficial do Siscomex (Resolução Gecex nº 926/2026);
+- **619 CFOP** do XLSX nacional de 04/09/2026 (incluindo entradas 1/2/3 e saídas 5/6/7);
+- **173 cClassTrib/CST** do XLSX da SVRS referente ao IT 2025.002 v1.71, de 30/10/2026.
 
-Comando (na raiz do repositório, sem acesso à rede):
+O mesmo arquivo é copiado para **dist/src/platform/fiscal-data/catalog.json** e entra automaticamente no ASAR do Electron. O runtime encontra o catálogo por caminho relativo ao módulo, sem solicitar download, terminal, arquivos ou variáveis ao cliente final. Nenhum código de exemplo é usado em produção.
 
-    node scripts/import-fiscal-catalog.mjs --ncm ncm.csv --cfop cfop.csv --ibscbs ibscbs.csv --sources source.json --checked-at 2026-11-05 --out fiscal-catalog-20261105.json
+A manutenção da base é tarefa da **ArtiSys**, no build: `python3 scripts/sync-official-fiscal-catalog.py` baixa as três fontes oficiais, verifica estrutura, valida quantidades mínimas e grava o arquivo com versões, datas, hashes dos arquivos de origem e SHA-256 do catálogo. O workflow `fiscal-sync-official.yml` pode regenerá-lo na branch de trabalho, sem deploy ou merge automáticos.
 
-Para ativar a checagem local configurar somente no ambiente privado do serviço:
+O script alternativo `scripts/import-fiscal-catalog.mjs` continua disponível para importações manuais de CSVs normalizados, apenas na manutenção do desenvolvedor. Instalações avançadas self-hosted podem apontar um arquivo próprio via `OFICINA_FISCAL_CATALOG_PATH`, sem alterar a distribuição padrão. **Não é uma etapa de instalação do cliente.**
 
-    OFICINA_FISCAL_CATALOG_PATH=/pasta-privada/fiscal-catalog-20261105.json
+O build do instalador executa `node scripts/assert-fiscal-data-bundle.mjs --dist` e falha se o arquivo estiver ausente, incompleto, alterado ou vencido. A CI confirma a inclusão no diretório de distribuição. O catálogo deve ser renovado a cada atualização oficial ou antes de 60 dias; isso exige um **novo pacote/atualização do Oficina**, e não operação manual dos clientes.
 
-O importador faz integridade SHA-256, datas, limites, duplicidades e URL oficial. O hash protege contra alteração local acidental, mas NÃO é prova criptográfica de autenticidade governamental; conferir a origem durante o preparo. Atualizar pelo menos a cada 60 dias. Emissão NF-e/NFC-e em produção falha fechada sem catálogo.
-
-A distribuição não incorpora catálogos de exemplos usados nos testes. Para entregar o recurso funcionando, a ArtiSys precisa obter/revisar todas as linhas vigentes das tabelas oficiais e incorporar o artefato aprovado ao pacote, sem exigir que o cliente execute terminal.
+**Limites:** o hash de origem e o digest verificam integridade dos dados baixados, não autenticação criptográfica do governo. A revisão legal e a homologação com NF-e/NFC-e/NFS-e reais continuam exigidas para distribuição fiscal.
 
 ## Tratamentos tributários
 
