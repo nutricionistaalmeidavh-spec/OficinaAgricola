@@ -49,3 +49,36 @@ test('fiscal tax review builds real ACBr INI from guided data and frozen commerc
   assert.throws(()=>provider.saveTaxReview({document,issuer,sections}),/já preparado/);
  }finally{rmSync(root,{recursive:true,force:true});}
 });
+
+test('revisão NFC-e guiada salva INI com pagamento explícito, sem alterar valores comerciais',()=>{
+ const root=mkdtempSync(join(tmpdir(),'oficina-nfce-review-')),inputDir=join(root,'fiscal');
+ mkdirSync(inputDir);
+ try{
+  const nfeLib=join(root,'ACBrNFe64.dll'),nfeConfig=join(root,'ACBrLibNFe.ini');
+  writeFileSync(nfeLib,'fixture');writeFileSync(nfeConfig,'[Principal]\\nLogNivel=0\\n');
+  const provider=createAcbrLibFiscalProvider({nfeLib,nfeConfig,inputDir,runner:async()=>({status:'INDETERMINADO'})});
+  const snapshot_json=JSON.stringify({originType:'VENDA',lines:[{
+   sourceItemId:5,kind:'PECA',description:'Óleo',quantity:1,
+   unitPriceCents:9000,subtotalCents:9000,discountCents:0,totalCents:9000
+  }],customer:{}});
+  const document={id:16,kind:'NFCE',status:'RASCUNHO',amount_cents:9000,
+    snapshot_json,snapshot_hash:createHash('sha256').update(snapshot_json).digest('hex'),
+    environment:'HOMOLOGACAO'};
+  const issuer={cnpj:'11222333000181',uf:'SP',municipalityIbge:'3550308',environment:'HOMOLOGACAO'};
+  const sections={
+   infNFe:{versao:'4.00'},
+   Identificacao:{mod:'65',cUF:'35',cMunFG:'3550308',serie:'1',nNF:'16',tpAmb:'2',
+    natOp:'Venda',idDest:'1',indFinal:'1',indPres:'1',tpEmis:'1'},
+   Emitente:{CNPJCPF:issuer.cnpj,IE:'123',xNome:'Oficina QA'},
+   Produto001:{NCM:'27101932',CFOP:'5102',uCom:'UN'},
+   ICMS001:{CSOSN:'102',orig:'0'},PIS001:{CST:'49'},COFINS001:{CST:'49'},
+   pag001:{tPag:'01',vPag:'90.00'},Total:{vProd:'90.00',vDesc:'0.00',vNF:'90.00'}
+  };
+  assert.equal(provider.saveTaxReview({document,issuer,sections}).reviewed,true);
+  provider.prepare({document,issuer});
+  const ini=readFileSync(join(inputDir,'NFCE-16-'+document.snapshot_hash+'.ini'),'utf8');
+  assert.match(ini,/mod=65/);
+  assert.match(ini,/\\[pag001\\]/);
+  assert.match(ini,/vPag=90\\.00/);
+ }finally{rmSync(root,{recursive:true,force:true});}
+});
