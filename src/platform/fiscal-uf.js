@@ -35,8 +35,14 @@ export function assertReviewedFiscalUf({kind,issuer,sections}={}){
       throw new Error('NFC-e exige venda interna a consumidor final, com presença informada');
     if(String(ide.tpEmis)!=='1')
       throw new Error('Contingência NFC-e offline não implementada: somente emissão normal é permitida');
-    if(!sections?.Pagamento001)
-      throw new Error('NFC-e exige pagamento revisado (Pagamento001) para o documento');
+    const payments=Object.entries(sections||{}).filter(([name])=>/^pag\\d{3}$/.test(name));
+    if(!payments.length)throw new Error('NFC-e exige grupo pag001 revisado para o documento');
+    if(payments.some(([,p])=>!/^\\d{2}$/.test(String(p.tPag||''))||
+       !/^(?:0|[1-9]\\d*)\\.\\d{2}$/.test(String(p.vPag||''))))
+      throw new Error('NFC-e exige código e valor de pagamento revisados');
+    if(issuer.uf==='RS'&&payments.some(([,p])=>['03','04','17'].includes(String(p.tPag))&&
+      (String(p.tpIntegra)!=='1'||!String(p.cAut||'').trim())))
+      throw new Error('RS: pagamento eletrônico NFC-e exige integração e autorização da transação');
   }
   return profile;
 }
