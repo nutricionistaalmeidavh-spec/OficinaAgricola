@@ -236,8 +236,47 @@ async function fiscalTaxReviewModal(id){
       await refreshCurrentPage();
     });
 }
+async function fiscalNationalDpsAutoModal(documentId){
+  const [profiles,document,settings]=await Promise.all([
+    api('/api/fiscal/tax/profiles'),api('/api/fiscal/'+documentId),api('/api/fiscal/settings')]);
+  const available=profiles.filter(p=>p.kind==='SERVICE'&&p.nationalServiceCode&&p.municipalityIbge===settings.municipality_ibge);
+  const snap=fiscalSnapshot(document),client=snap.customer||{},v=x=>esc(String(x||''));
+  showModal('Gerar DPS automaticamente',
+    '<form class="form-stack"><p class="muted">Use o perfil confirmado pelo contador. O Oficina assina a DPS com o A1 cadastrado, sem XML manual. Somente homologação até a conclusão fiscal.</p>'+
+    '<label>Perfil de serviço<select name="profileId" required><option value="">Selecione</option>'+available.map(p=>'<option value="'+esc(p.id)+'">'+esc(p.name)+' / '+esc(p.nationalServiceCode)+'</option>').join('')+'</select></label>'+
+    '<div class="field-row"><label>Série da DPS<input name="series" inputmode="numeric" maxlength="5" required></label><label>Número sequencial<input name="number" inputmode="numeric" value="'+v(document.id)+'" maxlength="15" required></label></div>'+
+    '<label>Tomador<input name="customerName" value="'+v(client.name)+'" required maxlength="120"></label>'+
+    '<label>CPF/CNPJ<input name="customerDocument" value="'+v(client.document)+'" required></label>'+
+    '<div class="field-row"><label>Município IBGE<input name="customerMunicipality" maxlength="7" required></label><label>CEP<input name="customerZip" maxlength="8" required></label></div>'+
+    '<div class="field-row"><label>Logradouro<input name="customerStreet" required></label><label>Número<input name="customerNumber" required></label></div>'+
+    '<label>Bairro<input name="customerDistrict" required></label>'+
+    '<div class="field-row"><label>Opção Simples<select name="opSimpNac" required><option value="">Selecione</option><option value="1">Não optante</option><option value="2">MEI</option><option value="3">Simples</option></select></label>'+
+    '<label>Regime especial<select name="regEspTrib" required><option value="">Selecione</option><option value="0">Nenhum</option><option value="1">Regime 1</option><option value="2">Regime 2</option></select></label></div>'+
+    '<label>Regime de apuração SN (se aplicável)<input name="regApTribSN" maxlength="1"></label>'+
+    '<div class="field-row"><label>Tributação ISS<select name="tribISSQN"><option value="1">Tributável</option></select></label><label>Retenção ISS<select name="tpRetISSQN"><option value="1">Não retido</option><option value="2">Retido</option></select></label></div>'+
+    '<label>CST PIS/COFINS<input name="cstPisCofins" maxlength="2" required></label>'+
+    '<label>Carga tributária Simples (%)<input name="percentSimples"></label>'+
+    '<div class="field-row"><label>Carga federal (%)<input name="percentFederal"></label><label>Carga estadual (%)<input name="percentState"></label></div>'+
+    '<label>Carga municipal (%)<input name="percentMunicipal"></label>'+
+    '<button class="btn primary" type="submit" '+(!available.length?'disabled':'')+'>Gerar e assinar DPS</button></form>',
+    async form=>{
+      const x=formObj(form);
+      await api('/api/fiscal/'+documentId+'/nfse/prepare',{method:'POST',body:{
+        profileId:x.profileId,requestId:newCommandId(),
+        customer:{name:x.customerName,document:x.customerDocument,municipalityIbge:x.customerMunicipality,
+          zip:x.customerZip,street:x.customerStreet,number:x.customerNumber,district:x.customerDistrict},
+        issuance:{series:x.series,number:x.number,opSimpNac:x.opSimpNac,regEspTrib:x.regEspTrib,
+          regApTribSN:x.regApTribSN,tribISSQN:x.tribISSQN,tpRetISSQN:x.tpRetISSQN,
+          cstPisCofins:x.cstPisCofins,percentSimples:x.percentSimples,
+          percentFederal:x.percentFederal,percentState:x.percentState,percentMunicipal:x.percentMunicipal}
+      }});
+      toast('DPS assinada e pronta para transmitir. Nenhuma nota enviada ainda.');
+      await refreshCurrentPage();
+    });
+}
 async function fiscalNationalDpsModal(documentId){
   const state=await api('/api/fiscal/'+documentId+'/nfse/dps');
+  if(state.enabled&&!state.prepared)return fiscalNationalDpsAutoModal(documentId);
   if(!state.enabled){
     showModal('DPS Nacional — preparação',
       '<p class="muted">Esta empresa ainda usa o emissor ACBr. Para transmitir diretamente pela API oficial, o administrador da instalação precisa ativar o canal nacional direto, mantendo a emissão municipal separada.</p>'+
