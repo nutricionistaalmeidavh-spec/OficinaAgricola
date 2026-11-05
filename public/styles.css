@@ -30,3 +30,5 @@
   .pending-commands{max-width:188px;padding:7px 8px;font-size:10px;line-height:1.25}
 }
 
+
+.form-stack fieldset{min-width:0;border:1px solid var(--line);border-radius:10px;padding:14px;display:grid;gap:12px}.form-stack fieldset[hidden]{display:none}

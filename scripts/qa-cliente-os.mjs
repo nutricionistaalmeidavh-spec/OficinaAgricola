@@ -87,7 +87,9 @@ try {
   await navigate(page, 'work-orders');
   await page.locator('#newOS').click();
   await page.locator('#osCustomer').selectOption({ label: clientName });
-  await page.locator('#osMachine').selectOption({ index: 1 });
+  const machineOption=page.locator('#osMachine option').filter({hasText:'Gol Jornada'});
+  await machineOption.waitFor({state:'attached'});
+  await page.locator('#osMachine').selectOption(await machineOption.getAttribute('value'));
   await page.locator('#modalBody textarea[name="problemReported"]').fill('Falha no motor e revisao preventiva');
   await page.locator('#modalBody select[name="priority"]').selectOption('ALTA');
   await page.locator('#modalBody button[type="submit"]').click();
@@ -95,7 +97,6 @@ try {
   await card.waitFor({ state: 'visible' });
   const osId = await card.getAttribute('data-os');
   if (!osId) throw new Error('OS criada sem identificador no DOM');
-  await card.click();
   await page.locator('[data-status="DIAGNOSTICO"]').waitFor({ state: 'visible' });
   await page.screenshot({ path: path.join(outputDir, '03-os-entrada.png'), fullPage: true });
 
@@ -105,7 +106,7 @@ try {
   await page.locator('.os-card[data-os="' + osId + '"]').click();
   await page.locator('#diagnosisForm textarea[name="diagnosis"]').fill('Filtro saturado; necessita manutencao');
   await page.locator('#diagnosisForm button[type="submit"]').click();
-  await page.getByRole('status').filter({ hasText: 'Diagnóstico salvo' }).waitFor({ state: 'visible' });
+  await page.locator('#toast').filter({ hasText: /Diagnóstico.*salvo/ }).waitFor({ state: 'visible' });
   await page.locator('#modalClose').click();
   await page.locator('#modal').waitFor({ state: 'hidden' });
   await page.locator('.os-card[data-os="' + osId + '"]').click();
@@ -116,6 +117,7 @@ try {
   await page.locator('#modalBody button[type="submit"]').click();
   await page.locator('#submitQuote').waitFor({ state: 'visible' });
   await page.locator('#submitQuote').click();
+  await page.locator('#approvalBackOrder').click();
   await page.locator('#approveQuote').waitFor({ state: 'visible' });
   await page.locator('#approveQuote').click();
   await page.locator('#payBtn').waitFor({ state: 'visible' });
@@ -169,6 +171,7 @@ try {
   await page.locator('#modalBody button[type="submit"]').click();
   await page.locator('#submitQuote').waitFor({ state: 'visible' });
   await page.locator('#submitQuote').click();
+  await page.locator('#approvalBackOrder').click();
   await page.locator('#approveQuote').waitFor({ state: 'visible' });
   await page.locator('#approveQuote').click();
   await page.locator('[data-status="EM_SERVICO"]').waitFor({ state: 'visible' });

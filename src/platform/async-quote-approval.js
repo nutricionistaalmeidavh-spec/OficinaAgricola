@@ -44,7 +44,7 @@ function quoteStillValid(quote,link){
 export function createPostgresQuoteApprovals(port){
  if(port?.engine!=='postgres'||typeof port.transaction!=='function')
    throw Error('Aprovação pública nativa exige PostgreSQL transacional');
- async function createApprovalLink(workOrderId,{expiresInHours=48}={}){
+ async function createApprovalLink(workOrderId,{expiresInHours=48,clientToken=null}={}){
    const id=ident(workOrderId),hours=Number(expiresInHours);
    if(!Number.isInteger(hours)||hours<1||hours>168)
      fail('Prazo de aprovação inválido',400);
@@ -55,7 +55,14 @@ export function createPostgresQuoteApprovals(port){
      const quote=await loadQuote(tx,id);
      if(quote.approval_status!=='AGUARDANDO'||quote.valid_until&&quote.valid_until<now().slice(0,10))
        fail('Orçamento não aguarda aprovação ou está vencido');
-     const token=randomBytes(32).toString('hex');
+     const token=clientToken??randomBytes(32).toString('hex');
+     const digest=tokenHash(token);
+     const previous=await tx.first('SELECT * FROM quote_approval_links WHERE token_hash=?',[digest]);
+     if(previous){
+       if(Number(previous.work_order_id)!==id||previous.quote_digest!==hashQuote(quote)||previous.status!=='ATIVO'||previous.expires_at<=now())
+         fail('Esta tentativa de link não pode ser reutilizada. Gere uma nova solicitação.');
+       return {token,expiresAt:previous.expires_at,path:'/approval.html?token='+token};
+     }
      const expiresAt=new Date(Date.now()+hours*3600000).toISOString();
      await tx.run("UPDATE quote_approval_links SET status='REVOGADO' WHERE work_order_id=? AND status='ATIVO'",[id]);
      await tx.run(
