@@ -30,7 +30,7 @@
 ## Regra nacional de 01/11/2026 — NFS-e de ME/EPP do Simples
 - Para **competência a partir de 01/11/2026**, ME/EPP optantes pelo Simples Nacional emitem NFS-e pelo **Emissor Nacional (web ou API)**, mesmo que a prefeitura mantenha plataforma municipal. A regra não é baseada só em cidade ou na data de envio. Documentação oficial publicada em 29/10/2026: https://www.gov.br/nfse/pt-br/noticias/nfs-e-informa-diretrizes-sobre-a-obrigatoriedade-da-emissao-da-nfs-e-nacional-para-optantes-do-simples-nacional/
 - Competências anteriores podem obedecer à via municipal conforme a regra temporal e o município. **Nunca converter automaticamente competências ou emitir por um provedor não confirmado.**
-- O contrato da NFS-e deve selecionar a via com base em `municipio_ibge + regime_tributario + data_competencia` e validações cadastrais. A existência deste catálogo **não implementa esse roteamento**.
+- O roteador NFS-e no servidor seleciona o canal com base em `municipio_ibge + regime_tributario + data_competencia`; configurações desconhecidas ficam bloqueadas e só emissores locais com canal declarado podem transmitir.
 
 ## Evidências de municípios-polo (05/11/2026)
 | Cidade | Código IBGE | NFS-e — fonte e condição |
