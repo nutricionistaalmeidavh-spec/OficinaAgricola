@@ -126,11 +126,27 @@ async function fiscalTaxReviewModal(documentId){
     '<p class="muted">Quantidade: '+safe(line.quantity)+
     ' · Valor: '+money(line.totalCents)+'</p>'+
     field('NCM (8 dígitos)','ncm'+index)+field('CFOP (4 dígitos)','cfop'+index)+
-    field('Origem da mercadoria (0-8)','origin'+index,'0')+
+    field('Origem da mercadoria (0-8)','origin'+index)+
     field(settings.tax_regime==='SIMPLES'||settings.tax_regime==='MEI'
        ?'CSOSN (ex.: 102)':'CST ICMS','icms'+index)+
     field('CST PIS','pis'+index)+field('CST COFINS','cofins'+index)+
-    field('Unidade comercial','unit'+index,'UN')+'</div>'
+    field('Unidade comercial','unit'+index,'UN')+
+    '<details><summary>Base e alíquotas de ICMS, PIS e COFINS (quando tributados)</summary>'+
+    '<p class="muted">Informe bases e alíquotas revisadas. O sistema calcula os valores, sem presumir impostos.</p>'+
+    field('Base ICMS (R$)','icmsBase'+index,'',false)+
+    field('Alíquota ICMS (%)','icmsRate'+index,'',false)+
+    field('Base PIS (R$)','pisBase'+index,'',false)+
+    field('Alíquota PIS (%)','pisRate'+index,'',false)+
+    field('Base COFINS (R$)','cofinsBase'+index,'',false)+
+    field('Alíquota COFINS (%)','cofinsRate'+index,'',false)+'</details>'+
+    '<details><summary>IBS/CBS — reforma tributária (quando aplicável)</summary>'+
+    '<p class="muted">Somente CST 000 (tributação regular) é calculado aqui. Benefícios, redução, monofasia e diferimento exigem revisão específica.</p>'+
+    field('CST IBS/CBS (3 dígitos)','ibsCst'+index,'',false)+
+    field('cClassTrib (6 dígitos)','ibsClass'+index,'',false)+
+    field('Base IBS/CBS (R$)','ibsBase'+index,'',false)+
+    field('Alíquota IBS UF (%)','ibsUfRate'+index,'',false)+
+    field('Alíquota IBS municipal (%)','ibsMunRate'+index,'',false)+
+    field('Alíquota CBS (%)','cbsRate'+index,'',false)+'</details></div>'
   ).join('');
   showModal('Revisão tributária NF-e',
     '<form class="form-stack"><p class="muted">As classificações devem corresponder à operação e às orientações contábeis. Valores e produtos vêm da OS e não são editáveis aqui. Homologação não tem valor fiscal.</p>'+
@@ -145,6 +161,18 @@ async function fiscalTaxReviewModal(documentId){
       const v=formObj(form);
       const digits=x=>String(x??'').replace(/\D/g,'');
       const fullMoney=x=>(x/100).toFixed(2);
+      const decimal=x=>String(x??'').trim().replace(',','.');
+      const taxAmount=(base,rate)=>{
+        const cents=Math.round(Number(decimal(base))*100),percentage=Number(decimal(rate));
+        if(!Number.isFinite(cents)||!Number.isFinite(percentage)||cents<0||percentage<0||percentage>100)
+          throw Error('Base ou alíquota tributária inválida');
+        return (Math.round(cents*percentage/100)/100).toFixed(2);
+      };
+      const taxFields=(prefix,index,rateKey,valueKey)=>{
+        const base=decimal(v[prefix+'Base'+index]),rate=decimal(v[prefix+'Rate'+index]);
+        return base||rate?{vBC:base,[rateKey]:rate,
+          [valueKey]:base&&rate?taxAmount(base,rate):''}:{};
+      };
       const totals={gross:lines.reduce((s,l)=>s+Number(l.subtotalCents),0),
         discount:lines.reduce((s,l)=>s+Number(l.discountCents),0)};
       const sections={
@@ -176,9 +204,29 @@ async function fiscalTaxReviewModal(documentId){
           CFOP:digits(v['cfop'+index]),uCom:v['unit'+index]};
         sections['ICMS'+suffix]={orig:v['origin'+index],
           ...(['MEI','SIMPLES'].includes(settings.tax_regime)
-           ?{CSOSN:v['icms'+index]}:{CST:v['icms'+index]})};
-        sections['PIS'+suffix]={CST:v['pis'+index]};
-        sections['COFINS'+suffix]={CST:v['cofins'+index]};
+           ?{CSOSN:v['icms'+index]}:{CST:v['icms'+index]}),
+          ...taxFields('icms',index,'pICMS','vICMS')};
+        sections['PIS'+suffix]={CST:v['pis'+index],
+          ...taxFields('pis',index,'pPIS','vPIS')};
+        sections['COFINS'+suffix]={CST:v['cofins'+index],
+          ...taxFields('cofins',index,'pCOFINS','vCOFINS')};
+        const ibsCst=String(v['ibsCst'+index]||'').trim(),
+          ibsClass=String(v['ibsClass'+index]||'').trim(),
+          ibsBase=decimal(v['ibsBase'+index]);
+        const ufRate=decimal(v['ibsUfRate'+index]),
+          munRate=decimal(v['ibsMunRate'+index]),
+          cbsRate=decimal(v['cbsRate'+index]);
+        if([ibsCst,ibsClass,ibsBase,ufRate,munRate,cbsRate].some(Boolean)){
+          if(![ibsCst,ibsClass,ibsBase,ufRate,munRate,cbsRate].every(Boolean))
+            throw Error('IBS/CBS do item '+(index+1)+' incompleto');
+          const ufValue=taxAmount(ibsBase,ufRate),munValue=taxAmount(ibsBase,munRate);
+          sections['IBSCBS'+suffix]={CST:ibsCst,cClassTrib:ibsClass};
+          sections['gIBSCBS'+suffix]={vBC:ibsBase,vIBS:
+            (Number(ufValue)+Number(munValue)).toFixed(2)};
+          sections['gIBSUF'+suffix]={pIBSUF:ufRate,vIBSUF:ufValue};
+          sections['gIBSMun'+suffix]={pIBSMun:munRate,vIBSMun:munValue};
+          sections['gCBS'+suffix]={pCBS:cbsRate,vCBS:taxAmount(ibsBase,cbsRate)};
+        }
       });
       await api('/api/fiscal/'+documentId+'/review',{method:'POST',body:{sections}});
       toast('Revisão tributária registrada. Teste a NF-e em homologação antes de produção.');
