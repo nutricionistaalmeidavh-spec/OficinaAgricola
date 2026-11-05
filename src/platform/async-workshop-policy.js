@@ -1,3 +1,4 @@
+import {mappedNativeRoles} from './native-api-route-map.js';
 // Explicit permission boundary for the native PostgreSQL/D1 tenant API.
 // The service Bearer token authenticates the gateway, never the end user.
 const ALL=['ADMIN','ATENDIMENTO','TECNICO','FINANCEIRO'];
@@ -17,6 +18,8 @@ export function requiredNativeRoles(method,path){
  const verb=String(method||'').toUpperCase();
  const route=String(path||'');
  if(serviceOnlyNativeRoute(route))return [];
+ const mapped=mappedNativeRoles(verb,route);
+ if(mapped)return mapped;
  if(route==='/v1/company'&&verb!=='GET')return ADMIN;
  if(route==='/v1/fiscal/onboarding'&&verb==='GET')return FIN;
  if(/^\/v1\/fiscal\/(?:onboarding|certificate(?:\/a3)?|certificates|diagnose)$/.test(route))return ADMIN;

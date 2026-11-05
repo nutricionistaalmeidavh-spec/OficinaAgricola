@@ -415,7 +415,20 @@ function showLogin(){
   $('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');
   $('#setupForm').classList.add('hidden');$('#loginForm').classList.remove('hidden');
 }
-function showApp(){$('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');$('#userName').textContent=state.user.name;$('#userRole').textContent=userRoleLabel(state.user.role);$('#avatar').textContent=state.user.name[0]?.toUpperCase()||'A';const fiscalLink=$('#nav [data-page="fiscal"]');if(fiscalLink)fiscalLink.hidden=!['ADMIN','FINANCEIRO'].includes(state.user.role);const mobileFiscalLink=$('#mobileMorePanel [data-mobile-page="fiscal"]');if(mobileFiscalLink)mobileFiscalLink.hidden=!['ADMIN','FINANCEIRO'].includes(state.user.role)}
+function canViewModule(page){
+ return Boolean(window.OficinaRolePermissions?.canViewPage(state.user?.role,page));
+}
+function showApp(){
+ $('#loginView').classList.add('hidden');
+ $('#appView').classList.remove('hidden');
+ $('#userName').textContent=state.user.name;
+ $('#userRole').textContent=userRoleLabel(state.user.role);
+ $('#avatar').textContent=state.user.name[0]?.toUpperCase()||'A';
+ for(const button of document.querySelectorAll('#nav [data-page],#mobileMorePanel [data-mobile-page]')){
+  const page=button.dataset.page||button.dataset.mobilePage;
+  button.hidden=!canViewModule(page);
+ }
+}
 function logout(){
   if(modalSession)closeModal();
   state.pageController?.abort();state.pageEpoch++;state.pageReady=false;
@@ -456,6 +469,7 @@ async function refreshCurrentPage(){
   finally{refreshPromise=null;refreshQueued=false}
 }
 async function navigate(page,{force=false}={}){
+ if(!canViewModule(page)){toast('Seu perfil não tem acesso a este módulo.',true);return;}
   if(page!==state.page&&!allowLeaveWorkshop())return;
   $('#mobileMorePanel')?.classList.add('hidden');
   $('#mobileMoreBtn')?.setAttribute?.('aria-expanded','false');

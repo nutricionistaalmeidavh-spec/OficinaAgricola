@@ -95,8 +95,8 @@ const ROUTES=[
  'POST /api/payment-intents /v1/payment-intents FIN',
  'GET /api/payment-intents/:intentId /v1/payment-intents/:intentId FIN',
  'POST /api/payment-intents/:intentId/sync /v1/payment-intents/:intentId/sync FIN',
- 'GET /api/work-orders/:id/payment /v1/orders/:id/payment ALL',
- 'GET /api/work-orders/:id/receipts /v1/orders/:id/receipts ALL',
+ 'GET /api/work-orders/:id/payment /v1/orders/:id/payment FIN',
+ 'GET /api/work-orders/:id/receipts /v1/orders/:id/receipts FIN',
  'POST /api/work-orders/:id/receipts /v1/payments FIN receipt',
  'POST /api/work-orders/:id/receipts/:receiptId/reverse /v1/orders/:id/receipts/:receiptId/reverse FIN reverseReceipt',
  'GET /api/expenses /v1/expenses FIN',
@@ -158,7 +158,7 @@ const definitions=ROUTES.map(line=>{
  const names=[];
  const expression=new RegExp('^'+legacy.replace(/:([A-Za-z]+)/g,(_,name)=>{
   names.push(name);
-  return name==='plate'?'([A-Z0-9-]{1,16})':['intentId','planId','installmentId','entryId'].includes(name)?'([a-f0-9]{32})':'([1-9][0-9]*)';
+  return name==='plate'?'([A-Z0-9-]{1,16})':['intentId','planId','installmentId','entryId','refundId'].includes(name)?'([a-f0-9]{32})':'([1-9][0-9]*)';
  })+'$');
  return Object.freeze({method,legacy,native,roles:ROLES[role],transform,names,expression});
 });
@@ -194,3 +194,25 @@ export function mapLegacyNativeRoute(method,path){
  return null;
 }
 export const nativeRouteCoverage=Object.freeze(definitions.map(x=>x.method+' '+x.legacy));
+
+/**
+ * The PostgreSQL gateway and the private native handler use the same reviewed
+ * endpoint permissions. A native-only endpoint can still have its own policy.
+ * Do not widen a role in one boundary without updating the gateway allowlist.
+ */
+const nativeDefinitions=definitions.map(spec=>Object.freeze({
+ method:spec.method,roles:spec.roles,
+ expression:new RegExp('^'+spec.native.replace(/:([A-Za-z]+)/g,(_,name)=>
+  name==='plate'?'([A-Z0-9-]{1,16})':
+  ['intentId','planId','installmentId','entryId','refundId'].includes(name)?
+    '([a-f0-9]{32})':'([1-9][0-9]*)')+'$')
+}));
+export function mappedNativeRoles(method,path){
+ if(typeof method!=='string'||typeof path!=='string'||
+    !path.startsWith('/v1/')||path.includes('%')||path.includes('\\')||
+    path.includes('//'))return null;
+ const verb=method.toUpperCase();
+ for(const spec of nativeDefinitions)
+  if(spec.method===verb&&spec.expression.test(path))return spec.roles;
+ return null;
+}
