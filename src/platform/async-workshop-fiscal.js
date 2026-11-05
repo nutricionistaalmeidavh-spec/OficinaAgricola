@@ -95,15 +95,17 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
  }
  async function saveFiscalTaxReview(documentId,input={}){
    const document=await getFiscalDocument(documentId);
-   if(!['NFE','NFCE'].includes(document.kind)||document.status!=='RASCUNHO')
-     fail('Somente rascunho NF-e/NFC-e permite revisar tributação',409);
+   if(!['NFE','NFCE','NFSE'].includes(document.kind)||document.status!=='RASCUNHO')
+     fail('Somente rascunho fiscal permite revisar tributação',409);
    const settings=await getFiscalSettings();
    if(!settings.enabled||document.environment!==settings.environment)
      fail('Cadastro fiscal/ambiente divergente do documento',409);
    if(!provider||typeof provider.saveTaxReview!=='function')
      fail('Revisão tributária exige ACBr local configurado',503);
    const result=await provider.saveTaxReview({
-     document,issuer:issuerFrom(settings),sections:input.sections
+     document,issuer:issuerFrom(settings),sections:input.sections,
+     municipalityIbge:input.municipalityIbge,providerCode:input.providerCode,
+     reviewerConfirmed:input.reviewerConfirmed
    });
    await port.run(`INSERT INTO fiscal_events(
      id,document_id,event_type,details_json,created_at
