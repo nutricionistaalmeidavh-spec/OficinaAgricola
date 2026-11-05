@@ -130,6 +130,7 @@ function fiscalProviderForUnit(unit){
     cancel:service('cancel'),consultCancellation:service('consultCancellation'),
     prepareCancellation:service('prepareCancellation'),
     saveNationalDps:args=>national.saveNationalDps(args),
+    prepareAutomaticNationalDps:args=>national.prepareAutomaticNationalDps(args),
     nationalDpsStatus:args=>national.nationalDpsStatus(args)
   });
 }
