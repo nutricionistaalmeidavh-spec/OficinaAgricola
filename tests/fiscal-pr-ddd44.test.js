@@ -50,7 +50,8 @@ test('tela fiscal usa seletores de coleção nos eventos, mesmo sem documentos',
  for(const name of ['data-nfse-competence','data-fiscal-details','data-fiscal-origin']){
    const bind=source.split('\n').filter(line=>line.includes('['+name+']')&&line.includes('.forEach('));
    assert.ok(bind.length>0,'handler ausente: '+name);
-   assert.ok(bind.every(line=>line.includes("$$('["+name+"]')")),
+   const expectedPrefix="$$('["+name+"]'";
+   assert.ok(bind.every(line=>line.includes(expectedPrefix)),
      'os handlers devem utilizar seletor de coleção: '+name);
  }
 });
