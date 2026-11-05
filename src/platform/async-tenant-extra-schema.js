@@ -2,7 +2,15 @@
 // Extracted from src/db.js, src/assistencia-schema.js, src/services/market-parity.js,
 // and fiscal settings. Immutable DDL; PostgreSQL is translated in migrations.
 // Existing tables are never silently dropped or overwritten.
+export const ONBOARDING_TABLE_DDL = `CREATE TABLE IF NOT EXISTS workshop_onboarding_state (
+  id INTEGER PRIMARY KEY CHECK(id=1),
+  skipped_json TEXT NOT NULL DEFAULT '[]',
+  confirmed_json TEXT NOT NULL DEFAULT '[]',
+  finished_at TEXT,
+  updated_at TEXT NOT NULL
+)`;
 export const ADDITIONAL_TENANT_TABLES = Object.freeze([
+  ONBOARDING_TABLE_DDL,
   "CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY, applied_at TEXT NOT NULL)",
   "CREATE TABLE IF NOT EXISTS company_settings (\n      id INTEGER PRIMARY KEY CHECK (id = 1),\n      name TEXT NOT NULL DEFAULT 'ArtiSys Oficina',\n      document TEXT NOT NULL DEFAULT '', phone TEXT NOT NULL DEFAULT '',\n      email TEXT NOT NULL DEFAULT '', address TEXT NOT NULL DEFAULT '',\n      updated_at TEXT NOT NULL\n    ,\n service_profile TEXT NOT NULL DEFAULT 'MISTA' CHECK(service_profile IN ('MISTA','AUTOMOTIVA','AGRICOLA'))\n)",
   "CREATE TABLE IF NOT EXISTS users (\n      id INTEGER PRIMARY KEY AUTOINCREMENT,\n      username TEXT NOT NULL UNIQUE COLLATE NOCASE,\n      password_hash TEXT NOT NULL,\n      name TEXT NOT NULL,\n      role TEXT NOT NULL CHECK(role IN ('ADMIN','ATENDIMENTO','TECNICO','FINANCEIRO')),\n      active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),\n      created_at TEXT NOT NULL, updated_at TEXT NOT NULL\n    )",
