@@ -70,7 +70,7 @@ async function renderSettings(){
   const f=$('#companyForm');
   if(isAdmin)f.onsubmit=async e=>{e.preventDefault();if(state.pageSaving)return;state.pageSaving=true;const button=$('button[type=submit]',f);button.disabled=true;try{await api('/api/company',{method:'PATCH',body:formObj(new FormData(f))});state.pageDirty=false;toast('Empresa atualizada');await refreshCurrentPage()}catch(error){toast(error.message,true)}finally{state.pageSaving=false;button.disabled=false}};
   const nu=$('#newUser');if(nu)nu.onclick=userModal;
-  if(isAdmin)$('[data-user-action]',$('#settings-users')).forEach(button=>{
+  if(isAdmin)document.querySelectorAll('#settings-users [data-user-action]').forEach(button=>{
     const user=users.find(item=>Number(item.id)===Number(button.dataset.userId));
     if(!user)return;
     button.onclick=()=>{

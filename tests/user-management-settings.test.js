@@ -44,4 +44,5 @@ test('settings exposes secure staff management actions',()=>{
  const s=readFileSync('public/app-admin.js','utf8');
  assert.match(s,/data-user-action/);assert.match(s,/Redefinir senha/);
  assert.match(s,/Desativar|Reativar/);assert.match(s,/method:'PATCH'/);
+ assert.match(s,/querySelectorAll\('#settings-users \[data-user-action\]'\)\.forEach/);
 });
