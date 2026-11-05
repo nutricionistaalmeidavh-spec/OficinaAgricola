@@ -1,12 +1,14 @@
 // Evidência fiscal canônica por unidade. Não há autorização gerada por checkbox,
 // ping da SEFAZ ou teste simulado. A prova só nasce do retorno do ACBr local.
 import {createHash} from 'node:crypto';
+import {validNationalNfseReceipt} from './nfse-national-evidence.js';
 
 const digest=value=>createHash('sha256').update(value).digest('hex');
 const clean=value=>String(value??'').trim();
 const digits=value=>clean(value).replace(/\D/g,'');
 const validDigest=value=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);
 const supportedModels=['NFE','NFCE'];
+const allModels=['NFE','NFCE','NFSE'];
 
 export function issuerEvidenceDigest(settings={}){
   const identity={
