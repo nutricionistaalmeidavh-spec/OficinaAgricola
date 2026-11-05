@@ -27,7 +27,11 @@ export function setFiscalSettings(db,input={}){
     const stateRegistration=input.stateRegistration===undefined?old.state_registration:String(input.stateRegistration).trim().slice(0,40);
     const municipalRegistration=input.municipalRegistration===undefined?old.municipal_registration:String(input.municipalRegistration).trim().slice(0,40);
     const environment=input.environment===undefined?old.environment:String(input.environment).trim().toUpperCase();
-    const enabled=input.enabled===undefined?Boolean(old.enabled):input.enabled===true;
+    // O cadastro válido habilita homologação automaticamente. `enabled` é
+    // apenas coluna legada: não existe feature flag global para o fiscal.
+    const configured=validCnpj(issuerCnpj)&&STATES.has(issuerUf)&&
+      /^\\d{7}$/.test(municipalityIbge)&&REGIMES.has(taxRegime);
+    const enabled=configured;
     const productionConfirmed=input.productionConfirmed===undefined?Boolean(old.production_confirmed):input.productionConfirmed===true;
     if(issuerCnpj&&!validCnpj(issuerCnpj))throw new Error('CNPJ do emissor inválido');
     if(issuerUf&&!STATES.has(issuerUf))throw new Error('UF do emissor inválida');
