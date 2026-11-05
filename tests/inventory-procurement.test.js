@@ -9,6 +9,10 @@ import {migrateInventoryProcurement} from '../src/platform/inventory-procurement
 async function setup(){
  const db=openDatabase(':memory:');
  migrate(db);migrateAssistencia(db);
+ const now=new Date().toISOString();
+ for(const id of [11,17])
+  db.prepare('INSERT INTO users(id,username,password_hash,name,role,created_at,updated_at) VALUES(?,?,?,?,?,?,?)')
+   .run(id,'test-usuario-'+id,'teste-sem-login','Operador QA '+id,'ADMIN',now,now);
  const port=createCommonDataAdapter({engine:'sqlite',db});
  await migrateInventoryProcurement(port);
  const service=createAsyncWorkshopServices(port);
