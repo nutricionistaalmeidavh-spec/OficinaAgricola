@@ -215,12 +215,22 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
    }
    const environment=clean(result.environment),accessKey=clean(result.accessKey),
      protocol=clean(result.protocol),receiptXml=clean(result.xml);
+   // ACBrLib NFE_Cancelar pode retornar XML vazio mesmo após cStat=101.
+   // Aceitar nesse caso somente prova estruturada do retorno oficial, nunca
+   // sucesso genérico de solicitação ou corpo arbitrário do navegador.
+   const proof=result?.officialReceipt;
+   const validProof=proof&&proof.cStat===101&&clean(proof.receivedAt).length>=10&&
+     clean(proof.accessKey)===accessKey&&clean(proof.protocol)===protocol&&
+     clean(proof.environment)===environment;
    if(environment!==doc.environment||accessKey!==doc.access_key||
-       !protocol||!receiptXml.startsWith('<')||receiptXml.length>4*1024*1024)
+       !protocol||receiptXml.length>4*1024*1024||
+       (!receiptXml.startsWith('<')&&!validProof))
      fail('Comprovante de cancelamento divergente ou incompleto',409);
    const at=now();
    const receipt={operation:'CANCEL',status:'CANCELADA',provider:providerName,
-     environment,accessKey,cancellationProtocol:protocol,cancellationXml:receiptXml};
+     environment,accessKey,cancellationProtocol:protocol,
+     cancellationXml:receiptXml||null,
+     ...(validProof?{officialReceipt:proof}:{})};
    const update={sql:`UPDATE fiscal_documents
      SET status='CANCELADA',response_json=?,last_error='',updated_at=?
      WHERE id=? AND status='INDETERMINADO' AND attempt_id=?`,
