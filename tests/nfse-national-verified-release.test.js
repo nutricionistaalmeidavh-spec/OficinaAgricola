@@ -27,6 +27,9 @@ test('o mesmo A1 e cadastro, após prova real, habilita somente NFS-e',()=>{
  certificate:{configured:true,certificateType:'A1'},certificateIdentity:'a'.repeat(64),
  providerName:'sefin-nacional-direta',providerReady:true,proofs:[valid],...extra});
  assert.equal(check().models.NFSE.productionReady,true);
+ assert.equal(check({providerName:'acbrlib-local',providerNames:{NFSE:'sefin-nacional-direta'}}).models.NFSE.productionReady,true);
+ assert.equal(check({providerName:'acbrlib-local'}).models.NFSE.productionReady,false);
+
  assert.equal(check().models.NFE.productionReady,false);
  assert.equal(check().models.NFCE.productionReady,false);
  assert.equal(check({proofs:[]}).models.NFSE.productionReady,false);
