@@ -133,6 +133,37 @@ export function compileReviewedFiscalIni({document,issuer,review,catalog=loadCon
  sections.Total.vProd=cents(gross);
  sections.Total.vDesc=cents(discount);
  sections.Total.vNF=cents(net);
+ // Totais obrigatórios IBS/CBS: sempre derivados dos itens validados e congelados.
+ const fiscalSuffixes=snapshot.lines.map((_,i)=>String(i+1).padStart(3,'0'))
+   .filter(id=>sections['IBSCBS'+id]);
+ if(fiscalSuffixes.length){
+   const sum=(prefix,key)=>fiscalSuffixes.reduce((total,id)=>{
+     const group=sections[prefix+id];
+     if(!group)fail('Grupo tributário IBS/CBS ausente: '+prefix+id);
+     return total+(group[key]===undefined?0:money(group[key]));
+   },0);
+   const format=c=>cents(c);
+   const ibsUf=sum('gIBSUF','vIBSUF'),ibsMun=sum('gIBSMun','vIBSMun'),
+     ibs=ibsUf+ibsMun,cbs=sum('gCBS','vCBS');
+   const grand={
+     IBSCBSTot:{vBCIBSCBS:format(sum('gIBSCBS','vBC'))},
+     gIBS:{vIBS:format(ibs)},
+     gIBSUFTot:{vIBSUF:format(ibsUf)},
+     gIBSMunTot:{vIBSMun:format(ibsMun)},
+     gCBSTot:{vCBS:format(cbs)}
+   };
+   for(const [prefix,section] of [
+     ['gIBSUF','gIBSUFTot'],['gIBSMun','gIBSMunTot'],['gCBS','gCBSTot']
+   ]){
+     if(fiscalSuffixes.some(id=>sections[prefix+id].vDif!==undefined))
+       grand[section].vDif=format(sum(prefix,'vDif'));
+   }
+   for(const [name,expected] of Object.entries(grand)){
+     if(sections[name]&&JSON.stringify(sections[name])!==JSON.stringify(expected))
+       fail('Total IBS/CBS foi informado manualmente e diverge do cálculo');
+     sections[name]=expected;
+   }
+ }
  for(const [section,fields] of Object.entries(sections)){
    if(!/^[A-Za-z][A-Za-z0-9_]{0,55}$/.test(section)||
        !fields||typeof fields!=='object'||Array.isArray(fields))
