@@ -55,7 +55,9 @@ jobs:
           python3 -m py_compile src/platform/acbrlib-worker.py src/platform/diagnostic-worker.py
           python3 -m unittest discover -s tests/python -p 'test_*.py'
       - name: Unit tests and fiscal regression
-        run: npm test
+        run: |
+          node --test tests/fiscal-ibs-guided-main.test.js tests/fiscal-reviewed-provider.test.js tests/fiscal-onboarding-ui.test.js
+          npm test
       - name: Build and canonical fiscal catalogue in dist
         run: |
           npm run build
