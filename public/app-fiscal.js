@@ -180,7 +180,7 @@ async function fiscalTaxProfilesModal(){
   kind.onchange=update;
   update();
   const form=$('#modalBody form');
-  $('[data-tax-edit]').forEach(button=>button.onclick=()=>{
+  $$('[data-tax-edit]').forEach(button=>button.onclick=()=>{
     const selected=profiles.find(p=>p.id===button.dataset.taxEdit);
     if(!selected||!form)return;
     for(const [key,value] of Object.entries(selected)){
