@@ -84,6 +84,26 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
      fail('Diagnóstico fiscal requer ACBr local configurado',503);
    return provider.diagnose({settings});
  }
+ async function saveFiscalTaxReview(documentId,input={}){
+   const document=await getFiscalDocument(documentId);
+   if(document.kind!=='NFE'||document.status!=='RASCUNHO')
+     fail('Somente rascunho NF-e permite revisar tributação',409);
+   const settings=await getFiscalSettings();
+   if(!settings.enabled||document.environment!==settings.environment)
+     fail('Cadastro fiscal/ambiente divergente do documento',409);
+   if(!provider||typeof provider.saveTaxReview!=='function')
+     fail('Revisão tributária exige ACBr local configurado',503);
+   const result=await provider.saveTaxReview({
+     document,issuer:issuerFrom(settings),sections:input.sections
+   });
+   await port.run(`INSERT INTO fiscal_events(
+     id,document_id,event_type,details_json,created_at
+   ) VALUES(?,?,?, ?,?)`,[
+     nextId(),document.id,'REVISAO_TRIBUTARIA',
+     JSON.stringify({reviewHash:result.reviewHash,environment:document.environment}),now()
+   ]);
+   return {reviewed:true,reviewHash:result.reviewHash};
+ }
  async function getFiscalDocument(documentId){
    const row=await port.first('SELECT * FROM fiscal_documents WHERE id=?',[id(documentId)]);
    if(!row)fail('Documento fiscal não encontrado',404);
@@ -331,7 +351,7 @@ export function createAsyncWorkshopFiscal(port,{provider=null}={}){
      :applyResult(doc.id,doc.attempt_id,result,clean(provider.name)||'local');
  }
  return Object.freeze({getFiscalSettings,setFiscalSettings,getFiscalOnboardingStatus,
-   installFiscalCertificate,diagnoseFiscal,getFiscalDocument,
+   installFiscalCertificate,diagnoseFiscal,saveFiscalTaxReview,getFiscalDocument,
    getFiscalEvents,listFiscalDocuments,submitFiscalDocument,reconcileFiscalDocument,
    cancelFiscalDocument,getFiscalPdf});
 }
