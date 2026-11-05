@@ -176,8 +176,8 @@ function drawQr(ops,key){
  const url='https://www.nfse.gov.br/ConsultaPublica/?tpc=1&chave='+key;
  const qr=qrcode(0,'M');qr.addData(url,'Byte');qr.make();
  // Coordenadas normativas: 17,48cm x 1,67cm (origem no topo esquerdo),
- // QR com lado >=1,52cm; usar 2,22cm para leitura confiável em A4.
- const modules=qr.getModuleCount(),quiet=4,side=63,
+ // QR com lado >=1,52cm; usar 1,59cm para caber na identificação A4.
+ const modules=qr.getModuleCount(),quiet=4,side=45,
    unit=side/(modules+quiet*2),x=495.50,top=47.34;
  ops.push('1 1 1 rg '+fmt(x)+' '+fmt(HEIGHT-top-side)+' '+fmt(side)+' '+fmt(side)+' re f');
  ops.push('0 0 0 rg');
@@ -224,9 +224,9 @@ export function renderNationalDanfse({xml,accessKey,environment,issuerCnpj,logoP
  p.group('Situação da NFS-e',156,105,data.status,142,ident);
  p.group('Finalidade',301,105,data.purpose,144,ident);
  const url=drawQr(p.ops,data.key);
- p.text('A autenticidade desta NFS-e pode ser',451,112,{size:6,max:61,width:132});
- p.text('verificada pela leitura deste código QR ou',451,120,{size:6,max:61,width:132});
- p.text('pela consulta da chave no portal da NFS-e',451,128,{size:6,max:61,width:132});
+ p.text('A autenticidade desta NFS-e pode ser',451,96,{size:6,max:61,width:132});
+ p.text('verificada pela leitura deste código QR ou',451,104,{size:6,max:61,width:132});
+ p.text('pela consulta da chave no portal da NFS-e',451,112,{size:6,max:61,width:132});
  p.line(8.5,123,586.8,123);
  p.block('Prestador / Fornecedor',124,data.issuer,73);
  const tax=data.issuer.tax;
