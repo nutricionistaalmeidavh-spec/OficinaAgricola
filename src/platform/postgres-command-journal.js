@@ -6,12 +6,13 @@ import {createHash} from 'node:crypto';
 // duplicate sales, payments or stock in a network-failure replay.
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 const identifier=value=>typeof value==='string'&&/^[A-Za-z0-9_:.-]{3,128}$/.test(value);
-const safeCreate=/^\/api\/(?:customers|machines|work-orders|parts|services|schedule|expenses|inventory\/movements|sales|cash\/open|cash\/current\/movements|cash\/current\/close)$/;
+const safeCreate=/^\/api\/(?:customers|machines|work-orders|parts|services|schedule|expenses|inventory\/movements|suppliers|purchases\/orders|sales|cash\/open|cash\/current\/movements|cash\/current\/close)$/;
+const safePurchaseReceive=/^\/api\/purchases\/orders\/[1-9][0-9]*\/receipts$/;
 const safeLinked=/^\/api\/work-orders\/[1-9][0-9]*\/(?:parts|receipts|checklists)$/;
 const safeUpdate=/^\/api\/(?:customers|machines|parts|services|schedule|expenses|company|work-orders)(?:\/[1-9][0-9]*)?$/;
 export function journalEligible(method,path){
  const verb=String(method??'').toUpperCase();
- if(verb==='POST')return safeCreate.test(path)||safeLinked.test(path);
+ if(verb==='POST')return safeCreate.test(path)||safeLinked.test(path)||safePurchaseReceive.test(path);
  if(verb==='PATCH'||verb==='PUT')
    return safeUpdate.test(path)||verb==='PUT'&&/^\/api\/work-orders\/[1-9][0-9]*\/quote$/.test(path);
  return false;
