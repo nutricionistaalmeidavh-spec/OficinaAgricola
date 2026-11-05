@@ -88,6 +88,16 @@ try{
   assert.equal(result.sales.length,1);assert.equal(Number(result.sales[0].total_cents),5900);assert.equal(Number(result.part.quantity),8);
   await screenshot('06-venda-confirmada');
   await navigate('inventory');
+  await page.locator('#stockHistory').waitFor({state:'visible',timeout:6000}).catch(async()=>{
+   const diagnostic=await page.evaluate(()=>({
+    page:state.page,role:state.user?.role,ready:state.pageReady,
+    content:document.querySelector('#content')?.textContent?.slice(0,1200),
+    modalOpen:!document.querySelector('#modal')?.classList.contains('hidden'),
+    modalDirty:modalSession?.dirty,
+    title:document.querySelector('#pageTitle')?.textContent
+   }));
+   throw Error('Falha ao abrir estoque: '+JSON.stringify(diagnostic));
+  });
   await page.locator('#stockHistory').click();
   await page.locator('#inventoryHistoryRows').getByText('PG-UI-FILTRO').first().waitFor();
   await page.locator('#inventoryHistoryType').selectOption('SAIDA_MANUAL');
