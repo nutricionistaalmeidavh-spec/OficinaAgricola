@@ -22,9 +22,13 @@ async function renderFiscal({cursor=null,loaded=[]}={}){
       : d.status==='INDETERMINADO'
         ? '<button class="btn sm" data-fiscal-check="'+d.id+'">Consultar situação</button>'
         : '';
+    const isAuthorized=['AUTORIZADA','AUTORIZADA_HOMOLOGACAO'].includes(d.status);
+    const pdf=isAuthorized?'<button class="btn sm soft" data-fiscal-pdf="'+d.id+'">DANFE/PDF</button>':'';
+    const cancel=isAuthorized&&state.user.role==='ADMIN'
+      ?'<button class="btn sm soft" data-fiscal-cancel="'+d.id+'">Cancelar nota</button>':'';
     return '<div class="list-item"><div><strong>'+esc(fiscalDisplayTitle(d))+'</strong> · '+esc(fiscalOriginTitle(d))+
       '<br><small>'+esc(d.status)+' · '+money(d.amount_cents)+'</small></div><div class="action-row">'+
-      '<button class="btn sm soft" data-fiscal-details="'+d.id+'">Histórico</button>'+actions+'</div></div>';
+      '<button class="btn sm soft" data-fiscal-details="'+d.id+'">Histórico</button>'+pdf+cancel+actions+'</div></div>';
   }).join('');
   setContent('<div class="section-head fiscal-head"><div><h2>Documentos fiscais</h2>'+
     '<span class="muted">Rascunhos, notas e protocolos das ordens de serviço e vendas</span></div>'+
@@ -40,6 +44,8 @@ async function renderFiscal({cursor=null,loaded=[]}={}){
   $$('[data-fiscal-details]').forEach(b=>b.onclick=()=>showFiscalHistory(Number(b.dataset.fiscalDetails)).catch(e=>toast(e.message,true)));
   $$('[data-fiscal-submit]').forEach(b=>b.onclick=()=>fiscalAction(Number(b.dataset.fiscalSubmit),'submit'));
   $$('[data-fiscal-check]').forEach(b=>b.onclick=()=>fiscalAction(Number(b.dataset.fiscalCheck),'reconcile'));
+  $('[data-fiscal-pdf]').forEach(button=>button.onclick=()=>downloadFiscalPdf(Number(button.dataset.fiscalPdf)).catch(e=>toast(e.message,true)));
+  $('[data-fiscal-cancel]').forEach(button=>button.onclick=()=>fiscalCancelModal(Number(button.dataset.fiscalCancel)));
    showPagedLoadMore({cursor:page.nextCursor,loaded:docs.length,total:page.total,onMore:()=>renderFiscal({cursor:page.nextCursor,loaded:docs})});
 }
 
@@ -154,6 +160,35 @@ function fiscalDraftModal(){
   void findSafe();
 }
 
+async function downloadFiscalPdf(id){
+  const bytes=await api('/api/fiscal/'+id+'/pdf',{binary:true});
+  if(bytes.length<8||bytes.length>6*1024*1024)
+    throw new Error('Emissor não retornou PDF fiscal válido');
+  const blob=new Blob([bytes],{type:'application/pdf'});
+  const url=URL.createObjectURL(blob);
+  const link=document.createElement('a');
+  link.href=url;link.download='ArtiSys-Oficina-NF-'+id+'.pdf';
+  document.body.appendChild(link);link.click();link.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function fiscalCancelModal(id){
+  showModal('Cancelar nota fiscal',
+    '<form class="form-stack">'+
+    '<p class="muted">Operação fiscal irreversível. O cancelamento depende da confirmação da SEFAZ ou prefeitura; falhas exigem consulta, nunca reenvio automático.</p>'+
+    '<label>Justificativa (15 a 255 caracteres)<textarea name="reason" minlength="15" maxlength="255" required rows="3" placeholder="Descreva o motivo real do cancelamento"></textarea></label>'+
+    '<button class="btn primary" type="submit">Solicitar cancelamento fiscal</button></form>',
+    async form=>{
+      const values=formObj(form);
+      const reason=String(values.reason||'').trim();
+      if(reason.length<15||reason.length>255)throw new Error('Informe uma justificativa de 15 a 255 caracteres.');
+      const doc=await api('/api/fiscal/'+id+'/cancel',{method:'POST',
+        body:{reason,requestId:newCommandId()}});
+      toast(doc.status==='CANCELADA'?'Cancelamento confirmado pelo fisco.':
+        'Cancelamento sem confirmação: use Consultar situação; não solicite novamente.',doc.status!=='CANCELADA');
+      await refreshCurrentPage();
+    });
+}
+
 const fiscalBusy=new Set();
 async function fiscalAction(id,action){
   const key=action+':'+id;
@@ -193,9 +228,11 @@ async function showFiscalHistory(id){
     (doc.access_key?'<p><strong>Chave:</strong> '+esc(doc.access_key)+'</p>':'')+
     (doc.protocol?'<p><strong>Protocolo:</strong> '+esc(doc.protocol)+'</p>':'')+
     (doc.fiscal_number?'<p><strong>Número/série:</strong> '+esc(doc.fiscal_number)+' / '+esc(doc.fiscal_series||'—')+'</p>':'')+
-    (['AUTORIZADA','AUTORIZADA_HOMOLOGACAO'].includes(doc.status)?'<button id="downloadFiscalXml" class="btn">Baixar XML</button>':'')+
+    (['AUTORIZADA','AUTORIZADA_HOMOLOGACAO','CANCELADA'].includes(doc.status)?'<button id="downloadFiscalXml" class="btn">Baixar XML original</button>':'')+
+    (['AUTORIZADA','AUTORIZADA_HOMOLOGACAO'].includes(doc.status)?'<button id="downloadFiscalPdf" class="btn">Baixar DANFE/DANFSe</button>':'')+
     (doc.last_error?'<p class="error">Não foi possível concluir a transmissão. Consulte a configuração fiscal e o suporte.</p>':'')+
     '<h3>Eventos</h3><div class="list">'+(rows||'<div class="empty">Nenhum evento.</div>')+'</div>');
+  if($('#downloadFiscalPdf'))$('#downloadFiscalPdf').onclick=()=>downloadFiscalPdf(id).catch(e=>toast(e.message,true));
   if($('#downloadFiscalXml'))$('#downloadFiscalXml').onclick=async()=>{
     try{
       const xml=await api('/api/fiscal/'+id+'/xml',{raw:true});
