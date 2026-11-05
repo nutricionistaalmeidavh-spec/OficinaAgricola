@@ -17,11 +17,14 @@ async function renderFiscal({cursor=null,loaded=[]}={}){
   const [page,settings]=await Promise.all([api('/api/fiscal/page?limit=50'+(cursor?'&cursor='+encodeURIComponent(cursor):'')),api('/api/fiscal/settings')]);const docs=loaded.concat(page.items);
   const cards=docs.map(d=>{
     const origin=d.origin_type==='OS'?'OS':'Venda';
-    const actions=d.status==='RASCUNHO'&&settings.enabled
+    const needsCompetence=d.kind==='NFSE'&&!fiscalSnapshot(d).nfseRoute;
+    const actions=d.status==='RASCUNHO'&&settings.enabled&&!needsCompetence
       ? '<button class="btn sm" data-fiscal-submit="'+d.id+'">Transmitir</button>'
       : d.status==='INDETERMINADO'
         ? '<button class="btn sm" data-fiscal-check="'+d.id+'">Consultar situação</button>'
         : '';
+    const revise=d.kind==='NFSE'&&d.status==='RASCUNHO'
+      ?'<button class="btn sm soft" data-nfse-competence="'+d.id+'">Ajustar competência</button>':'';
     const isAuthorized=['AUTORIZADA','AUTORIZADA_HOMOLOGACAO'].includes(d.status);
     const pdf=isAuthorized?'<button class="btn sm soft" data-fiscal-pdf="'+d.id+'">DANFE/PDF</button>':'';
     const cancel=isAuthorized&&state.user.role==='ADMIN'
@@ -32,7 +35,7 @@ async function renderFiscal({cursor=null,loaded=[]}={}){
       '<br><small>NFS-e antiga: rota e competência precisam de revisão antes de emitir</small>'):'';
     return '<div class="list-item"><div><strong>'+esc(fiscalDisplayTitle(d))+'</strong> · '+esc(fiscalOriginTitle(d))+
       '<br><small>'+esc(d.status)+' · '+money(d.amount_cents)+'</small>'+routeText+'</div><div class="action-row">'+
-      '<button class="btn sm soft" data-fiscal-details="'+d.id+'">Histórico</button>'+pdf+cancel+actions+'</div></div>';
+      '<button class="btn sm soft" data-fiscal-details="'+d.id+'">Histórico</button>'+revise+pdf+cancel+actions+'</div></div>';
   }).join('');
   setContent('<div class="section-head fiscal-head"><div><h2>Documentos fiscais</h2>'+
     '<span class="muted">Rascunhos, notas e protocolos das ordens de serviço e vendas</span></div>'+
@@ -45,7 +48,8 @@ async function renderFiscal({cursor=null,loaded=[]}={}){
     '<div class="list">'+(cards||'<div class="empty">Nenhum documento fiscal preparado.</div>')+'</div></div>');
   $('#fiscalNew').onclick=()=>fiscalDraftModal();
   if($('#fiscalSettings'))$('#fiscalSettings').onclick=()=>fiscalSettingsModal(settings);
-  $$('[data-fiscal-details]').forEach(b=>b.onclick=()=>showFiscalHistory(Number(b.dataset.fiscalDetails)).catch(e=>toast(e.message,true)));
+  $('[data-nfse-competence]').forEach(b=>b.onclick=()=>fiscalReviseCompetence(Number(b.dataset.nfseCompetence)).catch(e=>toast(e.message,true)));
+  $('[data-fiscal-details]').forEach(b=>b.onclick=()=>showFiscalHistory(Number(b.dataset.fiscalDetails)).catch(e=>toast(e.message,true)));
   $$('[data-fiscal-submit]').forEach(b=>b.onclick=()=>fiscalAction(Number(b.dataset.fiscalSubmit),'submit'));
   $$('[data-fiscal-check]').forEach(b=>b.onclick=()=>fiscalAction(Number(b.dataset.fiscalCheck),'reconcile'));
   $$('[data-fiscal-pdf]').forEach(button=>button.onclick=()=>downloadFiscalPdf(Number(button.dataset.fiscalPdf)).catch(e=>toast(e.message,true)));
@@ -204,6 +208,40 @@ function fiscalDraftModal(){
   competence.onchange=()=>{void updateNfseRoute()};
   void updateNfseRoute();
   void findSafe();
+}
+
+async function fiscalReviseCompetence(id){
+  const doc=await api('/api/fiscal/'+id);
+  if(doc.kind!=='NFSE'||doc.status!=='RASCUNHO')throw new Error('Apenas rascunhos NFS-e permitem corrigir competência.');
+  const current=fiscalSnapshot(doc).nfseRoute?.competenceDate||'';
+  showModal('Ajustar competência da NFS-e',
+    '<form class="form-stack"><p class="muted">O documento ainda não foi transmitido. A competência determina o emissor nacional ou municipal; alterar aqui preserva os itens e o histórico.</p>'+
+    '<label>Data de competência<input id="nfseReviseDate" type="date" name="competenceDate" value="'+esc(current)+'" required></label>'+
+    '<p id="nfseReviseResult" role="status" aria-live="polite" class="muted">Verificando o emissor…</p>'+
+    '<button type="submit" class="btn primary" id="nfseReviseSubmit" disabled>Salvar competência</button></form>',
+    async form=>{
+      const competenceDate=formObj(form).competenceDate;
+      await api('/api/fiscal/'+id+'/nfse/competence',{method:'POST',body:{competenceDate,requestId:newCommandId()}});
+      toast('Competência e emissor do rascunho NFS-e atualizados. Nenhuma nota foi transmitida.');
+      await refreshCurrentPage();
+    });
+  const input=$('#nfseReviseDate'),result=$('#nfseReviseResult'),submit=$('#nfseReviseSubmit');
+  let sequence=0;
+  const preview=async()=>{
+    const ticket=++sequence;submit.disabled=true;
+    if(!input.value){result.textContent='Informe uma competência para continuar.';return}
+    result.textContent='Verificando o canal de NFS-e…';
+    try{
+      const route=await api('/api/fiscal/nfse/route',{method:'POST',body:{competenceDate:input.value}});
+      if(ticket!==sequence||!result.isConnected)return;
+      const ready=route.channel!=='PENDENTE';
+      result.textContent=(ready?'Emissor '+(route.channel==='NACIONAL'?'Nacional':'Municipal')+'. ':'Configuração pendente. ')+route.reason;
+      submit.disabled=!ready;
+    }catch(error){if(ticket===sequence&&result.isConnected)
+      result.textContent='Não foi possível verificar: '+friendlyUiMessage(error.message)}
+  };
+  input.onchange=()=>{void preview()};
+  void preview();
 }
 
 async function downloadFiscalPdf(id){
