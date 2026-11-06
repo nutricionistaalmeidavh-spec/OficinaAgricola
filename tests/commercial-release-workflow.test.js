@@ -11,6 +11,8 @@ test('release gera instaladores livre e comercial distintos e verifica manifesto
  assert.match(workflow,/commercialActivation -ne \$false/);
  assert.match(workflow,/\.exe\.sha256/);
  assert.match(workflow,/gh release upload/);
+ assert.match(workflow,/api\/license\/status/);
+ assert.match(workflow,/api\/setup\/initialize/);
 });
 
 test('edição comercial não recebe atualização da edição gratuita',()=>{
