@@ -1,3 +1,4 @@
+param([switch]$Commercial)
 $ErrorActionPreference = 'Stop'
 
 Write-Host '[1/10] Instalando empacotador Electron temporariamente...'
@@ -53,6 +54,20 @@ if ($LASTEXITCODE -ne 0) { throw 'Bundle PostgreSQL 16 não foi gerado.' }
 Write-Host 'Preparando módulo fiscal nacional MIT isolado...'
 node scripts/stage-nfse-national.mjs
 if ($LASTEXITCODE -ne 0) { throw 'Bundle nacional OSS não foi gerado.' }
+
+# Licenciamento comercial é opção de empacotamento, nunca requisito do núcleo MIT.
+New-Item -ItemType Directory -Force -Path 'build' | Out-Null
+if ($Commercial) {
+  $editionJson = '{"product":"OFICINA","commercialActivation":true}'
+} else {
+  $editionJson = '{"product":"OFICINA","commercialActivation":false}'
+}
+[System.IO.File]::WriteAllText(
+  (Join-Path (Get-Location) 'build/oficina-edition.json'),
+  $editionJson,
+  [System.Text.UTF8Encoding]::new($false)
+)
+Write-Host "Edição do instalador: $(if ($Commercial) { 'COMERCIAL (ativação requerida)' } else { 'LIVRE (R$ 0)' })"
 
 Write-Host '[11/11] Gerando instalador Electron Windows x64...'
 npx electron-builder --win nsis --x64 --publish never
