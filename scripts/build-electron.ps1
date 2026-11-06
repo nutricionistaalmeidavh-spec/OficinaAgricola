@@ -1,3 +1,4 @@
+param([switch]$Commercial)
 $ErrorActionPreference = 'Stop'
 
 Write-Host '[1/10] Instalando empacotador Electron temporariamente...'
@@ -53,6 +54,14 @@ if ($LASTEXITCODE -ne 0) { throw 'Bundle PostgreSQL 16 não foi gerado.' }
 Write-Host 'Preparando módulo fiscal nacional MIT isolado...'
 node scripts/stage-nfse-national.mjs
 if ($LASTEXITCODE -ne 0) { throw 'Bundle nacional OSS não foi gerado.' }
+
+# A edição comercial só é criada por seleção explícita no builder.
+if ($Commercial) {
+  node scripts/stage-oficina-edition.mjs --commercial
+} else {
+  node scripts/stage-oficina-edition.mjs
+}
+if ($LASTEXITCODE -ne 0) { throw 'Falha ao gerar manifesto da edição do instalador.' }
 
 Write-Host '[11/11] Gerando instalador Electron Windows x64...'
 npx electron-builder --win nsis --x64 --publish never

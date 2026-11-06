@@ -28,6 +28,18 @@
       <button class="btn primary" type="submit">Entrar</button>
       <p id="loginError" class="error" role="alert" aria-live="assertive"></p>
     </form>
+    <form id="licenseForm" class="login-card hidden" autocomplete="off">
+      <div class="login-brand">
+        <div class="brand-mark">AO</div>
+        <div><small>ATIVAÇÃO COMERCIAL</small><h1>Liberar ArtiSys Oficina</h1>
+          <p>Informe o e-mail autorizado e o código de 6 dígitos fornecido pela ArtiSys. Os dados da oficina continuam locais.</p></div>
+      </div>
+      <label>E-mail da licença<input name="email" type="email" autocomplete="email" required></label>
+      <label>Código de ativação<input name="code" inputmode="numeric" maxlength="6" minlength="6" pattern="[0-9]{6}" autocomplete="one-time-code" required></label>
+      <button class="btn primary" type="submit">Ativar instalação</button>
+      <p id="licenseError" class="error" role="alert" aria-live="assertive"></p>
+      <small>Ative na máquina principal. Após a ativação, operações locais podem continuar durante indisponibilidade temporária da Central.</small>
+    </form>
     <form id="setupForm" class="login-card hidden" autocomplete="off">
       <div class="login-brand">
         <div class="brand-mark">AO</div>

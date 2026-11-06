@@ -161,6 +161,14 @@ try{
   assert.deepEqual(errors,[]);
   await writeFile(path.join(output,'summary.json'),JSON.stringify({status:'passed',engine:'postgres',viewport:viewportName,checks:['first-admin-ui','contextual-customer-machine-order','diagnosis-save-twice','sale-preview','price-conflict-no-write','sale-confirmed-stock-once','inventory-history-ui','supplier-create-ui','purchase-order-ui','partial-receipt-ui','barcode-usb-keyboard-ui','physical-stocktake-review-ui']},null,2));
 }catch(error){
+  if(page){
+    const observed=await page.evaluate(async()=>{
+      const read=async path=>{try{const r=await fetch(path);return {status:r.status,body:(await r.text()).slice(0,500)}}catch(e){return {error:String(e)}}};
+      return {forms:[...document.querySelectorAll('#loginForm,#setupForm,#licenseForm')].map(e=>({id:e.id,className:e.className,hidden:e.hidden})),
+        license:await read('/api/license/status'),setup:await read('/api/setup/status')};
+    }).catch(error=>({diagnosticError:String(error)}));
+    console.error('QA primeiro acesso:',JSON.stringify({observed,errors}));
+  }
   const diagnostic=logs.join('').split(/\r?\n/).filter(line=>line.includes('[qa-native-error]')).slice(-8);
   if(diagnostic.length)console.error('SQL QA trace:\n'+diagnostic.join('\n'));
   if(page)await screenshot('failure').catch(()=>{});
