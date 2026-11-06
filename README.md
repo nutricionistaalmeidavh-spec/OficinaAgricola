@@ -38,6 +38,13 @@ npm start
 - O build publica apenas os módulos JavaScript alcançáveis pelo gateway PostgreSQL e bootstrap Electron. Fontes SQLite antigas, necessárias para testes históricos, **não são distribuídas no instalador**.
 - CI: `npm run ci` e teste Windows NSIS de instalação limpa, primeiro administrador, login e persistência após reiniciar.
 
+## Licenciamento comercial (opcional)
+
+O núcleo MIT e self-hosted permanece gratuito e não exige ativação. Para
+instaladores comerciais ArtiSys, `OFICINA_REQUIRE_COMMERCIAL_ACTIVATION=true`
+habilita o mesmo portal de códigos do PDV ArtiSys, com licenças isoladas por produto
+(`OFICINA`). [Fluxo e limitações](docs/LICENCIAMENTO-COMERCIAL.md).
+
 ## P0 — segurança e transações
 - Vendas validam consumo agregado de peças repetidas e atualizam estoque atomicamente.
 - Vendas só finalizam com caixa aberto; cancelamento exige caixa corrente para registrar estorno sem alterar o fechamento antigo.
