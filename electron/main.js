@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, shell } from 'electron';
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { readFileSync } from 'node:fs';
+import {startDesktopUpdates} from './updater.js';
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) app.quit();
@@ -155,6 +156,7 @@ app.whenReady().then(async () => {
   app.setPath('userData', join(root, 'electron'));
   const url = await startPostgresDesktop();
   createWindow(url);
+  startDesktopUpdates({getWindow:()=>mainWindow,isCommercial:commercialEditionRequired()});
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0 && serverUrl) createWindow(serverUrl);

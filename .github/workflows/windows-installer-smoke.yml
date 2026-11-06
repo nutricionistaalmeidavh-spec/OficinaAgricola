@@ -2,6 +2,9 @@ name: Windows · Instalador limpo
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ['v*']
   pull_request:
     branches: [main]
     paths:
@@ -130,3 +133,112 @@ jobs:
       - name: Smoke PostgreSQL offline pós-instalação Windows (sem terminal do cliente)
         shell: pwsh
         run: ./scripts/smoke-postgres-portable.ps1
+      - name: Confirmar tag da main e versão do instalador
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          git fetch --depth=1 origin main
+          if ((git rev-parse HEAD) -ne (git rev-parse FETCH_HEAD)) {
+            throw 'A release deve apontar exatamente para a main validada'
+          }
+          $appVersion = node -p "JSON.parse(require('fs').readFileSync('package.json','utf8')).version"
+          if ($env:GITHUB_REF_NAME -ne "v$appVersion") {
+            throw "Tag $env:GITHUB_REF_NAME diverge do package.json ($appVersion)"
+          }
+      - name: Gerar SHA256 do instalador aprovado
+        if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem 'dist-electron/ArtiSys-Oficina-Setup-*-Windows-x64.exe' | Select-Object -First 1
+          if (-not $installer) { throw 'Instalador de release ausente' }
+          $sha256 = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$sha256  $($installer.Name)" | Set-Content -LiteralPath ($installer.FullName + '.sha256') -Encoding ascii -NoNewline
+      - name: Guardar instalador e checksum após todos os smokes
+        if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: oficina-release-${{ github.ref_name }}
+          path: |
+            dist-electron/ArtiSys-Oficina-Setup-*-Windows-x64.exe
+            dist-electron/ArtiSys-Oficina-Setup-*-Windows-x64.exe.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-verified-release:
+    name: Publicar versão verificada no GitHub Releases
+    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
+    needs: windows-clean-install
+    runs-on: windows-latest
+    permissions:
+      contents: write
+      checks: read
+    steps:
+      - name: Obter versão da main para publicar somente releases oficiais
+        uses: actions/checkout@v4
+      - name: Baixar artefatos aprovados
+        uses: actions/download-artifact@v4
+        with:
+          name: oficina-release-${{ github.ref_name }}
+          path: release
+      - name: Aguardar todos os gates CI e QA visual no mesmo commit
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          $required = @('quality','windows-nfse-bundle','visual-shell (desktop)','visual-shell (mobile)','NSIS · Windows x64 limpo')
+          $green = $false
+          for ($attempt = 1; $attempt -le 80; $attempt++) {
+            $checksJson = gh api "repos/$env:GH_REPO/commits/$env:GITHUB_SHA/check-runs?per_page=100"
+            if ($LASTEXITCODE -ne 0) { throw 'Falha ao consultar os gates no GitHub' }
+            $checks = ($checksJson | ConvertFrom-Json).check_runs
+            $pending = @()
+            foreach ($checkName in $required) {
+              $check = @($checks | Where-Object { $_.name -eq $checkName } | Sort-Object started_at -Descending | Select-Object -First 1)
+              if ($check.Count -eq 0) { $pending += $checkName; continue }
+              if ($check[0].status -eq 'completed' -and $check[0].conclusion -ne 'success') {
+                throw "Gate obrigatório falhou: $checkName ($($check[0].conclusion))"
+              }
+              if ($check[0].status -ne 'completed') { $pending += $checkName }
+            }
+            if ($pending.Count -eq 0) { $green = $true; break }
+            Write-Host "Aguardando gates: $($pending -join ', ')"
+            Start-Sleep -Seconds 15
+          }
+          if (-not $green) { throw 'Gates incompletos, release não publicada' }
+      - name: Publicar somente versão e SHA256 aprovados
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          $installer = Get-ChildItem 'release/ArtiSys-Oficina-Setup-*-Windows-x64.exe' | Select-Object -First 1
+          if (-not $installer) { throw 'Instalador não encontrado' }
+          $checksum = $installer.FullName + '.sha256'
+          if (-not (Test-Path -LiteralPath $checksum)) { throw 'SHA256 ausente' }
+          $expected = ((Get-Content -LiteralPath $checksum -Raw) -split '\s+')[0]
+          $actual = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($expected -ne $actual) { throw 'SHA256 do artefato divergente' }
+          $version = (Get-Content 'package.json' -Raw | ConvertFrom-Json).version
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'Versão deve ser SemVer estável' }
+          $tag = "v$version"
+          if ($installer.Name -ne "ArtiSys-Oficina-Setup-$version-Windows-x64.exe") {
+            throw 'Versão do instalador diverge do pacote aprovado'
+          }
+          if ($env:GITHUB_REF -like 'refs/tags/*' -and $env:GITHUB_REF_NAME -ne $tag) {
+            throw 'Tag de release diverge do package.json'
+          }
+          $existing = gh release view $tag --json tagName,isDraft 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            if (($existing | ConvertFrom-Json).isDraft) { throw 'Release existente em draft exige revisão' }
+            Write-Host "Release $tag já publicada: sem republicação"
+            exit 0
+          }
+          if ($env:GITHUB_REF -like 'refs/tags/*') {
+            gh release create $tag $installer.FullName $checksum --verify-tag --title "ArtiSys Oficina $tag" --generate-notes
+          } else {
+            $tagAlreadyExists = gh api "repos/$env:GH_REPO/git/ref/tags/$tag" 2>$null
+            if ($LASTEXITCODE -eq 0) { throw 'Tag existente sem release: verificar antes de publicar' }
+            gh release create $tag $installer.FullName $checksum --target $env:GITHUB_SHA --title "ArtiSys Oficina $tag" --generate-notes
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'Falha ao publicar GitHub Release' }
