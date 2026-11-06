@@ -59,7 +59,7 @@ function safeNativeResponse(reply){
  return new Response(reply.body,{status:reply.status===201?200:reply.status,headers});
 }
 export function createPostgresUnifiedGateway({
- registry,tenantHandlerForUnit,serviceToken,allowAdminBootstrap=false,publicOrigin=null
+ registry,tenantHandlerForUnit,serviceToken,allowAdminBootstrap=false,publicOrigin=null,licenseControl=null
 }={}){
  if(!registry||typeof registry.validateSession!=='function'||
     typeof registry.requireUnitMembership!=='function'||
@@ -75,6 +75,20 @@ export function createPostgresUnifiedGateway({
    const u=new URL(request.url),path=u.pathname,method=request.method.toUpperCase();
    if(path==='/api/health'&&method==='GET')
      return json({ok:true,engine:'postgres',operationalApiReady:true});
+   if(path==='/api/license/status'&&method==='GET')
+     return json(licenseControl?await licenseControl.status():{required:false,active:true,offline:false});
+   if(path==='/api/license/activate'&&method==='POST'){
+     if(!licenseControl?.required)fail('Licenciamento comercial não habilitado',404);
+     if(!['localhost','127.0.0.1','[::1]'].includes(u.hostname))
+       fail('Ative a instalação na máquina principal',403);
+     const data=await readPayload(request,1024);
+     try{return json(await licenseControl.activate(data));}
+     catch(error){fail(error.message||'Ativação recusada',error.status||503);}
+   }
+   if(licenseControl?.required&&!(path==='/api/setup/status'&&method==='GET')){
+     const status=await licenseControl.status();
+     if(!status.active)fail('Ativação comercial necessária. Informe e-mail e código da ArtiSys.',403);
+   }
    if(isControl(path))return control(request,options);
    if(!path.startsWith('/api/'))return json({error:'Rota não encontrada'},404);
    const approval=path.match(/^\/api\/public\/approval\/([a-f0-9]{64})$/);
