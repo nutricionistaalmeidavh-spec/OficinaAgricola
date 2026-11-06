@@ -169,8 +169,41 @@ jobs:
           if ($edition.product -ne 'OFICINA' -or $edition.commercialActivation -ne $true) {
             throw 'Instalador comercial não exige ativação'
           }
-          if (-not (Test-Path -LiteralPath (Join-Path $installDir 'ArtiSys Oficina.exe'))) {
+          $commercialApp = Join-Path $installDir 'ArtiSys Oficina.exe'
+          if (-not (Test-Path -LiteralPath $commercialApp)) {
             throw 'Executável comercial não foi instalado'
+          }
+          # Exercitar o binário real: sem código, o primeiro admin deve ser bloqueado.
+          $originalLocal = $env:LOCALAPPDATA
+          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'artisys-commercial-license-smoke'
+          $desktop = $null
+          try {
+            $desktop = Start-Process -FilePath $commercialApp -PassThru
+            $ready = $false
+            for ($attempt = 0; $attempt -lt 160; $attempt++) {
+              Start-Sleep -Milliseconds 350
+              if ($desktop.HasExited) { throw 'Oficina comercial encerrou antes de iniciar' }
+              try {
+                $health = Invoke-RestMethod 'http://127.0.0.1:3344/api/health' -TimeoutSec 1
+                if ($health.ok -and $health.engine -eq 'postgres') { $ready = $true; break }
+              } catch {}
+            }
+            if (-not $ready) { throw 'Backend comercial não respondeu' }
+            $license = Invoke-RestMethod 'http://127.0.0.1:3344/api/license/status'
+            if ($license.required -ne $true -or $license.active -ne $false) {
+              throw 'A edição comercial não solicitou ativação antes do primeiro administrador'
+            }
+            $initialize = Invoke-WebRequest 'http://127.0.0.1:3344/api/setup/initialize' -Method POST -ContentType 'application/json' -Body '{}' -SkipHttpErrorCheck
+            if ([int]$initialize.StatusCode -ne 403) {
+              throw 'O primeiro administrador não foi bloqueado sem licença comercial'
+            }
+          } finally {
+            if ($desktop -and -not $desktop.HasExited) {
+              $null = $desktop.CloseMainWindow()
+              Start-Sleep -Seconds 2
+              if (-not $desktop.HasExited) { Stop-Process -Id $desktop.Id -Force -ErrorAction SilentlyContinue }
+            }
+            $env:LOCALAPPDATA = $originalLocal
           }
       - name: Confirmar tag da main e versão do instalador
         if: startsWith(github.ref, 'refs/tags/v')
