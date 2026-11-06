@@ -16,12 +16,13 @@ A atualização é do executável instalado: **não** se deve executar `git pull
 
 ## Como publicar uma versão oficial
 
-1. Aplicar alterações na `main` com testes aprovados; atualizar os campos `version` de `package.json` e `package-lock.json` para a nova versão estável (ex.: `1.0.1`).
-2. Criar a tag exata no commit atual da `main`: `git tag v1.0.1 && git push origin v1.0.1`.
-3. O workflow `Windows · Instalador limpo` executa gates, compila binários OSS, gera NSIS, realiza os smokes de primeiro acesso e reinstalação e **somente na tag** publica o instalador e seu arquivo `.exe.sha256` no GitHub Releases.
-4. O cliente detecta automaticamente a nova versão na próxima verificação.
+1. Alterar a versão estável (`version`) em `package.json` e `package-lock.json`, enviar por PR e validar os gates antes do merge.
+2. No **push para `main`** após o merge, o workflow `Windows · Instalador limpo` compila o executável Windows NSIS e executa testes, instalação limpa e reinstalação PostgreSQL; o workflow de QA visual também roda no mesmo commit.
+3. Só depois de todos os gates `quality`, `windows-nfse-bundle`, `visual-shell (desktop)`, `visual-shell (mobile)` e `NSIS · Windows x64 limpo` aprovados, o publicador verifica o SHA256, cria a tag `vX.Y.Z` apontando para o commit aprovado e publica o executável e seu arquivo `.exe.sha256` no GitHub Releases.
+4. Se essa versão já foi publicada, o publicador não cria outra release. Para publicar alterações futuras, incremente a versão em ambos os manifestos.
+5. O cliente detecta automaticamente a nova versão na próxima verificação.
 
-Tag fora do commit atual da `main`, divergência do `package.json`, ausência do artefato, checksum divergente ou falha em qualquer gate impedem publicação. Pull requests **nunca** publicam releases.
+Tags externas ainda podem disparar a compilação, mas são recusadas quando não apontarem para a `main` atual ou não coincidirem com a versão do pacote. Arquivo ausente, SHA256 divergente, falha em testes ou QA incompleto **impedem publicação**. Pull requests **nunca** publicam releases.
 
 ## Limites e operação segura
 
