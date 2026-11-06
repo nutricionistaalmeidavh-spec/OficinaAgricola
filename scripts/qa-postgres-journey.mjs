@@ -167,6 +167,9 @@ try{
     {role:'FINANCEIRO',username:'qa-financeiro-pg',name:'Financeiro QA'}
   ];
   await page.locator('#modalClose').click();
+  // O motivo de inventário marca o modal como editado; confirmar descarte da UI.
+  const discard=page.locator('#modalDiscardPrompt [data-discard-edit]');
+  if(await discard.isVisible())await discard.click();
   await page.locator('#modal').waitFor({state:'hidden'});
   await navigate('settings');
   for(const user of qaRoles){
