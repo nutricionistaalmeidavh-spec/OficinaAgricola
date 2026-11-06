@@ -8,7 +8,18 @@ import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {existsSync} from 'node:fs';
 import {prepareNationalDpsInput} from './nfse-national-automatic.js';
+import {buildNationalCancelRequest} from './nfse-national-cancellation.js';
+import {attachNationalRtc} from './nfse-national-rtc.js';
 
+async function loadNationalSdk(){
+ try{
+  const packaged=process.resourcesPath?join(process.resourcesPath,'nfse-national',
+    'node_modules','@useinvio','nfse-sdk','dist','index.js'):null;
+  return packaged&&existsSync(packaged)
+    ?await import(pathToFileURL(packaged).href)
+    :await import('@useinvio/nfse-sdk');
+ }catch{throw Error('Módulo OSS NFS-e Nacional não disponível no instalador')}
+}
 export function createNationalNfseProvider({certificateStore,inputDir,client,danfseLogoPng}={}){
  if(!certificateStore||typeof certificateStore.withTlsIdentity!=='function')
    throw Error('NFS-e Nacional exige cofre de certificado A1 local');
@@ -34,20 +45,13 @@ export function createNationalNfseProvider({certificateStore,inputDir,client,dan
    const profile=profiles.find(x=>x.id===profileId&&x.kind==='SERVICE');
    if(!profile)throw Error('Selecione perfil tributário de serviço cadastrado nesta empresa');
    const prepared=prepareNationalDpsInput({document,issuer,profile,customer,issuance});
-   // SDK fiscal open source é opcional: carregado só quando a empresa utiliza NFS-e direta.
-   let sdk;
-   try{
-     const packaged=process.resourcesPath?join(process.resourcesPath,'nfse-national','node_modules',
-       '@useinvio','nfse-sdk','dist','index.js'):null;
-     sdk=packaged&&existsSync(packaged)
-       ?await import(pathToFileURL(packaged).href)
-       :await import('@useinvio/nfse-sdk');
-   }catch{throw Error('Módulo opcional OSS NFS-e Nacional não instalado neste servidor')}
+   const sdk=await loadNationalSdk();
    const built=sdk.buildDpsFromJson(prepared.payload);
    if(built.id!==prepared.idDps)throw Error('DPS gerada tem identificação divergente');
+   const unsigned=prepared.rtc?attachNationalRtc(built.xml,prepared.rtc):built.xml;
    const xmlSigned=await certificateStore.withTlsIdentity({cnpj:issuer.cnpj},identity=>{
      const material=sdk.loadPfxFromBuffer(identity.pfx,identity.passphrase);
-     const signed=sdk.signDps(built.xml,prepared.idDps,material);
+     const signed=sdk.signDps(unsigned,prepared.idDps,material);
      if(!sdk.verifyDps(signed,material.certPem))
        throw Error('Assinatura XMLDSig local inválida: DPS não armazenada');
      return signed;
@@ -73,6 +77,32 @@ export function createNationalNfseProvider({certificateStore,inputDir,client,dan
    const saved=dps.read({document,issuer});
    if(!saved)return {status:'INDETERMINADO',message:'DPS assinada não encontrada no backup local'};
    return api.reconcile({issuer,idDps:saved.idDps});
+  },
+  prepareCancellation:({document,issuer,reason}={})=>{
+   if(document?.kind!=='NFSE'||issuer?.cnpj!==issuerFor(document).cnpj||
+      issuer.environment!==document.environment||!document.access_key)
+     throw Error('NFS-e de cancelamento não pertence ao emissor e ambiente');
+   if(certificateStore.status().certificateType!=='A1')
+     throw Error('Cancelamento SEFIN Nacional exige certificado A1');
+   return buildNationalCancelRequest({issuer,accessKey:document.access_key,reason});
+  },
+  cancel:async({document,reason}={})=>{
+   const issuer=issuerFor(document);
+   const request=buildNationalCancelRequest({issuer,accessKey:document.access_key,reason});
+   if(certificateStore.status().certificateType!=='A1')throw Error('A1 local obrigatório');
+   const sdk=await loadNationalSdk();
+   const signed=await certificateStore.withTlsIdentity({cnpj:issuer.cnpj},identity=>{
+    const material=sdk.loadPfxFromBuffer(identity.pfx,identity.passphrase);
+    return sdk.signEnveloped(request.xml,request.id,'infPedReg',material);
+   });
+   const accepted=await api.registerEvent({issuer,accessKey:document.access_key,signedEventXml:signed});
+   if(accepted.status!=='EVENTO_RECEBIDO_PENDENTE_CONFIRMACAO')
+     return {status:'INDETERMINADO',message:'SEFIN não confirmou o recebimento do evento'};
+   return api.queryCancellation({issuer,accessKey:document.access_key});
+  },
+  consultCancellation:async({document}={})=>{
+   const issuer=issuerFor(document);
+   return api.queryCancellation({issuer,accessKey:document.access_key});
   },
   printPdf:async({document}={})=>{
    if(document?.kind!=='NFSE'||!['AUTORIZADA','AUTORIZADA_HOMOLOGACAO'].includes(document.status))

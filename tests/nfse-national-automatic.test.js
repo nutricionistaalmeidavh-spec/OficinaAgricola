@@ -50,3 +50,17 @@ test('número da DPS deriva da decisão explícita do operador, nunca da data ou
  assert.deepEqual(a,b);
  assert.notEqual(prep({issuance:{...issuance,series:'102'}}).idDps,a.idDps);
 });
+
+test('DPS em produção não depende de bloqueio fixo, mas exige IBS/CBS e NBS declarados',()=>{
+ const prodIssuer={...issuer,environment:'PRODUCAO'};
+ const prodDoc={...doc,environment:'PRODUCAO'};
+ assert.throws(()=>prep({document:prodDoc,issuer:prodIssuer}),/IBS|CBS|RTC/i);
+ const rtc={finNFSe:'0',cIndOp:'010101',indDest:'0',CST:'000',cClassTrib:'000001'};
+ assert.throws(()=>prep({document:prodDoc,issuer:prodIssuer,
+  issuance:{...issuance,rtc}}),/NBS/i);
+ const ready=prep({document:prodDoc,issuer:prodIssuer,
+  profile:{...profile,nbsCode:'123456789'},issuance:{...issuance,rtc}});
+ assert.equal(ready.payload.ambiente,'producao');
+ assert.deepEqual(ready.rtc,rtc);
+ assert.equal(ready.payload.servico.cNBS,'123456789');
+});
