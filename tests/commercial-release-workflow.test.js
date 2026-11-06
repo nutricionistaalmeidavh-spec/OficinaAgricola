@@ -5,7 +5,8 @@ import {readFileSync} from 'node:fs';
 test('release gera instaladores livre e comercial distintos e verifica manifestos instalados',()=>{
  const workflow=readFileSync('.github/workflows/windows-installer-smoke.yml','utf8');
  assert.match(workflow,/stage-oficina-edition\.mjs --commercial/);
- assert.match(workflow,/ArtiSys-Oficina-Setup-\$\{version\}-Windows-\$\{arch\}-Commercial/);
+ assert.match(workflow,/ArtiSys-Oficina-Setup-\$version-Windows-x64/);
+ assert.match(workflow,/\$base-Commercial\.exe/);
  assert.match(workflow,/commercialActivation -ne \$true/);
  assert.match(workflow,/commercialActivation -ne \$false/);
  assert.match(workflow,/\.exe\.sha256/);
