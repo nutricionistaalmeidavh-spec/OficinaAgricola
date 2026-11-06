@@ -133,6 +133,76 @@ jobs:
       - name: Smoke PostgreSQL offline pós-instalação Windows (sem terminal do cliente)
         shell: pwsh
         run: ./scripts/smoke-postgres-portable.ps1
+      - name: Conferir manifesto da edição livre realmente instalada
+        shell: pwsh
+        run: |
+          $edition = Get-Content (Join-Path $env:RUNNER_TEMP 'artisys-oficina-clean-install/resources/oficina-edition.json') -Raw | ConvertFrom-Json
+          if ($edition.product -ne 'OFICINA' -or $edition.commercialActivation -ne $false) {
+            throw 'O instalador da edição livre foi empacotado com ativação comercial'
+          }
+      - name: Gerar e testar instalador comercial separado
+        shell: pwsh
+        run: |
+          $version = (Get-Content 'package.json' -Raw | ConvertFrom-Json).version
+          $base = "ArtiSys-Oficina-Setup-$version-Windows-x64"
+          $free = "dist-electron/$base.exe"
+          $commercial = "dist-electron/$base-Commercial.exe"
+          if (-not (Test-Path -LiteralPath $free)) { throw 'Instalador livre de release ausente' }
+          New-Item -ItemType Directory -Path 'build/release-staging' -Force | Out-Null
+          Move-Item -LiteralPath $free -Destination 'build/release-staging/free.exe'
+          node scripts/stage-oficina-edition.mjs --commercial
+          if ($LASTEXITCODE -ne 0) { throw 'Manifesto comercial não foi gerado' }
+          npx electron-builder --win nsis --x64 --publish never
+          if ($LASTEXITCODE -ne 0) { throw 'Falha ao empacotar edição comercial' }
+          if (-not (Test-Path -LiteralPath $free)) { throw 'Instalador comercial não foi gerado' }
+          Move-Item -LiteralPath $free -Destination $commercial
+          Move-Item -LiteralPath 'build/release-staging/free.exe' -Destination $free
+          $installDir = Join-Path $env:RUNNER_TEMP 'artisys-oficina-commercial-install'
+          New-Item -ItemType Directory -Path $installDir -Force | Out-Null
+          $process = Start-Process -FilePath (Resolve-Path $commercial).Path -ArgumentList @('/S',"/D=$installDir") -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "NSIS comercial falhou: $($process.ExitCode)" }
+          $manifest = Join-Path $installDir 'resources/oficina-edition.json'
+          if (-not (Test-Path -LiteralPath $manifest)) { throw 'Instalador comercial não contém manifesto' }
+          $edition = Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json
+          if ($edition.product -ne 'OFICINA' -or $edition.commercialActivation -ne $true) {
+            throw 'Instalador comercial não exige ativação'
+          }
+          $commercialApp = Join-Path $installDir 'ArtiSys Oficina.exe'
+          if (-not (Test-Path -LiteralPath $commercialApp)) {
+            throw 'Executável comercial não foi instalado'
+          }
+          # Exercitar o binário real: sem código, o primeiro admin deve ser bloqueado.
+          $originalLocal = $env:LOCALAPPDATA
+          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'artisys-commercial-license-smoke'
+          $desktop = $null
+          try {
+            $desktop = Start-Process -FilePath $commercialApp -PassThru
+            $ready = $false
+            for ($attempt = 0; $attempt -lt 160; $attempt++) {
+              Start-Sleep -Milliseconds 350
+              if ($desktop.HasExited) { throw 'Oficina comercial encerrou antes de iniciar' }
+              try {
+                $health = Invoke-RestMethod 'http://127.0.0.1:3344/api/health' -TimeoutSec 1
+                if ($health.ok -and $health.engine -eq 'postgres') { $ready = $true; break }
+              } catch {}
+            }
+            if (-not $ready) { throw 'Backend comercial não respondeu' }
+            $license = Invoke-RestMethod 'http://127.0.0.1:3344/api/license/status'
+            if ($license.required -ne $true -or $license.active -ne $false) {
+              throw 'A edição comercial não solicitou ativação antes do primeiro administrador'
+            }
+            $initialize = Invoke-WebRequest 'http://127.0.0.1:3344/api/setup/initialize' -Method POST -ContentType 'application/json' -Body '{}' -SkipHttpErrorCheck
+            if ([int]$initialize.StatusCode -ne 403) {
+              throw 'O primeiro administrador não foi bloqueado sem licença comercial'
+            }
+          } finally {
+            if ($desktop -and -not $desktop.HasExited) {
+              $null = $desktop.CloseMainWindow()
+              Start-Sleep -Seconds 2
+              if (-not $desktop.HasExited) { Stop-Process -Id $desktop.Id -Force -ErrorAction SilentlyContinue }
+            }
+            $env:LOCALAPPDATA = $originalLocal
+          }
       - name: Confirmar tag da main e versão do instalador
         if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
@@ -149,18 +219,25 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
         shell: pwsh
         run: |
-          $installer = Get-ChildItem 'dist-electron/ArtiSys-Oficina-Setup-*-Windows-x64.exe' | Select-Object -First 1
-          if (-not $installer) { throw 'Instalador de release ausente' }
-          $sha256 = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$sha256  $($installer.Name)" | Set-Content -LiteralPath ($installer.FullName + '.sha256') -Encoding ascii -NoNewline
+          $version = (Get-Content 'package.json' -Raw | ConvertFrom-Json).version
+          $installers = @(
+            "dist-electron/ArtiSys-Oficina-Setup-$version-Windows-x64.exe",
+            "dist-electron/ArtiSys-Oficina-Setup-$version-Windows-x64-Commercial.exe"
+          )
+          foreach ($installer in $installers) {
+            if (-not (Test-Path -LiteralPath $installer)) { throw "Instalador de release ausente: $installer" }
+            $file = Get-Item -LiteralPath $installer
+            $sha256 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$sha256  $($file.Name)" | Set-Content -LiteralPath ($file.FullName + '.sha256') -Encoding ascii -NoNewline
+          }
       - name: Guardar instalador e checksum após todos os smokes
         if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
           name: oficina-release-${{ github.ref_name }}
           path: |
-            dist-electron/ArtiSys-Oficina-Setup-*-Windows-x64.exe
-            dist-electron/ArtiSys-Oficina-Setup-*-Windows-x64.exe.sha256
+            dist-electron/ArtiSys-Oficina-Setup-*-Windows-x64*.exe
+            dist-electron/ArtiSys-Oficina-Setup-*-Windows-x64*.exe.sha256
           if-no-files-found: error
           retention-days: 7
 
@@ -212,33 +289,43 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          $installer = Get-ChildItem 'release/ArtiSys-Oficina-Setup-*-Windows-x64.exe' | Select-Object -First 1
-          if (-not $installer) { throw 'Instalador não encontrado' }
-          $checksum = $installer.FullName + '.sha256'
-          if (-not (Test-Path -LiteralPath $checksum)) { throw 'SHA256 ausente' }
-          $expected = ((Get-Content -LiteralPath $checksum -Raw) -split '\s+')[0]
-          $actual = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($expected -ne $actual) { throw 'SHA256 do artefato divergente' }
           $version = (Get-Content 'package.json' -Raw | ConvertFrom-Json).version
           if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'Versão deve ser SemVer estável' }
           $tag = "v$version"
-          if ($installer.Name -ne "ArtiSys-Oficina-Setup-$version-Windows-x64.exe") {
-            throw 'Versão do instalador diverge do pacote aprovado'
-          }
           if ($env:GITHUB_REF -like 'refs/tags/*' -and $env:GITHUB_REF_NAME -ne $tag) {
             throw 'Tag de release diverge do package.json'
           }
-          $existing = gh release view $tag --json tagName,isDraft 2>$null
+          $free = Get-Item -LiteralPath "release/ArtiSys-Oficina-Setup-$version-Windows-x64.exe"
+          $commercial = Get-Item -LiteralPath "release/ArtiSys-Oficina-Setup-$version-Windows-x64-Commercial.exe"
+          foreach ($installer in @($free, $commercial)) {
+            $checksum = $installer.FullName + '.sha256'
+            if (-not (Test-Path -LiteralPath $checksum)) { throw "SHA256 ausente: $($installer.Name)" }
+            $expected = ((Get-Content -LiteralPath $checksum -Raw) -split '\s+')[0]
+            $actual = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($expected -ne $actual) { throw "SHA256 divergente: $($installer.Name)" }
+          }
+          $existing = gh release view $tag --json tagName,isDraft,assets 2>$null
           if ($LASTEXITCODE -eq 0) {
-            if (($existing | ConvertFrom-Json).isDraft) { throw 'Release existente em draft exige revisão' }
-            Write-Host "Release $tag já publicada: sem republicação"
+            $previous = $existing | ConvertFrom-Json
+            if ($previous.isDraft) { throw 'Release existente em draft exige revisão' }
+            $commercialNames = @($commercial.Name,($commercial.Name + '.sha256'))
+            $already = @($previous.assets | Where-Object { $commercialNames -contains $_.name })
+            if ($already.Count -eq 2) {
+              Write-Host "Instalador comercial $tag já publicado, sem republicação"
+              exit 0
+            }
+            if ($already.Count -ne 0) { throw 'Release possui edição comercial incompleta; revisão necessária' }
+            # v1.0.1 já possui a edição livre: acrescentar somente a comercial,
+            # sem sobrescrever o instalador gratuito da atualização automática.
+            gh release upload $tag $commercial.FullName ($commercial.FullName + '.sha256')
+            if ($LASTEXITCODE -ne 0) { throw 'Falha ao adicionar instalador comercial à release' }
             exit 0
           }
           if ($env:GITHUB_REF -like 'refs/tags/*') {
-            gh release create $tag $installer.FullName $checksum --verify-tag --title "ArtiSys Oficina $tag" --generate-notes
+            gh release create $tag $free.FullName ($free.FullName + '.sha256') $commercial.FullName ($commercial.FullName + '.sha256') --verify-tag --title "ArtiSys Oficina $tag" --generate-notes
           } else {
             $tagAlreadyExists = gh api "repos/$env:GH_REPO/git/ref/tags/$tag" 2>$null
             if ($LASTEXITCODE -eq 0) { throw 'Tag existente sem release: verificar antes de publicar' }
-            gh release create $tag $installer.FullName $checksum --target $env:GITHUB_SHA --title "ArtiSys Oficina $tag" --generate-notes
+            gh release create $tag $free.FullName ($free.FullName + '.sha256') $commercial.FullName ($commercial.FullName + '.sha256') --target $env:GITHUB_SHA --title "ArtiSys Oficina $tag" --generate-notes
           }
           if ($LASTEXITCODE -ne 0) { throw 'Falha ao publicar GitHub Release' }
