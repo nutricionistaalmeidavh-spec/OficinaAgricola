@@ -64,7 +64,7 @@ export function createOficinaCommercialLicense({
  }
  async function status(){
   const state=await get();
-  if(!state.licenseId||!state.active)return result(state,{at:now()});
+  if(!state.licenseId)return result(state,{at:now()});
   if(Number.isFinite(state.checkedAt)&&now()-state.checkedAt<REFRESH_MS)
    return {...result(state,{at:now()}),offline:false};
   const query=new URLSearchParams({installationId:state.installationId,product:PRODUCT});
