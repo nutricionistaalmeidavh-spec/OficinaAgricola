@@ -55,19 +55,13 @@ Write-Host 'Preparando módulo fiscal nacional MIT isolado...'
 node scripts/stage-nfse-national.mjs
 if ($LASTEXITCODE -ne 0) { throw 'Bundle nacional OSS não foi gerado.' }
 
-# Licenciamento comercial é opção de empacotamento, nunca requisito do núcleo MIT.
-New-Item -ItemType Directory -Force -Path 'build' | Out-Null
+# A edição comercial só é criada por seleção explícita no builder.
 if ($Commercial) {
-  $editionJson = '{"product":"OFICINA","commercialActivation":true}'
+  node scripts/stage-oficina-edition.mjs --commercial
 } else {
-  $editionJson = '{"product":"OFICINA","commercialActivation":false}'
+  node scripts/stage-oficina-edition.mjs
 }
-[System.IO.File]::WriteAllText(
-  (Join-Path (Get-Location) 'build/oficina-edition.json'),
-  $editionJson,
-  [System.Text.UTF8Encoding]::new($false)
-)
-Write-Host "Edição do instalador: $(if ($Commercial) { 'COMERCIAL (ativação requerida)' } else { 'LIVRE (R$ 0)' })"
+if ($LASTEXITCODE -ne 0) { throw 'Falha ao gerar manifesto da edição do instalador.' }
 
 Write-Host '[11/11] Gerando instalador Electron Windows x64...'
 npx electron-builder --win nsis --x64 --publish never
