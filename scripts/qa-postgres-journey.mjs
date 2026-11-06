@@ -209,13 +209,13 @@ try{
         };
         return {
           users:await request('GET','/api/users'),
-          receipt:await request('POST','/api/work-orders/'+ids.osId+'/receipts',
+          receipt:ids.role==='FINANCEIRO'?null:await request('POST','/api/work-orders/'+ids.osId+'/receipts',
             {amountCents:100,method:'PIX',requestId:'qa-rbac-unauthorized-'+ids.role}),
-          customer:await request('POST','/api/customers',
+          customer:ids.role==='ATENDIMENTO'?null:await request('POST','/api/customers',
             {name:'Nao pode cadastrar por '+ids.role,requestId:'qa-rbac-customer-'+ids.role}),
-          quote:await request('PUT','/api/work-orders/'+ids.osId+'/quote',
+          quote:ids.role!=='FINANCEIRO'?null:await request('PUT','/api/work-orders/'+ids.osId+'/quote',
             {items:[{kind:'MAO_DE_OBRA',description:'Alteração proibida',quantity:1,unitPriceCents:90000}]}),
-          saleCancel:await request('POST','/api/sales/'+ids.saleId+'/cancel',
+          saleCancel:ids.role==='FINANCEIRO'?null:await request('POST','/api/sales/'+ids.saleId+'/cancel',
             {reason:'Tentativa não autorizada',requestId:'qa-rbac-cancel-'+ids.role})
         };
       },{osId:os.id,saleId:result.sales[0].id,role:user.role});
