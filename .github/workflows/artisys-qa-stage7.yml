@@ -2,6 +2,8 @@ name: ArtiSys QA · Etapa 07
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
 concurrency:
