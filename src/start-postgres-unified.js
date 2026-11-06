@@ -174,9 +174,16 @@ try{
       reminderSender:reminderSenderForUnit(unit)}),
    fiscalProviderForUnit
  });
+ const licenseControl=createOficinaCommercialLicense({
+   required:process.env.OFICINA_REQUIRE_COMMERCIAL_ACTIVATION==='true',
+   root:process.env.OFICINA_LICENSE_STORAGE_ROOT||
+     join(process.env.OFICINA_POSTGRES_STORAGE_ROOT||'./storage/postgres','licenses'),
+   endpoint:process.env.OFICINA_LICENSE_ENDPOINT||
+     'https://pdv-artisys.sistema-artisys.workers.dev'
+ });
  const gateway=createPostgresUnifiedGateway({
    registry,tenantHandlerForUnit:tenantFactory.handlerForUnit,
-   serviceToken:token,allowAdminBootstrap:fresh,publicOrigin
+   serviceToken:token,allowAdminBootstrap:fresh,publicOrigin,licenseControl
  });
  const server=createServer(async(req,res)=>{
   const requestedHost=String(req.headers.host||'');
