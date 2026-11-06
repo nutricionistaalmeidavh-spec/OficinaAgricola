@@ -12,4 +12,6 @@ test('installer comercial tem modo explícito e não altera core open source',()
  assert.match(electron,/commercialActivation/);
  assert.match(electron,/OFICINA_REQUIRE_COMMERCIAL_ACTIVATION/);
  assert.match(installer,/if\s*\(\$Commercial\)/);
+ const workflow=readFileSync('.github/workflows/windows-installer-smoke.yml','utf8');
+ assert.match(workflow,/node scripts\/stage-oficina-edition\.mjs/);
 });
