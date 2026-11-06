@@ -55,7 +55,11 @@ export function createOficinaCommercialLicense({
    method,redirect:'error',signal:AbortSignal.timeout(6000),
    ...(body?{headers:{'content-type':'application/json'},body:JSON.stringify(body)}:{})
   });
-  if(!response.ok)throw Error('Central de licenças indisponível ou recusou a operação ('+response.status+')');
+  if(!response.ok){
+   let message='Central de licenças indisponível ('+response.status+')';
+   try{const data=await response.json();if(typeof data?.error==='string'&&data.error.length<200)message=data.error;}catch{}
+   throw Object.assign(Error(message),{status:response.status>=400&&response.status<500?response.status:503});
+  }
   return response.json();
  }
  async function status(){
