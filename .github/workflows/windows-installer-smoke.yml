@@ -120,6 +120,8 @@ jobs:
           }
           node scripts/stage-postgres-windows.mjs
           if ($LASTEXITCODE -ne 0) { throw 'Falha staging PostgreSQL Windows offline' }
+      - name: Preparar edição livre e manifesto de licenciamento
+        run: node scripts/stage-oficina-edition.mjs
       - name: Build Windows NSIS without publishing
         run: npx electron-builder --win nsis --x64 --publish never
       - name: Run fresh install and first-login smoke
