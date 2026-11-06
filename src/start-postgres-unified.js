@@ -12,6 +12,7 @@ import {createCommonDataAdapter} from './platform/common-data-adapter.js';
 import {createPostgresTenantRegistry} from './platform/async-postgres-registry.js';
 import {createPostgresTenantRuntimeFactory} from './platform/postgres-tenant-runtime.js';
 import {createPostgresUnifiedGateway} from './platform/postgres-unified-gateway.js';
+import {createOficinaCommercialLicense} from './platform/commercial-license.js';
 import {loadTenantPaymentConfigs,resolveTenantPaymentOptions} from './platform/tenant-payment.js';
 import {loadTenantReminderSenders} from './platform/tenant-reminder-smtp.js';
 import {loadTenantFiscalConfigs,resolveTenantFiscalProvider} from './platform/tenant-fiscal.js';
