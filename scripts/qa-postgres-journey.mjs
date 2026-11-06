@@ -166,11 +166,18 @@ try{
     {role:'TECNICO',username:'qa-tecnico-pg',name:'Técnico QA'},
     {role:'FINANCEIRO',username:'qa-financeiro-pg',name:'Financeiro QA'}
   ];
+  // O apply e o refresh da página são assíncronos: não tentar sair durante um salvamento.
+  await page.waitForFunction(()=>!modalSession?.busy&&!state.pageSaving);
   await page.locator('#modalClose').click();
   // O motivo de inventário marca o modal como editado; confirmar descarte da UI.
   const discard=page.locator('#modalDiscardPrompt [data-discard-edit]');
   if(await discard.isVisible())await discard.click();
-  await page.locator('#modal').waitFor({state:'hidden'});
+  if(await page.locator('#modal').isVisible()){
+    const diagnostic=await page.evaluate(()=>({busy:modalSession?.busy,dirty:modalSession?.dirty,
+      prompt:!!document.querySelector('#modalDiscardPrompt'),title:document.querySelector('#modalTitle')?.textContent,
+      page:state.page,saving:state.pageSaving,modal:document.querySelector('#modal')?.className}));
+    throw Error('Inventário não liberou o fechamento do modal: '+JSON.stringify(diagnostic));
+  }
   await navigate('settings');
   for(const user of qaRoles){
     await page.locator('#newUser').click();
