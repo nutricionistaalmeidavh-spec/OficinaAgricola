@@ -158,8 +158,117 @@ try{
   });
   const afterCount=await page.evaluate(async id=>api('/api/parts/'+id),part.id);
   assert.equal(Number(afterCount.quantity),10);
+
+  // P0: RBAC real de ponta a ponta (UI + HTTP), sem mocks nem contas de produção.
+  const rolePassword='QAOnly@2026!Role';
+  const qaRoles=[
+    {role:'ATENDIMENTO',username:'qa-atendimento-pg',name:'Atendimento QA'},
+    {role:'TECNICO',username:'qa-tecnico-pg',name:'Técnico QA'},
+    {role:'FINANCEIRO',username:'qa-financeiro-pg',name:'Financeiro QA'}
+  ];
+  await navigate('settings');
+  for(const user of qaRoles){
+    await page.locator('#newUser').click();
+    await page.locator('#modalBody [name=name]').fill(user.name);
+    await page.locator('#modalBody [name=username]').fill(user.username);
+    await page.locator('#modalBody [name=role]').selectOption(user.role);
+    await page.locator('#modalBody [name=password]').fill(rolePassword);
+    const created=page.waitForResponse(response=>response.url()===base+'/api/users'&&response.request().method()==='POST');
+    await page.locator('#modalBody button[type=submit]').click();
+    assert.equal((await created).status(),201,'Criação do funcionário '+user.role);
+    await page.locator('#modal').waitFor({state:'hidden'});
+  }
+  await screenshot('14-equipe-acessos');
+  async function navigateAs(rolePage,name){
+    const direct=rolePage.locator('[data-page="'+name+'"]');
+    if(await direct.isVisible())await direct.click();
+    else{
+      await rolePage.locator('#mobileMoreBtn').click();
+      await rolePage.locator('[data-mobile-page="'+name+'"]').click();
+    }
+  }
+  for(const user of qaRoles){
+    const roleContext=await browser.newContext({viewport});
+    try{
+      const rolePage=await roleContext.newPage();
+      rolePage.on('pageerror',error=>errors.push(user.role+': '+error.message));
+      await rolePage.goto(base);
+      await rolePage.locator('#loginForm [name=username]').fill(user.username);
+      await rolePage.locator('#loginForm [name=password]').fill(rolePassword);
+      await rolePage.locator('#loginForm button[type=submit]').click();
+      await rolePage.locator('#appView').waitFor({state:'visible'});
+      assert.equal((await rolePage.locator('#userRole').textContent()).trim(),
+        {ATENDIMENTO:'Atendimento',TECNICO:'Técnico',FINANCEIRO:'Financeiro'}[user.role]);
+
+      // Tentativas HTTP diretas comprovam autorização no servidor, não apenas botões ocultos.
+      const denied=await rolePage.evaluate(async ids=>{
+        const request=async(method,path,body)=>{
+          const response=await fetch(path,{method,headers:{'Content-Type':'application/json'},
+            body:body===undefined?undefined:JSON.stringify(body)});
+          return response.status;
+        };
+        return {
+          users:await request('GET','/api/users'),
+          receipt:await request('POST','/api/work-orders/'+ids.osId+'/receipts',
+            {amountCents:100,method:'PIX',requestId:'qa-rbac-unauthorized-'+ids.role}),
+          customer:await request('POST','/api/customers',
+            {name:'Nao pode cadastrar por '+ids.role,requestId:'qa-rbac-customer-'+ids.role}),
+          quote:await request('PUT','/api/work-orders/'+ids.osId+'/quote',
+            {items:[{kind:'MAO_DE_OBRA',description:'Alteração proibida',quantity:1,unitPriceCents:90000}]}),
+          saleCancel:await request('POST','/api/sales/'+ids.saleId+'/cancel',
+            {reason:'Tentativa não autorizada',requestId:'qa-rbac-cancel-'+ids.role})
+        };
+      },{osId:os.id,saleId:result.sales[0].id,role:user.role});
+      assert.equal(denied.users,403,'Funcionário não lê cadastros de usuários');
+      if(user.role!=='FINANCEIRO')assert.equal(denied.receipt,403,'Sem acesso a recebimentos da OS');
+      if(user.role==='TECNICO'){
+        assert.equal(denied.customer,403,'Técnico não cadastra cliente');
+        assert.equal(denied.saleCancel,403,'Técnico não cancela vendas');
+        await navigateAs(rolePage,'work-orders');
+        await rolePage.locator('[data-oa-os="'+os.id+'"]').click();
+        assert.equal(await rolePage.locator('#payBtn').count(),0,'Técnico sem botão de recebimento');
+        assert.equal(await rolePage.locator('#quoteBtn').count(),0,'Técnico sem edição de orçamento');
+        await rolePage.locator('#diagnosisForm textarea').fill('Diagnóstico técnico validado pelo perfil');
+        const saved=rolePage.waitForResponse(response=>response.url()===base+'/api/work-orders/'+os.id&&response.request().method()==='PATCH');
+        await rolePage.locator('#diagnosisForm button[type=submit]').click();
+        assert.equal((await saved).status(),200,'Técnico salva diagnóstico permitido');
+      }else if(user.role==='ATENDIMENTO'){
+        assert.equal(denied.saleCancel,403,'Atendimento não pode cancelar venda');
+        await navigateAs(rolePage,'customers');
+        await rolePage.locator('#newCustomer').click();
+        await rolePage.locator('#modalBody [name=name]').fill('Cliente cadastrado pelo atendimento QA');
+        const created=rolePage.waitForResponse(response=>response.url()===base+'/api/customers'&&response.request().method()==='POST');
+        await rolePage.locator('#modalBody button[type=submit]').click();
+        assert.ok([200,201].includes((await created).status()),'Atendimento cadastra cliente');
+      }else{
+        assert.equal(denied.quote,403,'Financeiro não altera orçamento');
+        assert.equal(denied.customer,403,'Financeiro não cadastra cliente');
+        await navigateAs(rolePage,'sales');
+        await rolePage.locator('[data-sale="'+result.sales[0].id+'"]').click();
+        await rolePage.locator('#cancelSale').waitFor({state:'visible'});
+        await rolePage.locator('#cancelSale').click();
+        await rolePage.locator('#modalBody textarea[name=reason]').fill('Devolução autorizada e registrada pelo financeiro QA');
+        const canceled=rolePage.waitForResponse(response=>response.url()===base+'/api/sales/'+result.sales[0].id+'/cancel'&&response.request().method()==='POST');
+        await rolePage.locator('#modalBody button[type=submit]').click();
+        assert.equal((await canceled).status(),200,'Financeiro cancela venda pela interface');
+        await rolePage.locator('#modal').waitFor({state:'hidden'});
+      }
+      await rolePage.screenshot({path:path.join(output,'15-perfil-'+user.role.toLowerCase()+'.png'),fullPage:true});
+    }finally{
+      await roleContext.close();
+    }
+  }
+  const afterCancellation=await page.evaluate(async ids=>({
+    sale:await api('/api/sales/'+ids.saleId),
+    part:await api('/api/parts/'+ids.partId),
+    customers:await api('/api/customers/page')
+  }),{saleId:result.sales[0].id,partId:part.id});
+  assert.equal(afterCancellation.sale.status,'CANCELADA','Venda cancelada permanece no histórico');
+  assert.equal(Number(afterCancellation.part.quantity),12,'Estorno repõe duas peças exatamente uma vez');
+  assert.equal(afterCancellation.customers.total,2,'Cadastro feito pelo atendimento persiste');
+  await screenshot('16-saldo-apos-estorno');
   assert.deepEqual(errors,[]);
-  await writeFile(path.join(output,'summary.json'),JSON.stringify({status:'passed',engine:'postgres',viewport:viewportName,checks:['first-admin-ui','contextual-customer-machine-order','diagnosis-save-twice','sale-preview','price-conflict-no-write','sale-confirmed-stock-once','inventory-history-ui','supplier-create-ui','purchase-order-ui','partial-receipt-ui','barcode-usb-keyboard-ui','physical-stocktake-review-ui']},null,2));
+  await writeFile(path.join(output,'summary.json'),JSON.stringify({status:'passed',engine:'postgres',viewport:viewportName,checks:['first-admin-ui','contextual-customer-machine-order','diagnosis-save-twice','sale-preview','price-conflict-no-write','sale-confirmed-stock-once','inventory-history-ui','supplier-create-ui','purchase-order-ui','partial-receipt-ui','barcode-usb-keyboard-ui','physical-stocktake-review-ui','rbac-admin-ui','rbac-roles-login-ui','rbac-forbidden-http','rbac-technician-diagnosis-ui','rbac-attendance-customer-ui','finance-sale-cancel-ui','stock-restored-once']},null,2));
 }catch(error){
   if(page){
     const observed=await page.evaluate(async()=>{
