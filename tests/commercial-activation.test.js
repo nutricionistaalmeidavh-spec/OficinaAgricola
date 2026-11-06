@@ -68,3 +68,23 @@ test('API bloqueia setup/login no modo comercial não ativado sem afetar ediçã
  assert.equal((await gateway(req('/api/setup/initialize','POST',{username:'admin'}))).status,200);
  assert.equal(bootstraps,1);
 });
+
+test('resposta de licença de outro produto não autoriza Oficina offline',async t=>{
+ const root=await mkdtemp(join(tmpdir(),'oficina-license-isolation-'));
+ t.after(()=>rm(root,{recursive:true,force:true}));
+ let statusProduct='OFICINA';
+ let current=Date.parse('2026-11-05T12:00:00.000Z');
+ const license=createOficinaCommercialLicense({
+  required:true,root,endpoint:'https://licenca.example.test',now:()=>current,
+  fetchImpl:async url=>{
+   if(String(url).includes('/activation/verify'))return Response.json({
+    licenseId:'lic-1',product:'OFICINA',accountEmail:'pessoa@example.com',
+    expiresAt:null,activatedAt:'2026-11-05T12:00:00.000Z'
+   });
+   return Response.json({product:statusProduct,active:true,expiresAt:null});
+  }
+ });
+ assert.equal((await license.activate({email:'pessoa@example.com',code:'123456'})).active,true);
+ statusProduct='PDV';current+=16*60*1000;
+ assert.equal((await license.status()).active,false);
+});
