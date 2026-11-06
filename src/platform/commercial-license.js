@@ -7,11 +7,11 @@ import {join} from 'node:path';
 const PRODUCT='OFICINA';
 const REFRESH_MS=15*60*1000;
 const DEFAULT_ENDPOINT='https://pdv-artisys.sistema-artisys.workers.dev';
-const emailOk=value=>typeof value==='string'&&/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(value.trim().toLowerCase());
+const emailOk=value=>typeof value==='string'&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim().toLowerCase());
 const dateOk=value=>value===null||(typeof value==='string'&&!Number.isNaN(Date.parse(value)));
-const result=(state,{offline=false}={})=>({
+const result=(state,{offline=false,at=Date.now()}={})=>({
  required:true,active:Boolean(state.active&&state.licenseId&&
-   (!state.expiresAt||Date.parse(state.expiresAt)>Date.now())),
+   (!state.expiresAt||Date.parse(state.expiresAt)>at)),
  offline,expiresAt:state.expiresAt||null
 });
 
@@ -60,9 +60,9 @@ export function createOficinaCommercialLicense({
  }
  async function status(){
   const state=await get();
-  if(!state.licenseId||!state.active)return result(state);
+  if(!state.licenseId||!state.active)return result(state,{at:now()});
   if(Number.isFinite(state.checkedAt)&&now()-state.checkedAt<REFRESH_MS)
-   return {...result(state),offline:false};
+   return {...result(state,{at:now()}),offline:false};
   try{
    const query=new URLSearchParams({installationId:state.installationId,product:PRODUCT});
    const data=await remote('/v1/license/status?'+query);
@@ -70,17 +70,17 @@ export function createOficinaCommercialLicense({
     throw Error('Resposta da Central inválida');
    const next={...state,active:data.active,expiresAt:data.expiresAt||null,checkedAt:now()};
    statePromise=Promise.resolve(await save(next));
-   return result(next);
+   return result(next,{at:now()});
   }catch{
    // Compatível com o PDV: somente a última situação ATIVA permite operar offline.
    // Uma revogação ou expiração conhecida nunca é substituída por uso offline.
-   return {...result(state),offline:true};
+   return {...result(state,{at:now()}),offline:true};
   }
  }
  async function activate({email,code}={}){
   const accountEmail=String(email||'').trim().toLowerCase();
   if(!emailOk(accountEmail))throw Object.assign(Error('E-mail inválido'),{status:400});
-  if(!/^\\d{6}$/.test(String(code||'')))throw Object.assign(Error('Código de 6 dígitos obrigatório'),{status:400});
+  if(!/^\d{6}$/.test(String(code||'')))throw Object.assign(Error('Código de 6 dígitos obrigatório'),{status:400});
   const state=await get();
   const data=await remote('/v1/activation/verify',{method:'POST',body:{
    product:PRODUCT,email:accountEmail,code:String(code),installationId:state.installationId
@@ -91,7 +91,7 @@ export function createOficinaCommercialLicense({
   const next={installationId:state.installationId,licenseId:data.licenseId,
     accountEmail,active:true,expiresAt:data.expiresAt||null,checkedAt:now()};
   statePromise=Promise.resolve(await save(next));
-  return result(next);
+  return result(next,{at:now()});
  }
  return Object.freeze({required:true,status,activate});
 }
