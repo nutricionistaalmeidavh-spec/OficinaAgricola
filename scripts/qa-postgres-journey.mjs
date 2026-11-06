@@ -237,7 +237,7 @@ try{
         assert.equal(denied.customer,403,'Técnico não cadastra cliente');
         assert.equal(denied.saleCancel,403,'Técnico não cancela vendas');
         await navigateAs(rolePage,'work-orders');
-        await rolePage.locator('[data-oa-os="'+os.id+'"]').click();
+        await rolePage.locator('.os-card[data-os="'+os.id+'"]').click();
         assert.equal(await rolePage.locator('#payBtn').count(),0,'Técnico sem botão de recebimento');
         assert.equal(await rolePage.locator('#quoteBtn').count(),0,'Técnico sem edição de orçamento');
         await rolePage.locator('#diagnosisForm textarea').fill('Diagnóstico técnico validado pelo perfil');
