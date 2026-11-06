@@ -134,7 +134,6 @@ jobs:
         shell: pwsh
         run: ./scripts/smoke-postgres-portable.ps1
       - name: Conferir manifesto da edição livre realmente instalada
-        if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
         shell: pwsh
         run: |
           $edition = Get-Content (Join-Path $env:RUNNER_TEMP 'artisys-oficina-clean-install/resources/oficina-edition.json') -Raw | ConvertFrom-Json
@@ -142,7 +141,6 @@ jobs:
             throw 'O instalador da edição livre foi empacotado com ativação comercial'
           }
       - name: Gerar e testar instalador comercial separado
-        if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
         shell: pwsh
         run: |
           $version = (Get-Content 'package.json' -Raw | ConvertFrom-Json).version
