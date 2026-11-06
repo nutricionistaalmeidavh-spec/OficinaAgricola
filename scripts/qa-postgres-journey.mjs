@@ -166,6 +166,8 @@ try{
     {role:'TECNICO',username:'qa-tecnico-pg',name:'Técnico QA'},
     {role:'FINANCEIRO',username:'qa-financeiro-pg',name:'Financeiro QA'}
   ];
+  await page.locator('#modalClose').click();
+  await page.locator('#modal').waitFor({state:'hidden'});
   await navigate('settings');
   for(const user of qaRoles){
     await page.locator('#newUser').click();
