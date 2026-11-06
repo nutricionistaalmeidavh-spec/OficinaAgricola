@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, shell } from 'electron';
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) app.quit();
@@ -14,6 +15,18 @@ let postgresShuttingDown=false;
 function dataRoot() {
   const local = process.env.LOCALAPPDATA || app.getPath('userData');
   return join(local, 'ArtiSys', 'Oficina');
+}
+
+function commercialEditionRequired(){
+  if(!app.isPackaged)return process.env.OFICINA_REQUIRE_COMMERCIAL_ACTIVATION==='true';
+  // Marcador gerado explicitamente pelo empacotador. Não depende de variáveis
+  // do computador do cliente; é false para o instalador gratuito.
+  let edition;
+  try{edition=JSON.parse(readFileSync(join(process.resourcesPath,'oficina-edition.json'),'utf8'));}
+  catch{throw Error('Manifesto da edição do instalador ausente ou inválido');}
+  if(edition.product!=='OFICINA'||typeof edition.commercialActivation!=='boolean')
+    throw Error('Manifesto da edição do instalador incompatível');
+  return edition.commercialActivation;
 }
 
 async function startPostgresDesktop(){
