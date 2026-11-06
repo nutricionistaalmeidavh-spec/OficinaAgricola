@@ -28,6 +28,15 @@ pode ter produtos diferentes sem misturar códigos ou cancelamentos.
    até a validade conhecida. Licenças já conhecidas como canceladas, suspensas ou
    expiradas não voltam a funcionar sem nova validação online.
 
+## Empacotar instaladores Windows
+
+- **Edição livre:** `npm run desktop:dist` — não exige Cloudflare nem chave.
+- **Edição comercial:** `powershell -ExecutionPolicy Bypass -File scripts/build-electron.ps1 -Commercial`
+  — gera o manifesto `oficina-edition.json` embarcado no instalador com
+  `commercialActivation=true`. O cliente não precisa definir variáveis.
+- O workflow Windows de QA monta explicitamente o manifesto da edição livre antes
+  do empacotamento direto pelo Electron Builder, sem alterar instalações de clientes.
+
 ## Configuração da distribuição comercial
 
 ```sh
