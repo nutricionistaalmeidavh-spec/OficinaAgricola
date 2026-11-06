@@ -40,6 +40,8 @@ test('ativação Oficina isola produto e preserva uso offline após confirmaçã
  assert.equal((await license.status()).active,false);
  online=false;current+=86400000;
  assert.equal((await license.status()).active,false,'revogada não pode voltar a funcionar offline');
+ online=true;remoteActive=true;current+=86400000;
+ assert.equal((await license.status()).active,true,'revalidação reconhece licença reativada na Central');
 });
 
 test('API bloqueia setup/login no modo comercial não ativado sem afetar edição livre',async()=>{
