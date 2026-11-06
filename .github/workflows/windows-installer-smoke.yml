@@ -219,8 +219,7 @@ jobs:
           $actual = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($expected -ne $actual) { throw 'SHA256 do artefato divergente' }
           $version = (Get-Content 'package.json' -Raw | ConvertFrom-Json).version
-          if ($version -notmatch '^\d+\.\d+\.\d+
-) { throw 'Versão deve ser SemVer estável' }
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'Versão deve ser SemVer estável' }
           $tag = "v$version"
           if ($installer.Name -ne "ArtiSys-Oficina-Setup-$version-Windows-x64.exe") {
             throw 'Versão do instalador diverge do pacote aprovado'
