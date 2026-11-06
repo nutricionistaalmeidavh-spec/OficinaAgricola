@@ -395,6 +395,8 @@ function showPagedLoadMore({cursor,loaded,total,onMore,label='Carregar mais'}){
 async function boot(){
   $('#today').textContent=new Date().toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'short'});
   try{
+    const license=await api('/api/license/status');
+    if(license.required&&!license.active){state.token='';return showLicense()}
     const setup=await api('/api/setup/status');
     if(setup.required){state.token='';return showSetup()}
   }catch{ /* The login view will display server errors if offline. */ }
@@ -408,13 +410,18 @@ async function boot(){
     void resumePendingCommands();
   }catch{showLogin()}
 }
-function showSetup(){
+function showLicense(){
+   $('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');
+   $('#loginForm').classList.add('hidden');$('#setupForm').classList.add('hidden');
+   $('#licenseForm').classList.remove('hidden');
+ }
+ function showSetup(){
   $('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');
-  $('#loginForm').classList.add('hidden');$('#setupForm').classList.remove('hidden');
+  $('#loginForm').classList.add('hidden');$('#licenseForm').classList.add('hidden');$('#setupForm').classList.remove('hidden');
 }
 function showLogin(){
   $('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');
-  $('#setupForm').classList.add('hidden');$('#loginForm').classList.remove('hidden');
+  $('#setupForm').classList.add('hidden');$('#licenseForm').classList.add('hidden');$('#loginForm').classList.remove('hidden');
 }
 function canViewModule(page){
  return Boolean(window.OficinaRolePermissions?.canViewPage(state.user?.role,page));
