@@ -31,6 +31,7 @@ export function startDesktopUpdates({getWindow,isCommercial=false}){
   async function check(){
     if(busy||closingForUpdate)return;
     busy=true;
+    let userRequestedDownload=false;
     const window=getWindow();
     try{
       const update=await checkGitHubUpdate(app.getVersion());
@@ -43,6 +44,7 @@ export function startDesktopUpdates({getWindow,isCommercial=false}){
         buttons:['Baixar atualização','Mais tarde'],defaultId:0,cancelId:1,noLink:true
       });
       if(question.response!==0)return;
+      userRequestedDownload=true;
       window.setProgressBar(0);
       const installer=await downloadVerifiedUpdate(update,
         join(app.getPath('userData'),'updates'),{
@@ -69,7 +71,8 @@ export function startDesktopUpdates({getWindow,isCommercial=false}){
     }catch(error){
       console.warn('[updater] atualização indisponível:',error?.message||error);
       const active=getWindow();
-      if(active&&!active.isDestroyed()){
+      // Falha de conexão na checagem periódica não abre modal nem bloqueia offline.
+      if(userRequestedDownload&&active&&!active.isDestroyed()){
         await dialog.showMessageBox(active,{
           type:'warning',
           title:'Atualização não concluída',
