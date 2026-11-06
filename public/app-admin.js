@@ -164,6 +164,18 @@ function table(headers,rows){return `<div class="table-wrap"><table><thead><tr>$
 
 const pendingRecovery=$('#pendingCommands');
 if(pendingRecovery)pendingRecovery.onclick=()=>void openPendingCommands();
+$('#licenseForm').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const form=e.currentTarget,button=$('button[type="submit"]',form),error=$('#licenseError');
+  if(button.disabled)return;
+  button.disabled=true;error.textContent='';
+  try{
+    await api('/api/license/activate',{method:'POST',body:formObj(new FormData(form))});
+    form.reset();toast('Licença ativada. Continue a configuração da oficina.');
+    await boot();
+  }catch(err){error.textContent=friendlyUiMessage(err.message)}
+  finally{button.disabled=false}
+});
 $('#setupForm').addEventListener('submit',async e=>{
   e.preventDefault();
   const form=e.currentTarget,button=$('button[type="submit"]',form);
