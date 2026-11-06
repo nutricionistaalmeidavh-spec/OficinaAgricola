@@ -395,8 +395,12 @@ function showPagedLoadMore({cursor,loaded,total,onMore,label='Carregar mais'}){
 async function boot(){
   $('#today').textContent=new Date().toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'short'});
   try{
-    const license=await api('/api/license/status');
-    if(license.required&&!license.active){state.token='';return showLicense()}
+    // Gate apenas quando o backend implementa licenciamento comercial.
+    // Runtime legado de QA retorna 404; a edição livre continua seu primeiro acesso.
+    try{
+      const license=await api('/api/license/status');
+      if(license.required&&!license.active){state.token='';return showLicense()}
+    }catch(error){if(error.status!==404)throw error;}
     const setup=await api('/api/setup/status');
     if(setup.required){state.token='';return showSetup()}
   }catch{ /* The login view will display server errors if offline. */ }
