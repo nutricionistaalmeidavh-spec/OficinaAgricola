@@ -40,6 +40,30 @@
     throw new Error('A busca excedeu o limite seguro. Pesquise a peça pelo SKU.');
   }
 
+  function isValidGtin(code){
+    if(!/^(?:\d{8}|\d{12}|\d{13}|\d{14})$/.test(code))return false;
+    let total=0,weight=3;
+    for(let index=code.length-2;index>=0;index--){
+      total+=Number(code[index])*weight;
+      weight=weight===3?1:3;
+    }
+    return (10-total%10)%10===Number(code.at(-1));
+  }
+
+  // Prefer the canonical GTIN for a valid barcode; preserve the older exact SKU
+  // lookup for labels that are not GTINs (e.g. CODE-128 or arbitrary workshop SKUs).
+  async function findPartByCode(code,fetchPage,{includeInactive=false}={}){
+    const term=normalizeCode(code);
+    if(typeof fetchPage!=='function')throw new Error('Busca de peças indisponível.');
+    if(isValidGtin(term)){
+      try{return await fetchPage('/api/parts/barcode/'+term);}
+      catch(error){
+        if(!/Código não encontrado|not found/i.test(String(error?.message||'')))throw error;
+      }
+    }
+    return findPartBySku(term,fetchPage,{includeInactive});
+  }
+
   function markup(context=''){
     return `<section class="barcode-panel" data-barcode-panel data-context="${context==='sale'?'sale':'inventory'}" aria-label="Leitura de código de barras">
       <div class="barcode-panel-head"><strong>Leitor de código de barras</strong><small>USB/Bluetooth · câmera · digitação</small></div>
@@ -238,6 +262,6 @@
     return stopCamera;
   }
 
-  window.OficinaBarcode={normalizeCode,createDeduper,findPartBySku,markup,attach,
+  window.OficinaBarcode={normalizeCode,createDeduper,isValidGtin,findPartBySku,findPartByCode,markup,attach,
     stopCamera(){if(typeof stopCurrentCamera==='function')stopCurrentCamera();}};
 })();

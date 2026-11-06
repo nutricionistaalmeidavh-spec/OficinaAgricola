@@ -1,3 +1,4 @@
+import {migrateStocktakeBarcode} from './inventory-stocktake-schema.js';
 import {BILLING_EXTENSIONS_DDL} from './billing-finance-extensions.js';
 import {ADDITIONAL_TENANT_TABLES,ADDITIONAL_TENANT_INDEXES} from './async-tenant-extra-schema.js';
 import {PAYMENT_COLLECTION_DDL} from './payment-collection.js';
@@ -246,6 +247,7 @@ export async function migrateAsyncTenantStore(port,{seed=true}={}){
      await tx.run(record.sql,record.params);
    });
  }
+ if(port.engine==='postgres')await migrateStocktakeBarcode(port);
  return {engine:port.engine,version:VERSION,tables:ddl.length};
 }
 

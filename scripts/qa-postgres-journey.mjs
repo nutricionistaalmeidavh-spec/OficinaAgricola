@@ -67,7 +67,7 @@ try{
   await screenshot('03-diagnostico-consecutivo');
   await page.locator('#modalClose').click();
   const part=await page.evaluate(async()=>{
-    const part=await api('/api/parts',{method:'POST',body:{requestId:newCommandId(),sku:'PG-UI-FILTRO',description:'Filtro UI PostgreSQL',salePriceCents:2500}});
+    const part=await api('/api/parts',{method:'POST',body:{requestId:newCommandId(),sku:'PG-UI-FILTRO',description:'Filtro UI PostgreSQL',barcode:'5901234123457',salePriceCents:2500}});
     await api('/api/inventory/movements',{method:'POST',body:{requestId:newCommandId(),partId:part.id,type:'ENTRADA',quantity:10}});
     await api('/api/cash/open',{method:'POST',body:{requestId:newCommandId(),openingCents:0}});return part;
   });
@@ -88,6 +88,16 @@ try{
   assert.equal(result.sales.length,1);assert.equal(Number(result.sales[0].total_cents),5900);assert.equal(Number(result.part.quantity),8);
   await screenshot('06-venda-confirmada');
   await navigate('inventory');
+  await page.locator('#stockHistory').waitFor({state:'visible',timeout:6000}).catch(async()=>{
+   const diagnostic=await page.evaluate(()=>({
+    page:state.page,role:state.user?.role,ready:state.pageReady,
+    content:document.querySelector('#content')?.textContent?.slice(0,1200),
+    modalOpen:!document.querySelector('#modal')?.classList.contains('hidden'),
+    modalDirty:modalSession?.dirty,
+    title:document.querySelector('#pageTitle')?.textContent
+   }));
+   throw Error('Falha ao abrir estoque: '+JSON.stringify(diagnostic));
+  });
   await page.locator('#stockHistory').click();
   await page.locator('#inventoryHistoryRows').getByText('PG-UI-FILTRO').first().waitFor();
   await page.locator('#inventoryHistoryType').selectOption('SAIDA_MANUAL');
@@ -120,8 +130,36 @@ try{
   assert.equal(Number(afterPurchase.part.quantity),10);
   assert.equal(afterPurchase.orders[0].status,'PARCIAL');
   await screenshot('10-estoque-compra-confirmada');
+  await page.locator('#content [data-barcode-panel] [data-barcode-input]').fill('5901234123457');
+  await page.locator('#content [data-barcode-panel] [data-barcode-input]').press('Enter');
+  await page.locator('#content [data-barcode-panel] [data-barcode-status]').filter({hasText:'PG-UI-FILTRO'}).waitFor({state:'visible'});
+  await screenshot('11-leitor-usb-ean-consulta');
+  await page.locator('#stocktakeOpen').click();
+  await page.locator('#startStocktakePage').click();
+  await page.locator('[data-stocktake-count]').first().waitFor({state:'visible'});
+  await screenshot('12-inventario-fisico');
+  const qtyInputs=await page.locator('[data-stocktake-count]').count();
+  assert.ok(qtyInputs>0);
+  await page.evaluate(async()=>{
+   for(const field of document.querySelectorAll('[data-stocktake-count]')){
+    const part=await api('/api/parts/'+field.dataset.stocktakeCount);
+    field.value=String(part.quantity);
+    field.dispatchEvent(new Event('input',{bubbles:true}));
+   }
+  });
+  await page.locator('#modalBody form button[type=submit]').click();
+  await page.locator('#applyStocktake').waitFor({state:'visible'});
+  await page.locator('#stocktakeReason').fill('Conferência presencial de estoque');
+  await screenshot('13-inventario-conferido');
+  await page.locator('#applyStocktake').click();
+  await page.waitForFunction(async()=>{
+   const takes=await api('/api/inventory/stocktakes');
+   return takes[0]?.status==='APLICADO';
+  });
+  const afterCount=await page.evaluate(async id=>api('/api/parts/'+id),part.id);
+  assert.equal(Number(afterCount.quantity),10);
   assert.deepEqual(errors,[]);
-  await writeFile(path.join(output,'summary.json'),JSON.stringify({status:'passed',engine:'postgres',viewport:viewportName,checks:['first-admin-ui','contextual-customer-machine-order','diagnosis-save-twice','sale-preview','price-conflict-no-write','sale-confirmed-stock-once','inventory-history-ui','supplier-create-ui','purchase-order-ui','partial-receipt-ui']},null,2));
+  await writeFile(path.join(output,'summary.json'),JSON.stringify({status:'passed',engine:'postgres',viewport:viewportName,checks:['first-admin-ui','contextual-customer-machine-order','diagnosis-save-twice','sale-preview','price-conflict-no-write','sale-confirmed-stock-once','inventory-history-ui','supplier-create-ui','purchase-order-ui','partial-receipt-ui','barcode-usb-keyboard-ui','physical-stocktake-review-ui']},null,2));
 }catch(error){
   const diagnostic=logs.join('').split(/\r?\n/).filter(line=>line.includes('[qa-native-error]')).slice(-8);
   if(diagnostic.length)console.error('SQL QA trace:\n'+diagnostic.join('\n'));

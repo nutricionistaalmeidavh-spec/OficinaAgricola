@@ -50,6 +50,12 @@ const ROUTES=[
  'GET /api/parts /v1/parts ALL',
  'POST /api/parts /v1/parts OFFICE',
  'GET /api/parts/page /v1/parts/page ALL',
+ 'GET /api/parts/barcode/:barcode /v1/parts/barcode/:barcode ALL',
+ 'GET /api/inventory/stocktakes /v1/stocktakes OFFICE',
+ 'POST /api/inventory/stocktakes /v1/stocktakes OFFICE',
+ 'GET /api/inventory/stocktakes/:id /v1/stocktakes/:id OFFICE',
+ 'POST /api/inventory/stocktakes/:id/counts /v1/stocktakes/:id/counts OFFICE',
+ 'POST /api/inventory/stocktakes/:id/apply /v1/stocktakes/:id/apply ADMIN',
  'GET /api/parts/:id /v1/parts/:id ALL',
  'PATCH /api/parts/:id /v1/parts/:id OFFICE',
  'GET /api/parts/:id/fitments /v1/parts/:id/fitments ALL',
@@ -168,7 +174,7 @@ const definitions=ROUTES.map(line=>{
  const names=[];
  const expression=new RegExp('^'+legacy.replace(/:([A-Za-z]+)/g,(_,name)=>{
   names.push(name);
-  return name==='plate'?'([A-Z0-9-]{1,16})':['intentId','planId','installmentId','entryId','refundId'].includes(name)?'([a-f0-9]{32})':'([1-9][0-9]*)';
+  return name==='barcode'?'(\\d{8}|\\d{12}|\\d{13}|\\d{14})':name==='plate'?'([A-Z0-9-]{1,16})':['intentId','planId','installmentId','entryId','refundId'].includes(name)?'([a-f0-9]{32})':'([1-9][0-9]*)';
  })+'$');
  return Object.freeze({method,legacy,native,roles:ROLES[role],transform,names,expression});
 });
@@ -213,7 +219,7 @@ export const nativeRouteCoverage=Object.freeze(definitions.map(x=>x.method+' '+x
 const nativeDefinitions=definitions.map(spec=>Object.freeze({
  method:spec.method,roles:spec.roles,
  expression:new RegExp('^'+spec.native.replace(/:([A-Za-z]+)/g,(_,name)=>
-  name==='plate'?'([A-Z0-9-]{1,16})':
+  name==='barcode'?'(\\d{8}|\\d{12}|\\d{13}|\\d{14})':name==='plate'?'([A-Z0-9-]{1,16})':
   ['intentId','planId','installmentId','entryId','refundId'].includes(name)?
     '([a-f0-9]{32})':'([1-9][0-9]*)')+'$')
 }));

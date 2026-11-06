@@ -208,10 +208,10 @@ async function saleModal() {
   addRow();
   const barcodeSalePanel=$('#modalBody [data-barcode-panel]');
   window.OficinaBarcode?.attach(barcodeSalePanel,async code=>{
-    const part=await window.OficinaBarcode.findPartBySku(code,api);
+    const part=await window.OficinaBarcode.findPartByCode(code,api);
     if(!barcodeSalePanel?.isConnected||barcodeSalePanel.closest?.('.modal-backdrop.hidden'))
       return {state:'warning',message:'Leitura interrompida ao fechar a venda.'};
-    if(!part)return {state:'error',message:'Código '+code+' não localizado entre os SKUs ativos. Pesquise a peça ou cadastre-a no estoque.'};
+    if(!part)return {state:'error',message:'Código '+code+' não localizado entre os SKUs e GTINs ativos. Pesquise a peça ou cadastre-a no estoque.'};
     let row=Array.from(document.querySelectorAll('.sale-item-row')).find(item=>$('[data-sale-kind]',item).value==='P'&&!$('[data-sale-part]',item).value);
     if(!row){addRow();row=Array.from(document.querySelectorAll('.sale-item-row')).at(-1);}
     const kind=$('[data-sale-kind]',row);

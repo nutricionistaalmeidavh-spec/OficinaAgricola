@@ -197,9 +197,15 @@ export function createAsyncWorkshopSales(port){
        item.quantity,item.price,item.total
      ]));
      if(item.partId){
-       changes.push(command(`UPDATE parts SET
-         quantity=CASE WHEN quantity>=? THEN quantity-? ELSE NULL END,updated_at=?
-         WHERE id=?`,[item.quantity,item.quantity,at,item.partId]));
+       // D1 needs an atomic constraint violation to roll back its batch.
+       // PostgreSQL/SQLite use conditional UPDATE, so a concurrent sold-out
+       // race produces a controlled 409 rather than leaking a NOT NULL SQL error.
+       changes.push(isD1
+         ?command(`UPDATE parts SET
+           quantity=CASE WHEN quantity>=? THEN quantity-? ELSE NULL END,updated_at=?
+           WHERE id=?`,[item.quantity,item.quantity,at,item.partId])
+         :command(`UPDATE parts SET quantity=quantity-?,updated_at=?
+           WHERE id=? AND quantity>=?`,[item.quantity,at,item.partId,item.quantity]));
        const movementId=id();
        const ref=isD1?'CASE WHEN changes()=1 THEN ? ELSE -1 END':'?';
        changes.push(command(`INSERT INTO inventory_movements(
@@ -224,6 +230,13 @@ export function createAsyncWorkshopSales(port){
      }else await port.transaction(async tx=>{
        const active=await tx.first("SELECT id FROM cash_sessions WHERE id=? AND status='ABERTO'"+lock,[cash.id]);
        if(!active)fail('Abra o caixa antes de concluir a venda',409);
+       // PG: serialize stock checks against all concurrent sales, OS consumption
+       // and stocktake application, using a stable part-ID lock order.
+       for(const [partId,count] of [...byPart.entries()].sort((a,b)=>a[0]-b[0])){
+         const locked=await tx.first('SELECT quantity FROM parts WHERE id=?'+lock,[partId]);
+         if(!locked||Number(locked.quantity)+1e-9<count)
+           fail('Estoque insuficiente para os itens da venda',409);
+       }
        const result=await tx.run(insert.sql,insert.params);
        if(affected(result)!==1)fail('Caixa não está aberto',409);
        for(const command of changes){
