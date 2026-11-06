@@ -67,19 +67,33 @@ export function createOficinaCommercialLicense({
   if(!state.licenseId||!state.active)return result(state,{at:now()});
   if(Number.isFinite(state.checkedAt)&&now()-state.checkedAt<REFRESH_MS)
    return {...result(state,{at:now()}),offline:false};
-  try{
-   const query=new URLSearchParams({installationId:state.installationId,product:PRODUCT});
-   const data=await remote('/v1/license/status?'+query);
-   if(data.product!==PRODUCT||typeof data.active!=='boolean'||!dateOk(data.expiresAt??null))
-    throw Error('Resposta da Central inválida');
-   const next={...state,active:data.active,expiresAt:data.expiresAt||null,checkedAt:now()};
-   statePromise=Promise.resolve(await save(next));
-   return result(next,{at:now()});
-  }catch{
-   // Compatível com o PDV: somente a última situação ATIVA permite operar offline.
-   // Uma revogação ou expiração conhecida nunca é substituída por uso offline.
-   return {...result(state,{at:now()}),offline:true};
+  const query=new URLSearchParams({installationId:state.installationId,product:PRODUCT});
+  let data;
+  try{data=await remote('/v1/license/status?'+query);}
+  catch(error){
+   // Queda de rede/5xx: respeitar último estado local ativo. Respostas 4xx
+   // explícitas de credencial ou instalação inválida não autorizam uso offline.
+   if(!error.status||error.status>=500||error.status===429)
+    return {...result(state,{at:now()}),offline:true};
+   const revoked={...state,active:false,checkedAt:now()};
+   try{statePromise=Promise.resolve(await save(revoked));}
+   catch{statePromise=Promise.resolve(revoked);}
+   return result(revoked,{at:now()});
   }
+  if(data.product!==PRODUCT||typeof data.active!=='boolean'||!dateOk(data.expiresAt??null)){
+   // Não interpretar resposta incompatível com PDV como simples falta de rede.
+   const invalid={...state,active:false,checkedAt:now()};
+   try{statePromise=Promise.resolve(await save(invalid));}
+   catch{statePromise=Promise.resolve(invalid);}
+   return result(invalid,{at:now()});
+  }
+  const next={...state,active:data.active,expiresAt:data.expiresAt||null,checkedAt:now()};
+  try{statePromise=Promise.resolve(await save(next));}
+  catch{
+   statePromise=Promise.resolve({...next,active:false});
+   return result({...next,active:false},{at:now()});
+  }
+  return result(next,{at:now()});
  }
  async function activate({email,code}={}){
   const accountEmail=String(email||'').trim().toLowerCase();
