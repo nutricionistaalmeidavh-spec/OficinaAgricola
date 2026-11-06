@@ -171,6 +171,7 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: write
+      checks: read
     steps:
       - name: Obter versão da main para publicar somente releases oficiais
         uses: actions/checkout@v4
