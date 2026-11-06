@@ -17,3 +17,11 @@ test('edição comercial não recebe atualização da edição gratuita',()=>{
  const updater=readFileSync('electron/updater.js','utf8');
  assert.match(updater,/isCommercial\)return/);
 });
+
+test('edição NSIS transmite exigência de licença ao gateway PostgreSQL real',()=>{
+ const electron=readFileSync('electron/main.js','utf8');
+ const server=readFileSync('src/start-postgres-unified.js','utf8');
+ assert.match(electron,/OFICINA_REQUIRE_COMMERCIAL_ACTIVATION:\s*commercialEditionRequired\(\)/);
+ assert.match(server,/createOficinaCommercialLicense\(\{/);
+ assert.match(server,/licenseControl\s*[,}]/);
+});
