@@ -83,7 +83,7 @@ export function createPostgresUnifiedGateway({
        fail('Ative a instalação na máquina principal',403);
      const data=await readPayload(request,1024);
      try{return json(await licenseControl.activate(data));}
-     catch(error){fail(error.message||'Ativação recusada',error.status||503);}
+     catch(error){return json({error:error.message||'Central de licenças indisponível'},error.status||503);}
    }
    if(licenseControl?.required&&!(path==='/api/setup/status'&&method==='GET')){
      const status=await licenseControl.status();
