@@ -38,7 +38,7 @@ test('ArtiSys QA fica configurado como consumidor opcional da assistência', asy
   assert.ok(manifest.flows['stage7-shell']);
   assert.ok(pkg.dependencies && typeof pkg.dependencies.pg==='string' && /^\^8\./.test(pkg.dependencies.pg),
     'PostgreSQL OSS é dependência local empacotada, não SaaS');
-  assert.deepEqual(Object.keys(pkg.dependencies),['pg','qrcode-generator']);
+  assert.deepEqual(Object.keys(pkg.dependencies),['pg','qrcode-generator','@xmldom/xmldom']);
 });
 
 test('QA visual usa runner local que encerra o servidor após gerar evidências', async () => {

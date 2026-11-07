@@ -22,7 +22,7 @@ test('entregas 00-08 permanecem isoladas e sem dependência SaaS de runtime', as
   assert.equal(pkg.name, 'artisys-oficina');
   assert.ok(pkg.dependencies && typeof pkg.dependencies.pg==='string' && /^\^8\./.test(pkg.dependencies.pg),
     'PostgreSQL OSS é dependência local empacotada, não SaaS');
-  assert.deepEqual(Object.keys(pkg.dependencies),['pg','qrcode-generator']);
+  assert.deepEqual(Object.keys(pkg.dependencies),['pg','qrcode-generator','@xmldom/xmldom']);
   assert.equal(pkg.dependencies['qrcode-generator'],'2.0.4', 'QR de código de consulta deve ser gerado localmente sem SaaS');
   assert.match(env, /PORT=3344/);
   assert.match(env, /OFICINA_POSTGRES_REGISTRY_URL=/);

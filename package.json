@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "pg": "^8.23.1",
-    "qrcode-generator": "2.0.4"
+    "qrcode-generator": "2.0.4",
+    "@xmldom/xmldom": "^0.8.13"
   }
 }

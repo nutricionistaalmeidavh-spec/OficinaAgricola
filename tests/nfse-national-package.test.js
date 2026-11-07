@@ -7,7 +7,9 @@ test('NFS-e desativada não instala SDK nem dependências transitivas',()=>{
  const lock=JSON.parse(readFileSync('package-lock.json','utf8'));
  assert.equal(pkg.dependencies['@useinvio/nfse-sdk'],undefined);
  assert.equal(lock.packages[''].dependencies['@useinvio/nfse-sdk'],undefined);
- for(const name of ['@useinvio/nfse-sdk','@xmldom/xmldom','@xmldom/is-dom-node','node-forge','xml-crypto','xpath'])
+ assert.equal(pkg.dependencies['@xmldom/xmldom'],'^0.8.13');
+ assert.ok(lock.packages['node_modules/@xmldom/xmldom']);
+ for(const name of ['@useinvio/nfse-sdk','@xmldom/is-dom-node','node-forge','xml-crypto','xpath'])
   assert.equal(lock.packages['node_modules/'+name],undefined,name);
 });
 test('bundle nacional não integra o instalador',()=>{
