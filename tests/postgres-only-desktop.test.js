@@ -9,7 +9,7 @@ test('Electron inicia PostgreSQL automaticamente em instalação limpa e não po
  assert.match(main,/app\.whenReady\(\)\.then\(async \(\) => \{[\s\S]*?const url = await startPostgresDesktop\(\);/);
  assert.doesNotMatch(main,/startLocalServer|openDatabase|artisys-oficina\.sqlite|OFICINA_POSTGRES_DESKTOP_MODE/);
  assert.match(main,/createPortablePostgresController/);
- assert.match(main,/configureBundledFiscal/);
+ assert.doesNotMatch(main,/configureBundledFiscal/);
 });
 
 test('comandos padrão usam somente PostgreSQL e servidor SQLite legado não inicia',async()=>{
