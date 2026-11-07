@@ -428,6 +428,7 @@ function showLogin(){
   $('#setupForm').classList.add('hidden');$('#licenseForm').classList.add('hidden');$('#loginForm').classList.remove('hidden');
 }
 function canViewModule(page){
+ if(page==='fiscal')return false;
  return Boolean(window.OficinaRolePermissions?.canViewPage(state.user?.role,page));
 }
 function showApp(){
@@ -455,12 +456,11 @@ function pageRenderer(page){
     if(state.user?.role==='ADMIN'&&window.OficinaFirstAccess)
       await window.OficinaFirstAccess.renderBanner();
   }:async()=>{};
-  const fiscal=typeof renderFiscal==='function'?renderFiscal:async()=>{};
   const market=typeof renderMarketParity==='function'?renderMarketParity:async()=>{};
   return ({
     dashboard,customers:renderCustomers,machines:renderMachines,
     'work-orders':renderWorkOrders,inventory:renderInventory,schedule:renderSchedule,
-    finance:renderFinance,reports:renderReports,fiscal,technicians:renderTechnicians,
+    finance:renderFinance,reports:renderReports,technicians:renderTechnicians,
     settings:renderSettings,services:renderServices,sales:renderSales,market
   })[page]||dashboard;
 }

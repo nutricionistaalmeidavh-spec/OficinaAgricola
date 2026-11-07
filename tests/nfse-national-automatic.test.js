@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {prepareNationalDpsInput} from '../src/platform/nfse-national-automatic.js';
-import {buildDpsFromJson} from '@useinvio/nfse-sdk';
 const issuer={cnpj:'11222333000181',municipalityIbge:'3106200',taxRegime:'SIMPLES',environment:'HOMOLOGACAO'};
 const snapshot=JSON.stringify({kind:'NFSE',originId:2,originType:'OS',
   nfseRoute:{channel:'NACIONAL',municipalityIbge:'3106200',taxRegime:'SIMPLES',competenceDate:'2026-11-05'},
@@ -27,10 +26,7 @@ test('gera dados determinísticos da DPS a partir do snapshot canônico sem impo
  assert.equal(result.payload.emissao.valores.vServ,'80.00');
  assert.equal(result.payload.emissao.dCompet,'2026-11-05');
  assert.equal(result.payload.emissao.tributacaoMunicipal.tribISSQN,'1');
- const xml=buildDpsFromJson(result.payload);
- assert.match(xml.xml,/<DPS/);
- assert.match(xml.xml,/Reparo no sistema hidraulico/);
- assert.match(xml.id,/^DPS\d{42}$/);
+ assert.match(result.idDps,/^DPS\d{42}$/);
 });
 test('bloqueia venda mista, desconto não revisado, soma divergente e CNPJ de outro emitente',()=>{
  assert.throws(()=>prep({document:{...doc,amount_cents:9000}}),/valor|totais|diverg/i);

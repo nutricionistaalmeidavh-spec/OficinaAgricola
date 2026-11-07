@@ -104,9 +104,9 @@ try{
  if((Get-Content -LiteralPath $sentinel -Raw -Encoding utf8) -ne 'arquivo-de-teste-pg'){
    throw 'Reinstalação apagou arquivos locais da oficina'
  }
- $afterFiscal=Invoke-RestMethod 'http://127.0.0.1:3344/api/fiscal/settings' -Headers $afterHeaders
- if($afterFiscal.enabled -eq $true -or $afterFiscal.enabled -eq 1){
-   throw 'Reinstalação habilitou emissão fiscal sem credenciamento'
+ $afterFiscal=Invoke-WebRequest 'http://127.0.0.1:3344/api/fiscal/settings' -Headers $afterHeaders -SkipHttpErrorCheck
+ if([int]$afterFiscal.StatusCode -ne 410){
+   throw 'Reinstalação não preservou o bloqueio fiscal obrigatório'
  }
  Remove-Item -LiteralPath $sentinel -Force
  Write-Host 'PASS: Reinstalação PostgreSQL preservou administrador, cliente, cluster e anexos'

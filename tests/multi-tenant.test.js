@@ -95,7 +95,7 @@ test('HTTP isolation: company and unit records, member roles and revoked access'
   assert.deepEqual(foreignOrders.data,[],'OS records never cross units');
   const sku=await request('POST','/api/parts',{sku:'PART-A-ONLY',description:'Componente exclusivo'},1);
   assert.equal(sku.status,200,JSON.stringify(sku.data));
-  assert.equal((await request('POST','/api/fiscal/1/submit',{},second)).status,409,'fiscal provider must be isolated per company');
+  assert.equal((await request('POST','/api/fiscal/1/submit',{},second)) .status,410,'fiscal está desativado para todas as empresas');
   const partsOfB=await request('GET','/api/parts',undefined,second);
   assert.equal(partsOfB.status,200);
   assert.deepEqual(partsOfB.data,[],'inventory is physically isolated');

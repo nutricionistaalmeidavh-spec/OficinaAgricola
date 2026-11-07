@@ -1,59 +1,33 @@
 param([switch]$Commercial)
 $ErrorActionPreference = 'Stop'
 
-Write-Host '[1/10] Instalando empacotador Electron temporariamente...'
+Write-Host '[1/8] Instalando empacotador Electron temporariamente...'
 npm install --no-save --package-lock=false electron-builder@26.15.3
 if ($LASTEXITCODE -ne 0) { throw 'Falha ao instalar electron-builder.' }
 
-Write-Host '[2/10] Lint...'
+Write-Host '[2/8] Lint...'
 npm run lint
 if ($LASTEXITCODE -ne 0) { throw 'Lint falhou.' }
 
-Write-Host '[3/10] Testes...'
+Write-Host '[3/8] Testes...'
 npm test
 if ($LASTEXITCODE -ne 0) { throw 'Testes falharam.' }
 
-Write-Host '[4/10] Build web/backend...'
+Write-Host '[4/8] Build web/backend...'
 npm run build
 if ($LASTEXITCODE -ne 0) { throw 'Build falhou.' }
 
-Write-Host 'Verificando tabelas oficiais NCM, CFOP e IBS/CBS embarcadas...'
-node scripts/assert-fiscal-data-bundle.mjs --dist
-if ($LASTEXITCODE -ne 0) { throw 'Instalador bloqueado: catálogo fiscal oficial ausente, inválido ou desatualizado.' }
-
-Write-Host '[5/10] E2E...'
+Write-Host '[5/8] E2E...'
 npm run test:e2e
 if ($LASTEXITCODE -ne 0) { throw 'E2E falhou.' }
 
-Write-Host '[6/10] Gerando executor fiscal standalone (sem Python no cliente)...'
-python -m pip install --disable-pip-version-check pyinstaller==6.16.0
-if ($LASTEXITCODE -ne 0) { throw 'Falha ao instalar PyInstaller no builder.' }
-python -m PyInstaller --noconfirm --clean --onefile --console --name acbrlib-worker --distpath build/fiscal-worker --workpath build/pyinstaller-tmp --specpath build/pyinstaller-src src/platform/acbrlib-worker.py
-if ($LASTEXITCODE -ne 0) { throw 'Falha ao empacotar worker fiscal.' }
-
-Write-Host '[7/10] Compilando DLLs ACBr NFe/NFSe a partir dos fontes LGPL...'
-& "$PSScriptRoot/build-acbr-native.ps1"
-if ($LASTEXITCODE -ne 0) { throw 'Falha ao compilar ACBr nativo.' }
-
-Write-Host '[8/10] Validando ABI fiscal e integridade do bundle...'
-foreach ($dll in @('ACBrNFe64.dll','ACBrNFSe64.dll')) {
-  $probe = & ./build/fiscal-worker/acbrlib-worker.exe --probe "build/fiscal-native/$dll" | ConvertFrom-Json
-  if ($LASTEXITCODE -ne 0 -or -not $probe.ok) { throw "Biblioteca ACBr incompatível: $dll" }
-}
-node scripts/stage-fiscal-bundle.mjs
-if ($LASTEXITCODE -ne 0) { throw 'Bundle ACBr não foi gerado.' }
-
-Write-Host '[9/10] Compilando ponte de diagnóstico autônoma...'
+Write-Host '[6/8] Compilando ponte de diagnóstico autônoma...'
 & (Join-Path $PSScriptRoot 'build-diagnostic-bridge.ps1')
 if ($LASTEXITCODE -ne 0) { throw 'Ponte de diagnóstico não foi compilada.' }
 
-Write-Host '[10/11] Preparando PostgreSQL 16 OSS embarcado...'
+Write-Host '[7/8] Preparando PostgreSQL 16 OSS embarcado...'
 node scripts/stage-postgres-windows.mjs
 if ($LASTEXITCODE -ne 0) { throw 'Bundle PostgreSQL 16 não foi gerado.' }
-
-Write-Host 'Preparando módulo fiscal nacional MIT isolado...'
-node scripts/stage-nfse-national.mjs
-if ($LASTEXITCODE -ne 0) { throw 'Bundle nacional OSS não foi gerado.' }
 
 # A edição comercial só é criada por seleção explícita no builder.
 if ($Commercial) {
@@ -63,7 +37,7 @@ if ($Commercial) {
 }
 if ($LASTEXITCODE -ne 0) { throw 'Falha ao gerar manifesto da edição do instalador.' }
 
-Write-Host '[11/11] Gerando instalador Electron Windows x64...'
+Write-Host '[8/8] Gerando instalador Electron Windows x64...'
 npx electron-builder --win nsis --x64 --publish never
 if ($LASTEXITCODE -ne 0) { throw 'Empacotamento Electron falhou.' }
 

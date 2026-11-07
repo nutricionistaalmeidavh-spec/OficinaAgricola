@@ -1,3 +1,4 @@
+import {isNativeFiscalPath,FISCAL_DISABLED_MESSAGE} from './fiscal-disabled.js';
 import {requiredNativeRoles,serviceOnlyNativeRoute} from './async-workshop-policy.js';
 // Private service-to-service HTTP boundary for native async D1/PG operations.
 // No arbitrary SQL endpoint, browser CORS allowance or client-side secrets.
@@ -33,6 +34,7 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
   if(!authorized)return json({error:'Serviço privado: acesso não autorizado'},401);
   try{
    const u=new URL(request.url),path=u.pathname,method=request.method.toUpperCase();
+   if(isNativeFiscalPath(path))return json({error:FISCAL_DISABLED_MESSAGE},410);
    // Called only after private Bearer authentication and before ANY
    // operational query; prevents a wrongly mapped company from reading data.
    if(preflight&&path!=='/v1/migrate'&&path!=='/v1/health')

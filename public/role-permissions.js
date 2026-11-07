@@ -16,7 +16,6 @@
   inventory:ALL,
   sales:SALES,
   finance:FINANCE,
-  fiscal:FINANCE,
   reports:ALL,
   technicians:ALL,
   settings:ADMIN

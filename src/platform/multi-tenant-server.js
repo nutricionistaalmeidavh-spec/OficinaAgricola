@@ -1,3 +1,4 @@
+import {isFiscalApiPath,FISCAL_DISABLED_MESSAGE} from './fiscal-disabled.js';
 import {requestPayloadLimit} from './billing-http-limits.js';
 import {createCommonDataAdapter} from './common-data-adapter.js';
 import {createBillingService} from './billing-p3-p4.js';
@@ -20,7 +21,6 @@ import { createApprovalLink, createMaintenanceCrmTasks } from '../services/marke
 import { financeSummary } from '../services/finance.js';
 import { sharePartCatalog, shareCustomer } from './tenant-catalog-sharing.js';
 import { transferTenantStock, retryTenantStockTransfer, listTenantStockTransfers } from './tenant-stock-transfer.js';
-import { resolveTenantFiscalProvider, validateTenantFiscalConfigs } from './tenant-fiscal.js';
 import { transferTenantWorkOrder, retryTenantWorkOrderTransfer, getTenantTransferDossier, listTenantOrderTransfers } from './tenant-os-transfer.js';
 import { seedDefaultChecklists, recoverOrphanAttachments } from '../services/operations.js';
 import { readRemoteAttachment } from './remote-attachments.js';
@@ -75,7 +75,6 @@ export function createMultiTenantServer({
   if(legacyOtherUnitOrders)
     throw httpError('Banco legado já contém OS de várias unidades. Migração segura das OS e seus vínculos é obrigatória antes de ativar o modo multiempresa.',409);
   migrateTenantRegistry(registryDb,legacyDb);
-  validateTenantFiscalConfigs(tenantFiscalConfigs);
   validateTenantPaymentConfigs(tenantPaymentConfigs);
   const root=resolve(tenantsRoot);
   const cache=new Map();
@@ -100,12 +99,6 @@ export function createMultiTenantServer({
     recoverOrphanAttachments(db,storageDir);
     const auditPath=isLegacy?(process.env.EVENT_LOG_PATH || join(dirname(resolve(legacyDatabasePath)),'oficina-events.jsonl')):join(dir,'events.jsonl');
     const eventRuntime=createEventRuntime({auditPath});
-    const configPresent=Object.hasOwn(tenantFiscalConfigs,String(unit.companyId));
-    const scopedFiscalProvider=configPresent
-      ?resolveTenantFiscalProvider({companyId:unit.companyId,configs:tenantFiscalConfigs}):null;
-    // Legacy can still use the existing single-company local provider,
-    // but never leak process-wide credentials into an unrelated unit.
-    const fiscalProviderOverride=isLegacy&&!configPresent?undefined:scopedFiscalProvider;
     // A unit-specific S3 namespace is derived from trusted registry IDs, never
     // from request headers or client-controlled JSON.
     const objectStore=objectStoreForUnit?objectStoreForUnit(unit):null;
@@ -113,9 +106,9 @@ export function createMultiTenantServer({
       billingProviders:billingProvidersForUnit?.(unit,db)??{},
       reminderSender:reminderSenderForUnit?.(unit)??null
     };
-    const srv=unitServerFactory({db,storageDir,eventRuntime,tls:null,fiscalProviderOverride,objectStore,paymentOptions});
+    const srv=unitServerFactory({db,storageDir,eventRuntime,tls:null,fiscalProviderOverride:null,objectStore,paymentOptions});
     const runtime={db,srv,unit,storageDir,objectStore,eventRuntime,owned:!isLegacy,
-      fiscalConfigured:isLegacy||Boolean(scopedFiscalProvider)};
+      fiscalConfigured:false};
     cache.set(id,runtime);
     return runtime;
   }
@@ -175,6 +168,7 @@ export function createMultiTenantServer({
       return json(res,200,identity);
     }
     const user=validateSession(registryDb,token);
+    if(isFiscalApiPath(path))throw httpError(FISCAL_DISABLED_MESSAGE,410);
     if(path==='/api/auth/logout'&&method==='POST'){
       logout(registryDb,token);
       for(const runtime of cache.values())runtime.db.prepare('DELETE FROM sessions WHERE token_hash=?').run(tokenDigest(token));

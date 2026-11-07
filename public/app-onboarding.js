@@ -1,5 +1,5 @@
 // Primeiro acesso: projeção somente-leitura do estado canônico de cada unidade.
-// Nenhuma etapa de homologação concede autorização de produção.
+// Somente etapas operacionais são exibidas.
 (function(){
   'use strict';
   const KEY='oficina:first-access-dismissed:v1:';
@@ -14,55 +14,32 @@
     if(flag)localStorage.setItem(preferenceKey(),'yes');
     else localStorage.removeItem(preferenceKey());
   }catch{/* A preferência não é um estado canônico. */}};
-  function evaluate({health=null,company=null,services=null,technicians=null,fiscal=null,settings=null}={}){
+  function evaluate({health=null,company=null,services=null,technicians=null}={}){
     const db=health?.ok===true&&health?.operationalApiReady===true;
     const companyReady=available(company)&&safeText(company.name).length>=2&&
       safeText(company.document).replace(/\D/g,'').length>=11&&
       safeText(company.address).length>=5&&
       ['MISTA','AUTOMOTIVA','AGRICOLA'].includes(company.service_profile);
     const operationsConfigured=array(services).length>0&&array(technicians).length>0;
-    const fiscalRegistration=fiscal?.companyConfigured===true;
-    const cert=fiscal?.certificate?.configured===true;
-    const provider=fiscal?.providerReady===true;
-    const fiscalTestEligible=fiscalRegistration&&cert&&provider;
-    const fiscalProduction=fiscalTestEligible&&fiscal?.productionReady===true;
-    const fiscalHomologationVerified=fiscal?.authorizationVerified===true;
-    const fiscalModels=fiscal?.models&&typeof fiscal.models==='object'?fiscal.models:{};
     const operationReady=db&&companyReady;
     return {
-      unitId:unitKey(),db,companyReady,operationsConfigured,
+      unitId:unitKey(),db,companyReady,operationsConfigured,operationReady,
       servicesCount:array(services).length,techniciansCount:array(technicians).length,
-      fiscalRegistration,cert,provider,fiscalTestEligible,fiscalProduction,
-      fiscalHomologationVerified,fiscalModels,operationReady,
-      fiscalState:fiscalProduction?'PRODUCAO_APTA_POR_MODELO':
-        fiscalHomologationVerified?'HOMOLOGACAO_VERIFICADA':
-        fiscalTestEligible?'PREPARADO_PARA_HOMOLOGACAO':'CONFIGURACAO_PENDENTE',
       pendingCore:(!db?1:0)+(!companyReady?1:0),
       coreCompleted:Number(db)+Number(companyReady),
       coreTotal:2
     };
   }
   async function readStatus(){
-    const paths=['/api/health','/api/company','/api/services','/api/technicians',
-      '/api/fiscal/onboarding','/api/fiscal/settings'];
+    const paths=['/api/health','/api/company','/api/services','/api/technicians'];
     const answers=await Promise.allSettled(paths.map(path=>api(path)));
     const values=answers.map(reply=>reply.status==='fulfilled'?reply.value:null);
     const status=evaluate(Object.fromEntries(
-      ['health','company','services','technicians','fiscal','settings']
+      ['health','company','services','technicians']
         .map((name,i)=>[name,values[i]])));
-    return {...status,unavailable:answers.filter(reply=>reply.status==='rejected').length,
-      fiscalDetails:values[4],fiscalSettings:values[5]};
+    return {...status,unavailable:answers.filter(reply=>reply.status==='rejected').length};
   }
-  // A lista visível é editorial: nunca é usada para autorizar emissão.
-  // Os indicadores fiscais vêm do backend da unidade, não do navegador.
   function customerSteps(status){
-    const fiscalDetail=status.fiscalProduction
-      ?'Pelo menos um tipo de nota está habilitado'
-      :status.fiscalHomologationVerified
-        ?'Testes concluídos para alguns tipos de nota'
-        :status.fiscalTestEligible?'Configuração em andamento'
-        :status.fiscalRegistration?'Continue quando precisar emitir notas'
-        :'Configure quando precisar emitir notas';
     return [
       {id:'system',title:'Sistema instalado',
         detail:status.db?'Tudo pronto para começar':'Aguardando conexão com o sistema',
@@ -72,11 +49,7 @@
         state:status.companyReady?'done':'pending',action:'company'},
       {id:'team',title:'Equipe e serviços',
         detail:status.operationsConfigured?'Cadastros concluídos':'Pode fazer depois',
-        state:status.operationsConfigured?'done':'optional',action:'services'},
-      {id:'fiscal',title:'Emissão de notas fiscais',
-        detail:fiscalDetail,
-        state:status.fiscalProduction?'done':
-          (status.fiscalRegistration?'progress':'optional'),action:'fiscal'}
+        state:status.operationsConfigured?'done':'optional',action:'services'}
     ];
   }
   function customerProgress(status){
@@ -120,7 +93,7 @@
       '<div class="first-access-ready" role="status">'+
       '<span class="first-access-ready-icon" aria-hidden="true">✓</span>'+
       '<span><strong>Sua oficina já pode funcionar</strong>'+
-      '<small>A emissão de notas pode ser configurada separadamente.</small></span></div>':
+      '<small>Cadastre clientes, serviços e equipe conforme necessário.</small></span></div>':
       '<div class="first-access-pending" role="status">'+
       '<span class="first-access-ready-icon" aria-hidden="true">i</span>'+
       '<span><strong>Falta completar os dados da oficina</strong>'+
@@ -178,62 +151,11 @@
           if(action==='technicians'){leaveModal();await navigate('technicians');return;}
           if(action==='users'){leaveModal();await navigate('settings');return;}
           if(action==='cash'){leaveModal();await navigate('sales');return;}
-          if(action==='fiscal'){leaveModal();await navigate('fiscal');return;}
-          if(action==='fiscal-settings'){
-            const settings=await api('/api/fiscal/settings');
-            fiscalSettingsModal(settings);
-            return;
-          }
-          if(action==='a1'){await fiscalCertificateA1Modal();return;}
-          if(action==='a3'){await fiscalCertificateA3Modal();return;}
-          if(action==='diagnose'){
-            button.disabled=true;
-            button.setAttribute('aria-busy','true');
-            button.textContent='Verificando…';
-            const current=await readStatus();
-            const lines=[
-              'Cadastro da oficina: '+(current.companyReady?'concluído':'pendente'),
-              'Dados fiscais: '+(current.fiscalRegistration?'preenchidos':'pendentes'),
-              'Certificado digital: '+(current.cert?'configurado':'pendente')
-            ];
-            let sefaz='não testada';
-            if(current.fiscalTestEligible){
-              try{
-                const response=await api('/api/fiscal/diagnose',{method:'POST',body:{}});
-                sefaz=response?.nfe?.status==='ONLINE'?'online':
-                  String(response?.nfe?.status||'não confirmada');
-              }catch(error){sefaz='falha na consulta';}
-            }
-            lines.push('Serviço de notas: '+sefaz);
-            lines.push('Este teste não autoriza a emissão de notas em produção.');
-            const host=document.querySelector('#firstAccessDiagnostics');
-            if(host)host.textContent=lines.join(' · ');
-            toast('Verificação concluída. Confira o resultado abaixo.',sefaz!=='online');
-            return;
-          }
         }catch(error){
           toast(error.message||'Não foi possível abrir a configuração',true);
-        }finally{
-          if(action==='diagnose'){
-            button.disabled=false;button.removeAttribute('aria-busy');
-            button.textContent='Testar conexão';
-          }
         }
       };
     });
-  }
-  function fiscalModelsMarkup(status){
-    const models=status.fiscalModels;
-    const entries=[['NFE','NF-e'],['NFCE','NFC-e'],['NFSE','NFS-e']];
-    return '<div class="first-access-fiscal-models" aria-label="Situação dos tipos de nota">'+
-      entries.map(([kind,title])=>{
-        const model=models[kind];
-        const detail=model?.productionReady?'Habilitada para tentar emitir':
-          model?.homologationVerified?'Testes concluídos; produção pendente':
-          'Ainda não habilitada';
-        return '<div class="first-access-fiscal-model">'+
-          '<strong>'+title+'</strong><span>'+esc(detail)+'</span></div>';
-      }).join('')+'</div>';
   }
   async function openWizard(cached){
     if(!state.user||state.user.role!=='ADMIN')return;
@@ -250,19 +172,6 @@
       actionButton('technicians','Equipe')+
       actionButton('users','Usuários')+
       actionButton('cash','Vendas e caixa')+'</div></div>'+
-      '<details class="first-access-fiscal-options"><summary>'+
-      '<span>Configurar emissão de notas</span><span aria-hidden="true">⌄</span></summary>'+
-      '<div class="first-access-fiscal-options-body">'+
-      '<p>Cada tipo de nota tem sua própria verificação. O teste de conexão não libera emissão em produção.</p>'+
-      fiscalModelsMarkup(s)+
-      '<div class="first-access-shortcut-actions">'+
-      actionButton('fiscal','Abrir notas fiscais')+
-      actionButton('fiscal-settings','Dados fiscais')+
-      actionButton('a1','Certificado A1')+
-      actionButton('a3','Certificado A3')+
-      actionButton('diagnose','Testar conexão')+'</div>'+
-      '<p class="first-access-diagnostics" id="firstAccessDiagnostics" role="status" aria-live="polite"></p>'+
-      '</div></details>'+
       '<div class="first-access-footer">'+
       (s.operationReady?actionButton('dismiss','Começar a trabalhar',true):
         actionButton('company','Completar dados da oficina',true))+
@@ -272,5 +181,5 @@
   window.OficinaFirstAccess={
     evaluate,readStatus,customerSteps,customerProgress,renderBanner,openWizard
   };
-  // Nenhum documento, credencial, CNPJ ou resultado fiscal é gravado no navegador.
+  // O checklist é uma projeção somente leitura do estado operacional.
 })();

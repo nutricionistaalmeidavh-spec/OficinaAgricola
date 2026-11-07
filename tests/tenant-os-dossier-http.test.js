@@ -82,9 +82,8 @@ test('transferred OS dossier exposes original evidence to authorized administrat
   const xmlUrl='/api/tenancy/os-transfer/'+moved.body.transferId+'/fiscal/'+fiscalId+'/xml';
   assert.equal((await request(xmlUrl,{binary:true})).status,401);
   const xml=await request(xmlUrl,{token,binary:true});
-  assert.equal(xml.status,200);
-  assert.deepEqual(xml.body,Buffer.from(authorizedXml));
-  assert.equal((await request(xmlUrl.replace('/'+fiscalId+'/xml','/999999/xml'),{token,binary:true})).status,404);
+  assert.equal(xml.status,410,'o download fiscal integrado está desativado');
+  assert.equal((await request(xmlUrl.replace('/'+fiscalId+'/xml','/999999/xml'),{token,binary:true})).status,410);
   assert.equal(sourceDb.prepare('SELECT COUNT(*) n FROM fiscal_documents').get().n,1);
 
   const received=await request('/api/work-orders',{token,method:'GET'});

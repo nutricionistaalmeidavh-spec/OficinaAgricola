@@ -36,15 +36,10 @@ test('municípios-polo fiscal DDD 44 preservam geocódigos oficiais',()=>{
   assert.equal(byName['Alto Paraíso'],'4128625');
 });
 
-test('catálogo é carregado antes da UI fiscal e não depende de serviços pagos',()=>{
-  const catalog=html.indexOf('src="/pr-ddd44-municipios.js"');
-  const fiscal=html.indexOf('src="/app-fiscal.js"');
-  assert.ok(catalog!==-1&&fiscal>catalog,'catálogo deve existir antes do formulário fiscal');
-  const fiscalSource=readFileSync(new URL('../public/app-fiscal.js',import.meta.url),'utf8');
-  assert.match(fiscalSource,/PR_DDD44_MUNICIPIOS/);
-  assert.ok(fiscalSource.includes("lookup.hidden=issuerUf.value!=='PR'"),'seletor deve aparecer somente quando a UF for PR');
+test('catálogo DDD44 histórico não é carregado no produto sem fiscal',()=>{
+ assert.doesNotMatch(html,/src="\/pr-ddd44-municipios\.js"/);
+ assert.doesNotMatch(html,/src="\/app-fiscal\.js"/);
 });
-
 test('tela fiscal usa seletores de coleção nos eventos, mesmo sem documentos',()=>{
  const source=readFileSync(new URL('../public/app-fiscal.js',import.meta.url),'utf8');
  for(const name of ['data-nfse-competence','data-fiscal-details','data-fiscal-origin']){

@@ -5,7 +5,6 @@ import {fileURLToPath} from 'node:url';
 // Self-hosted R$0; PostgreSQL embarcado no instalador Windows.
 import {createServer} from 'node:http';
 import {readFile,stat} from 'node:fs/promises';
-import {mkdirSync,writeFileSync,existsSync} from 'node:fs';
 import {resolve,extname,sep,join} from 'node:path';
 import {randomBytes} from 'node:crypto';
 import {createCommonDataAdapter} from './platform/common-data-adapter.js';
@@ -15,11 +14,6 @@ import {createPostgresUnifiedGateway} from './platform/postgres-unified-gateway.
 import {createOficinaCommercialLicense} from './platform/commercial-license.js';
 import {loadTenantPaymentConfigs,resolveTenantPaymentOptions} from './platform/tenant-payment.js';
 import {loadTenantReminderSenders} from './platform/tenant-reminder-smtp.js';
-import {loadTenantFiscalConfigs,resolveTenantFiscalProvider} from './platform/tenant-fiscal.js';
-import {createAcbrLibFiscalProvider} from './platform/acbrlib-fiscal-provider.js';
-import {createNationalNfseProvider} from './platform/nfse-national-provider.js';
-import {selectManagedFiscalEngine} from './platform/nfse-national-provider-selection.js';
-import {createLocalFiscalCertificateStore} from './platform/fiscal-certificate-store.js';
 
 const registryUrl=process.env.OFICINA_POSTGRES_REGISTRY_URL;
 const operationsUrl=process.env.OFICINA_POSTGRES_OPERATIONS_URL;
@@ -72,76 +66,6 @@ async function staticAsset(url,res){
 const tenantPaymentConfigs=loadTenantPaymentConfigs(process.env.TENANCY_PAYMENT_CONFIG_FILE);
 const reminderSenderForUnit=loadTenantReminderSenders(process.env.TENANCY_REMINDER_SMTP_CONFIG_FILE);
 
-const tenantFiscalConfigs=loadTenantFiscalConfigs(process.env.TENANCY_FISCAL_CONFIG_FILE);
-function fiscalProviderForUnit(unit){
-  // Explicit company-level fiscal configuration is opt-in. Never inherit an
-  // issuer's credentials, fiscal provider or CNPJ from another company.
-  if(Object.hasOwn(tenantFiscalConfigs,String(unit.companyId)))
-    return resolveTenantFiscalProvider({companyId:unit.companyId,configs:tenantFiscalConfigs});
-  // The bundled ACBr is already verified by the Electron bootstrap. For other
-  // PostgreSQL deployments no fiscal adapter is enabled implicitly.
-  if(process.env.OFICINA_POSTGRES_MANAGED_LOCAL!=='true'||
-      process.env.OFICINA_BUNDLED_FISCAL_VERIFIED!=='true'||
-      !process.env.FISCAL_ACBR_WORKER_EXE||
-      !process.env.FISCAL_ACBR_INPUT_DIR)return null;
-  const companyId=Number(unit.companyId),unitId=Number(unit.id);
-  if(!Number.isSafeInteger(companyId)||companyId<=0||
-      !Number.isSafeInteger(unitId)||unitId<=0)
-    throw Error('Identidade fiscal da unidade inválida');
-  const privateRoot=join(resolve(process.env.FISCAL_ACBR_INPUT_DIR),
-    'empresa-'+companyId+'-unidade-'+unitId);
-  const configDir=join(privateRoot,'config'),inputDir=join(privateRoot,'entrada');
-  mkdirSync(configDir,{recursive:true,mode:0o700});
-  mkdirSync(inputDir,{recursive:true,mode:0o700});
-  const privateIni=name=>{
-    const target=join(configDir,name);
-    if(!existsSync(target)){
-      // Criar apenas o modelo vazio da unidade. Nunca copiar um INI com
-      // certificado/senha de outra unidade ou da configuração global.
-      try{writeFileSync(target,'[Principal]\nLogNivel=0\n',{flag:'wx',mode:0o600})}
-      catch(error){if(error.code!=='EEXIST')throw error}
-    }
-    return target;
-  };
-  const nfeLib=process.env.FISCAL_ACBR_NFE_LIB||null;
-  const nfseLib=process.env.FISCAL_ACBR_NFSE_LIB||null;
-  if(!nfeLib&&!nfseLib)return null;
-  const certificateStore=createLocalFiscalCertificateStore({directory:join(privateRoot,'segredos')});
-  const acbr=createAcbrLibFiscalProvider({
-    nfeLib,nfseLib,workerExe:process.env.FISCAL_ACBR_WORKER_EXE,inputDir,
-    certificateStore,
-    // A biblioteca NFSe integrada usa o canal nacional; rotas municipais exigem
-    // configuração isolada específica da empresa, nunca fallback silencioso.
-    ...(nfseLib?{nfseChannel:'NACIONAL'}:{}),
-    ...(nfeLib?{nfeConfig:privateIni('ACBrLibNFe.ini')}:{}),
-    ...(nfseLib?{nfseConfig:privateIni('ACBrLibNFSe.ini')}:{})
-  });
-  // A1 habilita API nacional direta no modelo NFS-e, sem exigir flag técnica.
-  // A3 mantém ACBr; configurações explícitas por empresa têm precedência acima.
-  const national=createNationalNfseProvider({certificateStore,inputDir});
-  const select=(kind,providerName)=>selectManagedFiscalEngine({
-    kind,providerName,certificateType:certificateStore.status().certificateType
-  })==='nacional'?national:acbr;
-  const service=method=>async args=>{
-    const target=select(args?.document?.kind,args?.document?.provider_name);
-    if(typeof target?.[method]!=='function')
-      throw Error('Operação fiscal não habilitada para este emissor');
-    return target[method](args);
-  };
-  return Object.freeze({...acbr,
-    nfseChannel:'NACIONAL',
-    nameForKind:kind=>select(kind).name,
-    nameForDocument:document=>select(document?.kind,document?.provider_name).name,
-    prepare:service('prepare'),transmit:service('transmit'),
-    consult:service('consult'),printPdf:service('printPdf'),
-    cancel:service('cancel'),consultCancellation:service('consultCancellation'),
-    prepareCancellation:service('prepareCancellation'),
-    saveNationalDps:args=>national.saveNationalDps(args),
-    prepareAutomaticNationalDps:args=>national.prepareAutomaticNationalDps(args),
-    nationalDpsStatus:args=>national.nationalDpsStatus(args)
-  });
-}
-
 let tenantFactory;
 try{
  await registryPool.query('SELECT 1');
@@ -172,7 +96,7 @@ try{
    localStorageRoot:process.env.OFICINA_POSTGRES_STORAGE_ROOT||'./storage/postgres',
    paymentOptionsForUnit:unit=>({...resolveTenantPaymentOptions(unit,tenantPaymentConfigs),
       reminderSender:reminderSenderForUnit(unit)}),
-   fiscalProviderForUnit
+   fiscalProviderForUnit:()=>null // Emissão desativada em todas as unidades.
  });
  const licenseControl=createOficinaCommercialLicense({
    required:process.env.OFICINA_REQUIRE_COMMERCIAL_ACTIVATION==='true',

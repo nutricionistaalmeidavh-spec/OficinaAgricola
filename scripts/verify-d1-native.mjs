@@ -72,14 +72,12 @@ const quote=await request('PUT','/v1/orders/'+os.id+'/quote',{
 assert.equal(quote.total_cents,4000);
 const approval=await request('POST','/v1/orders/'+os.id+'/quote/approve');
 assert.equal(approval.approval_status,'APROVADO');
-const f=await request('POST','/v1/fiscal/drafts',{
- originType:'OS',originId:os.id,kind:'NFE',requestId:'d1-real-fiscal-001'
+const disabledFiscal=await fetch(base+'/v1/fiscal/drafts',{
+ method:'POST',headers:{Authorization:'Bearer '+token,'X-Oficina-Session':personalSession,
+ 'Content-Type':'application/json'},
+ body:JSON.stringify({originType:'OS',originId:os.id,kind:'NFE',requestId:'fiscal-off'})
 });
-assert.equal(f.amount_cents,2857);
-const dup=await request('POST','/v1/fiscal/drafts',{
- originType:'OS',originId:os.id,kind:'NFE',requestId:'d1-real-fiscal-001'
-});
-assert.equal(f.id,dup.id);
+assert.equal(disabledFiscal.status,410,'D1 não pode emitir nem criar rascunhos fiscais');
 const part=await request('POST','/v1/parts',{sku:'D1-PART-001',description:'Filtro',salePriceCents:1500});
 await request('POST','/v1/stock',{partId:part.id,type:'ENTRADA',quantity:5});
 await request('POST','/v1/stock',{partId:part.id,type:'SAIDA_MANUAL',quantity:2});

@@ -12,7 +12,7 @@ test('Electron inicia PostgreSQL 16 privado e não executa SQLite nem fallback',
  assert.match(source,/serverUrl='http:\/\/127\.0\.0\.1:'\+port/);
  assert.match(source,/OFICINA_POSTGRES_MANAGED_LOCAL:'true'/);
  assert.match(source,/OFICINA_POSTGRES_PROVISION_NEW_UNITS:'true'/);
- assert.match(source,/configureBundledFiscal/);
+ assert.doesNotMatch(source,/configureBundledFiscal/);
  assert.doesNotMatch(source,/\.sqlite|startLocalServer|migrateAssistencia\(db\)|openDatabase/);
  assert.doesNotMatch(source,/assistencia-tecnica\.sqlite|OficinaAgro/);
 });

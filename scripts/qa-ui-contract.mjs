@@ -163,31 +163,10 @@ export async function verifyUiContract(page,viewportName,outputDir){
   assert.ok(cancelBody.requestId,'Falta chave de idempotência na confirmação');
   await page.unroute('**/api/sales**',salesRoute);
 
-  // P1: seleção fiscal é por operação pesquisável, não por ID interno.
-  if(viewportName==='mobile'){
-    await page.locator('#mobileMoreBtn').click();
-    await page.locator('[data-mobile-page="fiscal"]').click();
-  }else await page.locator('[data-page="fiscal"]').click();
-  try{
-    await page.locator('#fiscalNew').waitFor({state:'visible',timeout:8000});
-  }catch(error){
-    const message=await page.locator('#content').innerText().catch(()=>'(sem conteúdo)');
-    const pageName=await page.evaluate(()=>state?.page||'desconhecida').catch(()=>'desconhecida');
-    throw new Error('QA: página fiscal não carregou. Página='+pageName+
-      ', conteúdo='+message.slice(0,1000),{cause:error});
-  }
-  await page.locator('#fiscalNew').click();
-  const fiscalDialog=page.getByRole('dialog',{name:'Preparar documento fiscal'});
-  await fiscalDialog.waitFor({state:'visible'});
-  assert.equal(await fiscalDialog.locator('#fiscalDraftSubmit').isDisabled(),true);
-  await fiscalDialog.locator('#fiscalOriginType').selectOption('SALE');
-  await fiscalDialog.locator('#fiscalOriginSearch').fill('zz-venda-inexistente-qa');
-  await fiscalDialog.getByText('Nenhuma operação encontrada. Tente outro número ou nome.').waitFor({state:'visible'});
-  assert.equal(await fiscalDialog.locator('#fiscalDraftSubmit').isDisabled(),true);
-  await page.keyboard.press('Escape');
-  await page.getByRole('button',{name:'Descartar alterações',exact:true}).click();
-  await fiscalDialog.waitFor({state:'hidden'});
-
+  // A integração fiscal não pode aparecer em nenhuma viewport.
+  assert.equal(await page.locator('[data-page="fiscal"]').count(),0);
+  assert.equal(await page.locator('[data-mobile-page="fiscal"]').count(),0);
+  assert.equal(await page.locator('#fiscalNew').count(),0);
   await page.locator('[data-page="dashboard"]').click();
   await page.locator('.oa-order-mini').first().focus();
   await page.keyboard.press('Enter');

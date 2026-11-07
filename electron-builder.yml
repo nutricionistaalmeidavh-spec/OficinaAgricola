@@ -3,7 +3,6 @@ productName: ArtiSys Oficina
 electronVersion: 43.4.1
 asar: true
 asarUnpack:
-  - dist/src/platform/acbrlib-worker.py
   - dist/src/platform/diagnostic-worker.py
 directories:
   output: dist-electron
@@ -12,14 +11,6 @@ extraResources:
     to: oficina-edition.json
   - from: build/postgresql
     to: postgresql
-    filter:
-      - '**/*'
-  - from: build/fiscal
-    to: fiscal
-    filter:
-      - '**/*'
-  - from: build/nfse-national
-    to: nfse-national
     filter:
       - '**/*'
   - from: build/diagnostics/ArtiSys-Diagnostic-Bridge

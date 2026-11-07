@@ -34,38 +34,11 @@ try {
 }
 Write-Host 'PASS: Ponte J2534/J1939 embutida funciona sem Python instalado no PATH'
 
-# A instalação só é considerada válida se o pacote fiscal nativo, em resources,
-# estiver completo, íntegro e carregável, SEM Python instalado no cliente.
-$fiscalDir = Join-Path $installDir 'resources\fiscal'
-$manifestFile = Join-Path $fiscalDir 'acbr-bundle.json'
-if (-not (Test-Path $manifestFile)) { throw 'Instalador sem pacote fiscal/manifesto ACBr' }
-$manifest = Get-Content $manifestFile -Raw | ConvertFrom-Json
-if ($manifest.schemaVersion -ne 1 -or $manifest.architecture -ne 'x64') {
-  throw 'Manifesto ACBr inválido'
-}
-foreach ($file in $manifest.files.PSObject.Properties) {
-  $name = $file.Name
-  if ($name -notmatch '^(?:[a-zA-Z0-9._-]+|deps/[a-zA-Z0-9._-]+)$') {
-    throw "Caminho fiscal suspeito: $name"
-  }
-  $local = Join-Path $fiscalDir $name
-  if (-not (Test-Path $local)) { throw "Pacote ACBr incompleto: $name" }
-  if ((Get-FileHash -Path $local -Algorithm SHA256).Hash.ToLowerInvariant() -ne $file.Value) {
-    throw "Pacote ACBr adulterado: $name"
-  }
-}
-$worker = Join-Path $fiscalDir 'acbrlib-worker.exe'
-$workerState = & $worker --self-test | ConvertFrom-Json
-if ($LASTEXITCODE -ne 0 -or -not $workerState.ok -or -not $workerState.frozen) {
-  throw 'Worker fiscal exige Python ou falhou no Windows limpo'
-}
-foreach ($dll in @('ACBrNFe64.dll','ACBrNFSe64.dll')) {
-  $native = & $worker --probe (Join-Path $fiscalDir $dll) | ConvertFrom-Json
-  if ($LASTEXITCODE -ne 0 -or -not $native.ok) { throw "ACBr não carregou no instalador: $dll" }
-}
-Write-Host 'PASS: worker standalone e duas DLLs ACBr reais carregadas sem Python do cliente'
+# Confirme que a edição distribuída não contém pacotes fiscais.
+if (Test-Path -LiteralPath (Join-Path $installDir 'resources\fiscal')) { throw 'Instalador contém pacote fiscal inativo' }
+if (Test-Path -LiteralPath (Join-Path $installDir 'resources\nfse-national')) { throw 'Instalador contém SDK NFS-e inativo' }
 
 # O smoke de inicialização/login/persistência PostgreSQL fica em
 # scripts/smoke-postgres-portable.ps1, executado como gate obrigatório em seguida.
 # Nunca voltar a exercitar event bus ou banco SQLite como se fossem o core.
-Write-Host 'PASS: NSIS instalado; ACBr e diagnóstico embarcados íntegros. PostgreSQL smoke a seguir.'
+Write-Host 'PASS: NSIS instalado; diagnóstico embarcado íntegro e fiscal ausente. PostgreSQL smoke a seguir.'
