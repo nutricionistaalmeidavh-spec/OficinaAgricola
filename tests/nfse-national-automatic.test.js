@@ -26,7 +26,7 @@ test('gera dados determinísticos da DPS a partir do snapshot canônico sem impo
  assert.equal(result.payload.emissao.valores.vServ,'80.00');
  assert.equal(result.payload.emissao.dCompet,'2026-11-05');
  assert.equal(result.payload.emissao.tributacaoMunicipal.tribISSQN,'1');
- assert.match(result.idDps,/^DPS\\d{42}$/);
+ assert.match(result.idDps,/^DPS\d{42}$/);
 });
 test('bloqueia venda mista, desconto não revisado, soma divergente e CNPJ de outro emitente',()=>{
  assert.throws(()=>prep({document:{...doc,amount_cents:9000}}),/valor|totais|diverg/i);
