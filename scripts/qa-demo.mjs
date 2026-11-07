@@ -250,7 +250,8 @@ try{
   await page.locator('#modalBody').filter({hasText:'Garantia'}).waitFor({state:'visible'});
   await page.getByRole('status').filter({hasText:'Garantia registrada'}).waitFor({state:'visible'});
   await page.screenshot({path:path.join(outputDir,'05-historico-automotivo.png'),fullPage:true});
-
+  await page.locator('#modalClose').click();
+  await page.locator('#modal').waitFor({state:'hidden'});
   await navigateQa(page,'reports');
   await page.locator('#content').filter({hasText:'OS entregues no mês'}).waitFor({state:'visible'});
   await page.screenshot({path:path.join(outputDir,'10-relatorios-sql.png'),fullPage:true});

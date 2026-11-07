@@ -42,7 +42,7 @@ async function check(role,method,path){
 
 test('gateway financial ledgers are private to admin and finance',async()=>{
  for(const path of ['/api/work-orders/7/payment','/api/work-orders/7/receipts',
-  '/api/finance/summary','/api/fiscal']){
+  '/api/finance/summary']){
   assert.equal(await check('ADMIN','GET',path),200,path);
   assert.equal(await check('FINANCEIRO','GET',path),200,path);
   for(const role of ['TECNICO','ATENDIMENTO'])
@@ -56,7 +56,6 @@ test('the unit membership role, not global account role, authorizes each operati
   ['POST','/api/work-orders/7/checklists',['ADMIN','ATENDIMENTO','TECNICO']],
   ['POST','/api/work-orders/7/attachments',['ADMIN','ATENDIMENTO','TECNICO']],
   ['POST','/api/expenses',['ADMIN','FINANCEIRO']],
-  ['POST','/api/fiscal/7/cancel',['ADMIN']],
   ['POST','/api/sales/7/cancel',['ADMIN','FINANCEIRO']],
   ['GET','/api/reports',roles]
  ];
@@ -64,4 +63,11 @@ test('the unit membership role, not global account role, authorizes each operati
   for(const role of roles)
    assert.equal(await check(role,method,path),permitted.includes(role)?200:403,
     method+' '+path+' as '+role);
+});
+
+test('rotas fiscais são indisponíveis para todos os perfis',async()=>{
+ for(const role of roles){
+  assert.equal(await check(role,'GET','/api/fiscal'),410,role);
+  assert.equal(await check(role,'POST','/api/fiscal/7/cancel'),410,role);
+ }
 });

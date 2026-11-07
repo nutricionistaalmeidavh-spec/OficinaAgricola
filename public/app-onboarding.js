@@ -23,7 +23,7 @@
     const operationsConfigured=array(services).length>0&&array(technicians).length>0;
     const operationReady=db&&companyReady;
     return {
-      unitId:unitKey(),db,companyReady,operationsConfigured,
+      unitId:unitKey(),db,companyReady,operationsConfigured,operationReady,
       servicesCount:array(services).length,techniciansCount:array(technicians).length,
       pendingCore:(!db?1:0)+(!companyReady?1:0),
       coreCompleted:Number(db)+Number(companyReady),
