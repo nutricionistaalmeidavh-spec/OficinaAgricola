@@ -5,13 +5,12 @@ import {
 import {resolve,dirname,extname,sep,join} from 'node:path';
 
 // O artefato de produção distribui somente a árvore de dependências do
-// gateway PostgreSQL e do bootstrap Electron (ACBr + PostgreSQL portátil).
+// gateway PostgreSQL e do bootstrap Electron (PostgreSQL portátil).
 // Fontes SQLite históricas podem continuar no repositório para os testes,
 // mas não entram no instalador nem constituem um fallback operacional.
 const roots=[
   resolve('src/start-postgres-unified.js'),
-  resolve('src/platform/postgres-local-instance.js'),
-  resolve('src/platform/fiscal-bundle.js')
+  resolve('src/platform/postgres-local-instance.js')
 ];
 const srcRoot=resolve('src')+sep;
 const included=new Set();

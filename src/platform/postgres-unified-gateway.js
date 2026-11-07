@@ -1,3 +1,4 @@
+import {isFiscalApiPath,FISCAL_DISABLED_MESSAGE} from './fiscal-disabled.js';
 import {normalizePublicOrigin} from './public-access.js';
 import {requestPayloadLimit} from './billing-http-limits.js';
 import {journalEligible} from './postgres-command-journal.js';
@@ -198,6 +199,7 @@ export function createPostgresUnifiedGateway({
      return json(await runtime.commandStatus(
        'http:'+queriedMethod+':'+queriedPath+':user:'+actor.id,key));
    }
+   if(isFiscalApiPath(path))fail(FISCAL_DISABLED_MESSAGE,410);
    const mapping=mapLegacyNativeRoute(method,path);
    if(!mapping)fail('Rota não migrada para PostgreSQL',501);
    if(!mapping.roles.includes(unit.role))fail('Permissão insuficiente',403);

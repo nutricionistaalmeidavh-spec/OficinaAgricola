@@ -45,14 +45,6 @@ async function startPostgresDesktop(){
   try{
     // No terminal, global service, network download, or manual SQL setup:
     // initdb and pg_ctl are executed from read-only NSIS extraResources.
-    // Configura automaticamente o ACBr no mesmo perfil do PostgreSQL.
-    // Não existe caminho alternativo SQLite nem serviço pago obrigatório.
-    const {configureBundledFiscal}=await import('../dist/src/platform/fiscal-bundle.js');
-    const fiscal=configureBundledFiscal({
-      resourcesPath:process.resourcesPath,dataRoot:root,
-      platform:process.platform,arch:process.arch
-    });
-    console.info('[fiscal-bundle]',fiscal.active?'Pacote local verificado':'Pacote não ativo: '+fiscal.reason);
     config=await postgresController.ensureReady();
     const port=3344;
     const entry=join(app.getAppPath(),'dist','src','start-postgres-unified.js');
@@ -68,7 +60,6 @@ async function startPostgresDesktop(){
       // Edição comercial do NSIS exige licença no backend, não só na interface.
       // Sobrescreve variáveis externas na versão empacotada.
       OFICINA_REQUIRE_COMMERCIAL_ACTIVATION:commercialEditionRequired()?'true':'false',
-      OFICINA_BUNDLED_FISCAL_VERIFIED:fiscal.active?'true':'false',
       OFICINA_REGISTRY_NEW_INSTALL:config.newInstall?'true':'false'
     };
     postgresBackend=spawn(process.execPath,[entry],{

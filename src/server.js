@@ -1,3 +1,4 @@
+import {isFiscalApiPath,FISCAL_DISABLED_MESSAGE} from './platform/fiscal-disabled.js';
 import {requestPayloadLimit} from './platform/billing-http-limits.js';
 import {startBillingReminderScheduler} from './platform/billing-reminder-scheduler.js';
 import { createServer } from 'node:http';
@@ -252,6 +253,7 @@ export function createAppServer({db=openDatabase(),storageDir=process.env.STORAG
     try{
       assertSecureNetwork(req);
       assertSameOrigin(req);
+      if(isFiscalApiPath(url.pathname))return json(res,410,{error:FISCAL_DISABLED_MESSAGE});
       if(url.pathname==='/api/payment-intents/capabilities'||
          url.pathname==='/api/payment-intents'||
          /^\/api\/payment-intents\/[a-f0-9]{32}(?:\/sync)?$/.test(url.pathname)){
