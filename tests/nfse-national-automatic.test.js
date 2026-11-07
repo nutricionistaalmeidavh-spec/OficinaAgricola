@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {prepareNationalDpsInput} from '../src/platform/nfse-national-automatic.js';
-import {buildDpsFromJson} from '@useinvio/nfse-sdk';
 const issuer={cnpj:'11222333000181',municipalityIbge:'3106200',taxRegime:'SIMPLES',environment:'HOMOLOGACAO'};
 const snapshot=JSON.stringify({kind:'NFSE',originId:2,originType:'OS',
   nfseRoute:{channel:'NACIONAL',municipalityIbge:'3106200',taxRegime:'SIMPLES',competenceDate:'2026-11-05'},
