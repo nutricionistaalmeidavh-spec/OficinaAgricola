@@ -6,8 +6,6 @@ import { validateSession } from './auth.js';
 import {authTokenFrom,assertSameOrigin,hardenHttpResponse} from './platform/session-http.js';
 import {assertSecureNetwork} from './platform/network.js';
 import { createAppServer } from './server.js';
-import { createLocalFiscalProvider } from './platform/local-fiscal-provider.js';
-import { createAcbrLibFiscalProvider } from './platform/acbrlib-fiscal-provider.js';
 import { migrateAssistencia } from './assistencia-schema.js';
 import {enqueueHttpEvent,dispatchOutbox} from './platform/outbox.js';
 import {runIdempotent} from './platform/idempotency.js';
@@ -171,14 +169,8 @@ export function createAssistenciaServer({
   migrateAssistencia(db);
   // Explicit tenant override, including null (= disabled), never falls back
   // to global environment credentials used by the legacy single-company app.
-  let fiscalProvider=fiscalProviderOverride;
-  if(fiscalProviderOverride===undefined){
-    const acbrFiscalProvider=createAcbrLibFiscalProvider();
-    const localFiscalProvider=createLocalFiscalProvider();
-    if(acbrFiscalProvider&&localFiscalProvider)
-      throw new Error('Configure apenas um motor fiscal local: ACBrLib ou sidecar');
-    fiscalProvider=acbrFiscalProvider||localFiscalProvider;
-  }
+  // Integração fiscal desativada em todas as instalações e unidades.
+  const fiscalProvider=null;
   const baseServer = createAppServer({ db, storageDir, eventRuntime, fiscalProvider, objectStore, paymentOptions });
 
   const handler=async (req,res) => {
