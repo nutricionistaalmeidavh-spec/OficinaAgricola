@@ -27,53 +27,16 @@ jobs:
           cache: npm
       - name: Install
         run: npm ci
-      - name: Validate packaged national NFS-e SDK
-        run: node scripts/stage-nfse-national.mjs
-      - name: Renderizar DANFSe NT 008/2026 com logomarca oficial
-        run: |
-          if ! command -v pdftoppm >/dev/null; then
-            sudo apt-get update
-            sudo apt-get install -y poppler-utils
-          fi
-          node scripts/qa-danfse-nt008.mjs
-      - name: Guardar PDF e render sintéticos para conferência
-        uses: actions/upload-artifact@v4
-        with:
-          name: danfse-nt008-layout
-          path: build/qa-danfse/
-          retention-days: 7
       - name: Lint
         run: npm run lint
-      - name: ACBrLib Python syntax and offline unit tests
+      - name: Python diagnostic and offline unit tests
         run: |
-          python3 -m py_compile src/platform/acbrlib-worker.py src/platform/diagnostic-worker.py
+          python3 -m py_compile src/platform/diagnostic-worker.py
           python3 -m unittest discover -s tests/python -p 'test_*.py'
       - name: Test
         run: npm test
       - name: Build
         run: npm run build
-      - name: Verify official fiscal data bundled in dist
-        run: node scripts/assert-fiscal-data-bundle.mjs --dist
       - name: Critical E2E
         run: npm run test:e2e
-
-  windows-nfse-bundle:
-    runs-on: windows-latest
-    timeout-minutes: 12
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Node 22
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22.16.0
-          cache: npm
-      - name: Install OSS dependencies
-        run: npm ci
-      - name: Validate Windows NFS-e offline bundle
-        run: node scripts/stage-nfse-national.mjs
-      - name: Verificar fontes originais Arial e Microsoft Sans Serif do Windows
-        run: |
-          node scripts/qa-danfse-windows-fonts.mjs
-          node --test tests/nfse-danfse-layout-nt008.test.js tests/nfse-national-danfse.test.js
 

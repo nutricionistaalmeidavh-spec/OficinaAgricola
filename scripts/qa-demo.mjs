@@ -251,19 +251,6 @@ try{
   await page.getByRole('status').filter({hasText:'Garantia registrada'}).waitFor({state:'visible'});
   await page.screenshot({path:path.join(outputDir,'05-historico-automotivo.png'),fullPage:true});
 
-  // P0 fiscal: a UI deve mostrar claramente que rascunhos não são notas autorizadas.
-  await page.locator('#modalClose').click();
-  await page.locator('#modal').waitFor({state:'hidden'});
-  await navigateQa(page,'fiscal');
-  await page.locator('#fiscalNew').waitFor({state:'visible'});
-  await page.locator('#content').filter({hasText:'Um rascunho'}).waitFor({state:'visible'});
-  await page.screenshot({path:path.join(outputDir,'09-fiscal-nao-autorizado.png'),fullPage:true});
-  await page.locator('#fiscalSettings').click();
-  await page.locator('#modalBody input[name="issuerCnpj"]').waitFor({state:'visible'});
-  await page.locator('#modalClose').click();
-  await page.locator('#fiscalNew').click();
-  await page.locator('#modalBody select[name="kind"]').waitFor({state:'visible'});
-  await page.locator('#modalClose').click();
   await navigateQa(page,'reports');
   await page.locator('#content').filter({hasText:'OS entregues no mês'}).waitFor({state:'visible'});
   await page.screenshot({path:path.join(outputDir,'10-relatorios-sql.png'),fullPage:true});
@@ -307,7 +294,7 @@ try{
     }finally{await first.close()}
   }finally{setupProcess.kill('SIGTERM')}
 
-  await writeFile(path.join(outputDir,'qa-summary.json'),`${JSON.stringify({status:'passed',viewport:viewportName,checks:['navigation-contrast-aa','mobile-nav-no-overlap','mobile-global-search','server-status-in-flow','modal-focus-trap-restore','modal-background-inert','form-error-draft-recovery','unsaved-discard-confirmation','keyboard-os-card','reduced-motion','login','dashboard','demo-data','work-orders','os-detail','edit-action','pdf-action','history-action','client-save-without-rerender','settings-draft-focus-preserved','vehicle-identity','review-and-warranty','fiscal-read-only-and-config','reports-sql','first-run-admin-browser','durable-command-lost-response','offline-manual-command-retry']},null,2)}\n`);
+  await writeFile(path.join(outputDir,'qa-summary.json'),`${JSON.stringify({status:'passed',viewport:viewportName,checks:['navigation-contrast-aa','mobile-nav-no-overlap','mobile-global-search','server-status-in-flow','modal-focus-trap-restore','modal-background-inert','form-error-draft-recovery','unsaved-discard-confirmation','keyboard-os-card','reduced-motion','login','dashboard','demo-data','work-orders','os-detail','edit-action','pdf-action','history-action','client-save-without-rerender','settings-draft-focus-preserved','vehicle-identity','review-and-warranty','fiscal-ui-removed','reports-sql','first-run-admin-browser','durable-command-lost-response','offline-manual-command-retry']},null,2)}\n`);
 } catch(error){
   if(page)await page.screenshot({path:path.join(outputDir,'failure.png'),fullPage:true}).catch(()=>{});
   await writeFile(path.join(outputDir,'qa-summary.json'),`${JSON.stringify({status:'failed',viewport:viewportName,error:error.message},null,2)}\n`).catch(()=>{});

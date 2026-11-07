@@ -13,15 +13,12 @@ on:
       - 'electron-builder.yml'
       - 'scripts/build.mjs'
       - 'scripts/smoke-installer.ps1'
-      - 'scripts/build-acbr-native.ps1'
       - 'scripts/build-diagnostic-bridge.ps1'
       - 'scripts/requirements-diagnostic-bridge.txt'
-      - 'scripts/stage-fiscal-bundle.mjs'
       - 'scripts/stage-postgres-windows.mjs'
       - 'scripts/smoke-postgres-portable.ps1'
       - 'src/platform/postgres-windows-bundle.js'
       - 'src/platform/postgres-local-instance.js'
-      - 'src/platform/fiscal-bundle.js'
       - 'public/**'
       - 'tests/**'
       - '.github/workflows/windows-installer-smoke.yml'
@@ -55,7 +52,7 @@ jobs:
       - name: Validar parser PowerShell antes da compilação nativa
         shell: pwsh
         run: |
-          foreach ($script in @('scripts/smoke-postgres-portable.ps1','scripts/smoke-installer.ps1','scripts/build-acbr-native.ps1','scripts/build-electron.ps1','scripts/build-diagnostic-bridge.ps1')) {
+          foreach ($script in @('scripts/smoke-postgres-portable.ps1','scripts/smoke-installer.ps1','scripts/build-electron.ps1','scripts/build-diagnostic-bridge.ps1')) {
             $tokens = $null
             $errors = $null
             [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script).Path,[ref]$tokens,[ref]$errors) | Out-Null
@@ -63,52 +60,6 @@ jobs:
           }
       - name: Build application files
         run: npm run build
-      - name: Python 3.12 apenas no builder (não no cliente)
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Compilar worker fiscal autônomo
-        shell: pwsh
-        run: |
-          python -m pip install --disable-pip-version-check pyinstaller==6.16.0
-          python -m PyInstaller --noconfirm --clean --onefile --console --name acbrlib-worker --distpath build/fiscal-worker --workpath build/pyinstaller-tmp --specpath build/pyinstaller-src src/platform/acbrlib-worker.py
-          $response = & ./build/fiscal-worker/acbrlib-worker.exe --self-test | ConvertFrom-Json
-          if (-not $response.ok -or -not $response.frozen) { throw 'Worker ACBr não é executável autônomo' }
-      - name: Instalar compilador open source Lazarus/FPC + SVN
-        shell: pwsh
-        run: |
-          # Chocolatey community feed occasionally returns HTTP 504. Do not
-          # pretend the compiler was installed if all attempts fail.
-          $lazarusReady = $false
-          for ($attempt = 1; $attempt -le 3; $attempt++) {
-            choco install lazarus --version=4.0.0 -y --no-progress
-            if ($LASTEXITCODE -eq 0) { $lazarusReady = $true; break }
-            Write-Warning "Lazarus 4.0.0 download failed (attempt $attempt/3)."
-            if ($attempt -lt 3) { Start-Sleep -Seconds (10 * $attempt) }
-          }
-          if (-not $lazarusReady) { throw 'Falha ao instalar Lazarus/FPC no builder após 3 tentativas' }
-          if (-not (Get-Command svn -ErrorAction SilentlyContinue)) {
-            choco install sliksvn --version=1.14.5 -y --no-progress
-            if ($LASTEXITCODE -ne 0) { throw 'Falha ao instalar cliente SVN OSS' }
-          }
-          $svnDir = 'C:\\Program Files\\SlikSvn\\bin'
-          if (Test-Path (Join-Path $svnDir 'svn.exe')) {
-            $env:PATH = "$svnDir;$env:PATH"
-            Add-Content -Path $env:GITHUB_PATH -Value $svnDir
-          }
-          svn --version --quiet
-          if ($LASTEXITCODE -ne 0) { throw 'svn CLI indisponível no builder Windows' }
-      - name: Compilar ACBrLib NF-e e NFS-e de fontes oficiais LGPL
-        shell: pwsh
-        run: ./scripts/build-acbr-native.ps1 -Revision 48608
-      - name: Verificar DLLs reais e montar bundle autocontido
-        shell: pwsh
-        run: |
-          foreach ($lib in @('ACBrNFe64.dll','ACBrNFSe64.dll')) {
-            $response = & ./build/fiscal-worker/acbrlib-worker.exe --probe "build/fiscal-native/$lib" | ConvertFrom-Json
-            if (-not $response.ok) { throw "DLL sem exportações ACBr válidas: $lib" }
-          }
-          node scripts/stage-fiscal-bundle.mjs
       - name: Install temporary Electron builder
         run: npm install --no-save --package-lock=false electron-builder@26.15.3
       - name: Build bundled diagnostic bridge
@@ -263,7 +214,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          $required = @('quality','windows-nfse-bundle','visual-shell (desktop)','visual-shell (mobile)','NSIS · Windows x64 limpo')
+          $required = @('quality','visual-shell (desktop)','visual-shell (mobile)','NSIS · Windows x64 limpo')
           $green = $false
           for ($attempt = 1; $attempt -le 80; $attempt++) {
             $checksJson = gh api "repos/$env:GH_REPO/commits/$env:GITHUB_SHA/check-runs?per_page=100"
