@@ -45,7 +45,7 @@ function workOrderEntryForm(customers,techs){
     <small id="osCustomerNotice" role="status"></small><button id="osCustomerMore" type="button" class="btn sm" hidden>Carregar mais clientes</button>
     <fieldset id="osNewCustomer" hidden disabled><legend>Novo cliente</legend>
       <label>Nome / Razão social<input name="newCustomerName" required></label><label>Telefone<input name="newCustomerPhone" type="tel"></label>
-      <p class="muted">O cliente será cadastrado ao abrir a OS. Fiscal e integrações são opcionais.</p></fieldset>
+      <p class="muted">O cliente será cadastrado ao abrir a OS.</p></fieldset>
     <label>Buscar veículo ou equipamento<input id="osMachineSearch" type="search" placeholder="Placa, chassi, modelo ou série" disabled></label>
     <label>Veículo / equipamento<select name="machineId" id="osMachine" required><option value="">Selecione o cliente</option></select></label>
     <small id="osMachineNotice" role="status"></small><button id="osMachineMore" type="button" class="btn sm" hidden>Carregar mais equipamentos</button>

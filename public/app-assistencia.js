@@ -232,13 +232,7 @@ async function saleModal() {
 async function saleDetails(id) {
   const sale = await api(`/api/sales/${id}`);
   const canCancel = ['ADMIN', 'FINANCEIRO'].includes(state.user.role) && sale.status === 'CONCLUIDA';
-  showModal(`Venda #${sale.sale_number}`, `<div class="detail-grid"><div class="detail-block"><h3>Resumo</h3><p>${dt(sale.created_at)}<br>${esc(sale.customer_name || 'Consumidor')}<br>${esc(sale.payment_method)}</p>${badge(sale.status)}</div><div class="detail-block"><h3>Total</h3><strong>${money(sale.total_cents)}</strong><p class="muted">Subtotal ${money(sale.subtotal_cents)} · desconto ${money(sale.discount_cents)}</p></div></div><div class="list" style="margin-top:14px">${sale.items.map(item => `<div class="list-item"><div><strong>${esc(item.description)}</strong><br><small>${item.quantity} × ${money(item.unit_price_cents)}</small></div><strong>${money(item.total_cents)}</strong></div>`).join('')}</div>${['ADMIN','FINANCEIRO'].includes(state.user.role)?'<button id="saleFiscalAction" type="button" class="btn soft" style="margin-top:14px">Preparar documento fiscal desta venda</button>':''}${canCancel ? '<button id="cancelSale" type="button" class="btn danger" style="margin-top:14px">Cancelar venda e estornar estoque</button>' : ''}`);
-  const fiscal = $('#saleFiscalAction');
-  if(fiscal)fiscal.onclick=async()=>{
-    closeModal();
-    await navigate('fiscal');
-    $('#fiscalNew')?.click();
-  };
+  showModal(`Venda #${sale.sale_number}`, `<div class="detail-grid"><div class="detail-block"><h3>Resumo</h3><p>${dt(sale.created_at)}<br>${esc(sale.customer_name || 'Consumidor')}<br>${esc(sale.payment_method)}</p>${badge(sale.status)}</div><div class="detail-block"><h3>Total</h3><strong>${money(sale.total_cents)}</strong><p class="muted">Subtotal ${money(sale.subtotal_cents)} · desconto ${money(sale.discount_cents)}</p></div></div><div class="list" style="margin-top:14px">${sale.items.map(item => `<div class="list-item"><div><strong>${esc(item.description)}</strong><br><small>${item.quantity} × ${money(item.unit_price_cents)}</small></div><strong>${money(item.total_cents)}</strong></div>`).join('')}</div>${canCancel ? '<button id="cancelSale" type="button" class="btn danger" style="margin-top:14px">Cancelar venda e estornar estoque</button>' : ''}`);
   const cancel = $('#cancelSale');
   if (cancel) cancel.onclick = () => cancelSaleModal(sale);
 }

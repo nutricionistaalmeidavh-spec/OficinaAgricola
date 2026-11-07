@@ -34,11 +34,9 @@ async function renderSettings(){
   const users=isAdmin?await api('/api/users'):[];
   const readonly=isAdmin?'':' readonly aria-readonly="true"';
   const disabled=isAdmin?'':' disabled';
-  const fiscalAllowed=['ADMIN','FINANCEIRO'].includes(state.user.role);
   const links=[
     ['company','Minha oficina','Dados cadastrais e perfil de atendimento'],
     ['users','Equipe e acessos','Contas e permissões da equipe'],
-    ...(fiscalAllowed?[['fiscal','Configuração fiscal','Certificados, homologação e emissão de notas']]:[]),
     ['setup','Preparação do sistema','Acompanhe os passos para começar a trabalhar']
   ];
   const navigation=links.map(([id,title,description])=>'<button type="button" class="btn settings-jump" data-settings-target="'+id+'"><strong>'+title+'</strong><small>'+description+'</small></button>').join('');
@@ -64,7 +62,6 @@ async function renderSettings(){
       <p class="muted">Administrador gerencia a oficina; Atendimento registra operações; Técnico executa serviços; Financeiro acompanha as finanças.</p>
       ${isAdmin?(users.length?users.map(settingsUserRow).join(''):'<div class="empty">Nenhum usuário cadastrado.</div>'):'<p class="muted">A lista de usuários é restrita aos administradores.</p>'}
     </section>
-    ${fiscalAllowed?'<section class="card" id="settings-fiscal"><h2>Configuração fiscal</h2><p class="muted">Cadastre o emissor, configure certificados e consulte os testes de homologação na área Fiscal.</p><button class="btn" type="button" id="settingsFiscalOpen">Abrir área Fiscal</button></section>':''}
     <section class="card" id="settings-setup"><h2>Preparação do sistema</h2><p class="muted">O checklist de primeiro acesso mostra o que falta configurar para começar a operar.</p><button class="btn" type="button" id="settingsSetupOpen">Ver preparação do sistema</button></section>
   </div>`);
   const f=$('#companyForm');
@@ -80,13 +77,11 @@ async function renderSettings(){
     };
   });
 
-  const fiscal=$('#settingsFiscalOpen');if(fiscal)fiscal.onclick=()=>navigate('fiscal');
   const setup=$('#settingsSetupOpen');if(setup)setup.onclick=()=>navigate('dashboard');
   $$('.settings-jump').forEach(button=>button.onclick=()=>{
     const id=button.dataset.settingsTarget;
     const target=$('#settings-'+id);
     if(target)target.scrollIntoView({behavior:'smooth',block:'start'});
-    else if(id==='fiscal')navigate('fiscal');
     else if(id==='setup')navigate('dashboard');
   });
   if(window.OficinaTenant?.enabled&&isAdmin){

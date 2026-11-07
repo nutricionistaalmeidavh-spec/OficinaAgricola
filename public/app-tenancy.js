@@ -57,7 +57,7 @@ async function openTenantAdmin(){
       const result=await api('/api/tenancy/company-summary?companyId='+id);
       const numbers=result.totals;
       showModal('Operação consolidada',`<div class="form-stack">
-        <p class="muted">Somente unidades da empresa selecionada. Consolidação gerencial pelo livro financeiro canônico, sem substituir emissão fiscal ou contabilidade.</p>
+        <p class="muted">Somente unidades da empresa selecionada. Consolidação gerencial pelo livro financeiro canônico.</p>
         <div class="grid two-col">
           <div class="card"><strong>${numbers.customers}</strong><small> Clientes por unidade</small></div>
           <div class="card"><strong>${numbers.workOrders}</strong><small> Ordens de serviço</small></div>
@@ -217,7 +217,7 @@ async function openTenantAdmin(){
     const requestId=newCommandId();
     const options=possibleCatalogSources.map(u=>'<option value="'+u.id+'">'+esc(u.companyName)+' / '+esc(u.name)+'</option>').join('');
     showModal('Transferir OS entre filiais',`<form class="form-stack">
-      <p class="muted">A OS de origem ficará marcada como TRANSFERIDA e uma nova OS continuará o atendimento no destino. Orçamentos, pagamentos, estoque consumido, notas fiscais e anexos anteriores permanecem legalmente na origem e poderão ser consultados no histórico auditado; não são duplicados.</p>
+      <p class="muted">A OS de origem ficará marcada como TRANSFERIDA e uma nova OS continuará o atendimento no destino. Orçamentos, pagamentos, estoque consumido e anexos anteriores permanecem legalmente na origem e poderão ser consultados no histórico auditado; não são duplicados.</p>
       <label>Filial de origem<select id="osTransferSource" name="sourceUnitId">${options}</select></label>
       <label>Filial de destino<select id="osTransferTarget" name="targetUnitId" required></select></label>
       <label>OS a transferir<select id="osTransferOrder" name="workOrderId" required></select></label>
@@ -277,32 +277,11 @@ async function openTenantAdmin(){
               <div class="card"><strong>${money(q?.total_cents||0)}</strong><small>Orçamento original</small></div>
               <div class="card"><strong>${money(received)}</strong><small>Recebimentos ativos</small></div>
               <div class="card"><strong>${(dossier.stockConsumptions||[]).length}</strong><small>Consumos documentados</small></div>
-              <div class="card"><strong>${(dossier.fiscalDocuments||[]).length}</strong><small>Notas / rascunhos fiscais</small></div>
               <div class="card"><strong>${(dossier.attachments||[]).length}</strong><small>Anexos da origem</small></div>
             </div>
-            <strong>Documentos fiscais</strong>
-            ${(dossier.fiscalDocuments||[]).map(doc=>'<div class="list-item"><small>'+esc(doc.kind)+' #'+doc.id+' · '+esc(doc.status)+' · '+money(doc.amount_cents)+'</small>'+(['AUTORIZADA','AUTORIZADA_HOMOLOGACAO'].includes(doc.status)?'<button type="button" class="btn sm" data-fiscal-xml="'+doc.id+'">Baixar XML</button>':'')+'</div>').join('')||'<p class="muted">Nenhum documento fiscal</p>'}
             <strong>Anexos originais</strong>
             ${(dossier.attachments||[]).map(att=>'<div class="list-item"><small>'+esc(att.original_name)+' · '+esc(att.category)+'</small><button class="btn sm" type="button" data-os-evidence="'+att.id+'">Baixar evidência</button></div>').join('')||'<p class="muted">Nenhum anexo</p>'}
           </div>`);
-          for(const xmlBtn of document.querySelectorAll('[data-fiscal-xml]')){
-            xmlBtn.onclick=async()=>{
-              const fiscalId=Number(xmlBtn.dataset.fiscalXml);
-              if(!(dossier.fiscalDocuments||[]).some(doc=>doc.id===fiscalId))return;
-              const path='/api/tenancy/os-transfer/'+id+'/fiscal/'+fiscalId+'/xml';
-              const response=await (window.localRuntime?.request||fetch)(path,{
-                method:'GET',headers:window.OficinaTenant?.headers()||{},credentials:'same-origin'
-              });
-              if(!response.ok)throw new Error('XML fiscal de origem não disponível para download');
-              const blob=await response.blob();
-              const uri=URL.createObjectURL(blob);
-              try{
-                const link=document.createElement('a');link.href=uri;
-                link.download='Fiscal-'+fiscalId+'.xml';
-                document.body.append(link);link.click();link.remove();
-              }finally{setTimeout(()=>URL.revokeObjectURL(uri),500);}
-            };
-          }
           for(const fileBtn of document.querySelectorAll('[data-os-evidence]')){
             fileBtn.onclick=async()=>{
               const attachmentId=Number(fileBtn.dataset.osEvidence);
