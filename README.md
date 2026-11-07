@@ -5,18 +5,17 @@ Sistema para **oficina mecânica, assistência técnica e máquinas agrícolas**
 ## Instalação Windows — automática, sem terminal
 
 O cliente executa `ArtiSys-Oficina-Setup-<versão>-Windows-x64.exe`.
-O instalador inclui **PostgreSQL 16** e **ACBr** open source, sem download de dependências no computador do cliente. No primeiro início, o Electron:
+O instalador inclui **PostgreSQL 16** open source, sem download de dependências no computador do cliente. No primeiro início, o Electron:
 
 1. Verifica o pacote PostgreSQL embarcado, inicia um cluster privado por usuário e cria os bancos de registry e operações;
-2. Configura o ACBr com seus binários locais e arquivos de trabalho fora do instalador;
-3. Inicia o gateway PostgreSQL e abre o cadastro do primeiro administrador.
+2. Inicia o gateway PostgreSQL e abre o cadastro do primeiro administrador.
 
 **Não existem usuários anteriores para migrar.** O produto inicia com bancos novos; nenhuma importação SQLite é executada. Não há fallback silencioso para SQLite: se o PostgreSQL estiver ausente, inválido ou indisponível, o aplicativo apresenta erro explícito e não cria outra base.
 
 - Perfil Windows: `%LOCALAPPDATA%\\ArtiSys\\Oficina`.
 - Cluster: `postgres\\cluster` (dados persistentes fora do instalador).
 - Registry e operações: bancos PostgreSQL privados `oficina_registry` e `oficina_operations`.
-- Anexos: `storage\\postgres`; configuração fiscal em `fiscal`.
+- Anexos: `storage\\postgres`.
 - Porta local do aplicativo: `127.0.0.1:3344`.
 - Serviço PostgreSQL: processo privado do aplicativo, não instala serviço global e não exige permissão administrativa para dados do usuário.
 - Desinstalação: preserva dados do perfil do usuário.
@@ -56,18 +55,18 @@ habilita o mesmo portal de códigos do PDV ArtiSys, com licenças isoladas por p
 - **Estoque:** `inventory_movements` é o único livro de origem para OS, vendas, ajustes e estornos; `parts.quantity` é a projeção reconciliável.
 - **Receitas:** `payment_events` é a origem para recebimentos/estornos de OS e vendas balcão; `cash_movements` registra a sessão do caixa quando aplicável.
 - **Interface:** gravações não recriam páginas inteiras; `refreshCurrentPage()` reconcilia os nós alterados e preserva formulários, foco e scroll. Navegação explícita continua criando a nova tela.
-- **Fiscal:** cadastro, rascunhos NF-e/NFS-e, idempotência, XML e estados de consulta preparados. **Emissão real segue desativada sem sidecar homologado e configuração explícita**; nenhum serviço fiscal pago é obrigatório.
+- **Fiscal:** interface e API indisponíveis nesta versão. Não há geração de rascunhos, configuração de certificados, transmissão nem consulta fiscal. Registros já existentes permanecem preservados no banco.
 - Detalhes e limites: [ADR-0002](docs/architecture/0002-canonicalidade-e-ui-estavel.md).
 
-## P0 — relatórios e preparação fiscal
+## Relatórios e integração fiscal desativada
 
-- Relatórios e contagens do dashboard são SQL do backend, sem corte de 200 OS ou 8 peças; entrega mensal usa `delivered_at`.
-- A página de OS carrega o histórico por cursor em `/api/work-orders/page` e permite consultar ordens antigas.
-- Página **Fiscal**: configuração da empresa com validação de CNPJ, rascunhos NF-e/NFS-e por OS/venda, histórico fiscal, consulta em falha indeterminada, XML e protocolo após autorização por adaptador.
-- O documento comercial é congelado e o livro fiscal nunca realiza uma segunda baixa no estoque nem lançamento de recebimento/caixa.
-- **Padrão seguro:** homologação ativada automaticamente após cadastro fiscal completo; produção separada e confirmada; ninguém recebe nota fiscal automaticamente. Sem certificado, regras tributárias e emissor homologado configurados, nenhuma emissão real ocorre.
-- O motor fiscal opcional pode usar **ACBrLib local** (`FISCAL_ACBR_NFE_LIB` / `FISCAL_ACBR_NFSE_LIB`) por `ctypes` em Python 3, ou um sidecar HTTP loopback (`FISCAL_LOCAL_PROVIDER_URL`), nunca os dois simultaneamente. Não há dependência de ACBr API paga. INI tributário revisado, certificado e homologação real continuam obrigatórios para emissão legal.
-- Documentação, limites e checklist de validação: [P0 Fiscal e Relatórios](docs/P0-FISCAL-REPORTS.md).
+- Relatórios e contagens do dashboard permanecem operacionais no PostgreSQL.
+- A página de OS mantém histórico, atendimento e pagamentos, sem emissão fiscal integrada.
+- O menu Fiscal, configuração fiscal, checklist fiscal e botões nas vendas foram retirados.
+- Rotas fiscais respondem **HTTP 410**: não é possível criar, emitir, cancelar nem consultar notas pelo Oficina.
+- O instalador Windows não inclui ACBr, worker fiscal ou SDK NFS-e.
+- Nenhuma tabela ou documento histórico é apagado. Caso a empresa precise emitir notas, use uma solução fiscal externa regularizada, fora deste sistema. O núcleo continua R$ 0, self-hosted e open source.
+
 ## CI exclusivo no GitHub
 As validações automatizadas são executadas por **GitHub Actions**:
 `CI` (lint, testes, build, E2E) e `ArtiSys QA` (Playwright desktop/mobile).
@@ -105,6 +104,3 @@ Instalador Windows é opcional via `npm run desktop:dist`, sem publicação auto
 
 Consulte `docs/P0-CONSOLIDACAO.md` para limites, cenários e validação da unificação.
 
-### ACBr fiscal Windows embarcado (branch de implementação)
-
-O instalador Windows x64 é montado com worker independente de Python e bibliotecas ACBr nativas compiladas dos fontes LGPL, com teste de integridade e DLL real. O cliente final não instala Python/ACBr manualmente. Consulte [ACBR-WINDOWS-EMBUTIDO.md](docs/ACBR-WINDOWS-EMBUTIDO.md). A emissão permanece opcional/desativada até configuração legal/tributária e homologação; não há SaaS pago obrigatório.
