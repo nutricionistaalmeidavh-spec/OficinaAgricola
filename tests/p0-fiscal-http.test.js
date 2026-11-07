@@ -74,44 +74,37 @@ test('HTTP P0: relatórios completos com RBAC e listagem de OS paginada até o f
   assert.equal(new Set(seen).size,221);
 });
 
-test('HTTP P0: fiscal só para financeiro/admin, rascunho não pode simular emissão',async t=>{
+
+test('HTTP P0: rotas fiscais respondem 410 e não criam registros',async t=>{
   const {db,base,admin,tech}=await setup(t);
   const {os}=createQuotedOS(db);
-  const denied=await request(base,'/api/fiscal',{token:tech});
-  assert.equal(denied.status,403);
-  const body={originType:'OS',originId:os.id,kind:'NFE',requestId:'http-fiscal-nfe'};
-  const created=await request(base,'/api/fiscal/drafts',{method:'POST',token:admin,body});
-  assert.equal(created.status,200);
-  assert.equal(created.data.amount_cents,4950);
-  const replay=await request(base,'/api/fiscal/drafts',{method:'POST',token:admin,body});
-  assert.equal(replay.data.id,created.data.id);
-  const deniedPost=await request(base,'/api/fiscal/drafts',{method:'POST',token:tech,body:{...body,requestId:'other'}});
-  assert.equal(deniedPost.status,403);
-  const submit=await request(base,'/api/fiscal/'+created.data.id+'/submit',{method:'POST',token:admin,body:{requestId:'send'}});
-  assert.notEqual(submit.status,200);
-  assert.match(submit.data.error,/emissor|configurad/i);
-  const doc=await request(base,'/api/fiscal/'+created.data.id,{token:admin});
-  assert.equal(doc.data.status,'RASCUNHO');
-  assert.equal(db.prepare('SELECT COUNT(*) n FROM payment_events').get().n,0);
+  const payload={originType:'OS',originId:os.id,kind:'NFE',requestId:'fiscal-disabled'};
+  for(const token of [admin,tech]){
+    for(const route of ['/api/fiscal','/api/fiscal/settings','/api/fiscal/onboarding']){
+      const result=await request(base,route,{token});
+      assert.equal(result.status,410,route);
+      assert.match(result.data.error,/fiscal.*desativada/i);
+    }
+    for(const route of ['/api/fiscal/drafts','/api/fiscal/1/submit']){
+      const result=await request(base,route,{token,method:'POST',body:payload});
+      assert.equal(result.status,410,route);
+    }
+  }
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM fiscal_documents').get().n,0);
+  const health=await request(base,'/api/health',{token:admin});
+  assert.equal(health.status,200);
 });
 
-test('HTTP P0: resposta simulada só vale pelo contrato de provider explícito',async t=>{
-  const provider={name:'fixture-teste',transmit:async()=>({status:'AUTORIZADA',environment:'HOMOLOGACAO',protocol:'SIMULATED',accessKey:'TESTE',number:'1',series:'1',xml:'<NFe>test-only</NFe>'})};
+test('HTTP P0: nem um provider fictício desbloqueia transmissão',async t=>{
+  const provider={name:'fixture-teste',transmit:async()=>({status:'AUTORIZADA'})};
   const {db,base,admin}=await setup(t,{fiscalProvider:provider});
   setFiscalSettings(db,{issuerCnpj:'11222333000181',issuerUf:'MG',municipalityIbge:'3170107',taxRegime:'SIMPLES',enabled:true});
   const {os}=createQuotedOS(db);
-  const created=await request(base,'/api/fiscal/drafts',{method:'POST',token:admin,body:{originType:'OS',originId:os.id,kind:'NFSE',requestId:'fiscal-test'}});
-  assert.equal(created.status,200);
-  const sent=await request(base,'/api/fiscal/'+created.data.id+'/submit',{method:'POST',token:admin,body:{}});
-  assert.equal(sent.status,200);
-  assert.equal(sent.data.status,'AUTORIZADA_HOMOLOGACAO');
-  assert.equal(sent.data.fiscal_number,'1');
-  const xml=await fetch(base+'/api/fiscal/'+created.data.id+'/xml',{headers:{Authorization:'Bearer '+admin}});
-  assert.equal(xml.status,200);
-  assert.match(await xml.text(),/test-only/);
-  const repeat=await request(base,'/api/fiscal/'+created.data.id+'/submit',{method:'POST',token:admin,body:{}});
-  assert.notEqual(repeat.status,200);
-  assert.equal(db.prepare('SELECT COUNT(*) n FROM payment_events').get().n,0);
+  const result=await request(base,'/api/fiscal/drafts',{
+    method:'POST',token:admin,body:{originType:'OS',originId:os.id,kind:'NFE',requestId:'fiscal-provider-rejected'}
+  });
+  assert.equal(result.status,410);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM fiscal_documents').get().n,0);
 });
 
 test('P0 provider: URL externa e credenciais em URL são proibidas, opt-in vazio é offline',()=>{
