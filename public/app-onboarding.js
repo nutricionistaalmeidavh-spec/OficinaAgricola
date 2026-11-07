@@ -151,22 +151,8 @@
           if(action==='technicians'){leaveModal();await navigate('technicians');return;}
           if(action==='users'){leaveModal();await navigate('settings');return;}
           if(action==='cash'){leaveModal();await navigate('sales');return;}
-        }catch(error){sefaz='falha na consulta';}
-            }
-            lines.push('Serviço de notas: '+sefaz);
-            lines.push('Este teste não autoriza a emissão de notas em produção.');
-            const host=document.querySelector('#firstAccessDiagnostics');
-            if(host)host.textContent=lines.join(' · ');
-            toast('Verificação concluída. Confira o resultado abaixo.',sefaz!=='online');
-            return;
-          }
         }catch(error){
           toast(error.message||'Não foi possível abrir a configuração',true);
-        }finally{
-          if(action==='diagnose'){
-            button.disabled=false;button.removeAttribute('aria-busy');
-            button.textContent='Testar conexão';
-          }
         }
       };
     });
