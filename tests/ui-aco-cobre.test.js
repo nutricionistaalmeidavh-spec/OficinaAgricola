@@ -48,3 +48,8 @@ test('Kanban oferece busca explícita nas OS já carregadas sem alterar a fonte 
   assert.match(orders,/function filterLoadedKanban/);
   assert.match(orders,/Carregadas|carregadas/);
 });
+
+test('filtro e drag cleanup consultam coleções de cartões, nunca um elemento isolado',()=>{
+  assert.match(orders,/document\.querySelectorAll\('\.kanban \.os-card'\)\.forEach/);
+  assert.match(orders,/document\.querySelectorAll\('\.os-drop-target'\)\.forEach/);
+});
