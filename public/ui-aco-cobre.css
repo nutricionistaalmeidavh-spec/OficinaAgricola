@@ -51,9 +51,9 @@
 html{color-scheme:light;accent-color:var(--ui-primary)}
 body{background:var(--ui-background);color:var(--ui-foreground)}
 ::selection{background:#C8E0ED;color:var(--ui-foreground)}
-.sidebar{background:var(--ui-primary);color:#fff}
+.sidebar{background:#235A75;color:#fff}
 @media(min-width:841px){
-  .sidebar{background:linear-gradient(180deg,#235A75 0%,#1D4C65 100%);border-right:1px solid #1F536D}
+  .sidebar{background:#235A75;border-right:1px solid #1F536D}
   #nav button,.sidebar nav button{color:#E4F0F7}
   #nav button:hover,.sidebar nav button:hover{background:rgba(255,255,255,.12);color:#fff}
   #nav button.active,.sidebar nav button.active{background:rgba(255,255,255,.19);color:#fff;box-shadow:inset 3px 0 #D8A477}
