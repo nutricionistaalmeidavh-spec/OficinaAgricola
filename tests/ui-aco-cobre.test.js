@@ -41,3 +41,10 @@ test('Kanban permanece operável sem arrastar por meio do detalhe acessível da 
   assert.match(orders,/openWorkOrder\(card\.dataset\.os\)/);
   assert.match(orders,/kanban-help/);
 });
+
+test('Kanban oferece busca explícita nas OS já carregadas sem alterar a fonte canônica',()=>{
+  assert.match(orders,/id="osBoardSearch"/);
+  assert.match(orders,/id="osBoardSearchCount"/);
+  assert.match(orders,/function filterLoadedKanban/);
+  assert.match(orders,/Carregadas|carregadas/);
+});
