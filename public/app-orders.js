@@ -5,6 +5,21 @@ let osPagedRows=[],osPageCursor=null,osTotal=0;
 function osCard(order){
   return '<button type="button" class="os-card" data-os="'+order.id+'" aria-label="Abrir OS '+order.os_number+'"><strong>OS #'+order.os_number+' · '+esc(order.customer_name)+'</strong><p>'+esc(order.machine_brand||'')+' '+esc(order.machine_model||'')+'<br>'+esc(order.problem_reported)+'</p>'+badge(order.status)+'</button>';
 }
+function filterLoadedKanban(){
+  const input=$('#osBoardSearch');
+  if(!input)return;
+  const query=String(input.value||'').trim().toLocaleLowerCase('pt-BR');
+  let visible=0;
+  $('.kanban .os-card').forEach(card=>{
+    const matches=!query||card.textContent.toLocaleLowerCase('pt-BR').includes(query);
+    card.hidden=!matches;
+    if(matches)visible++;
+  });
+  const count=$('#osBoardSearchCount');
+  if(count)count.textContent=query
+    ?visible+' resultado(s) entre '+osPagedRows.length+' OS carregadas'
+    :osPagedRows.length+' OS carregadas';
+}
 function bindOrderCards(host=document){
   const canMove=['ADMIN','ATENDIMENTO','TECNICO'].includes(state.user.role);
   host.querySelectorAll('[data-os]').forEach(card=>{
@@ -87,6 +102,9 @@ async function renderWorkOrders({append=false}={}){
   setContent('<div class="section-head"><div><h2>Fluxo da oficina</h2><span class="muted" id="osLoadedCount">'+orders.length+' de '+osTotal+' OS em fluxo carregadas</span></div>'+
     (canCreate?'<button id="newOS" class="btn primary">+ Abrir OS</button>':'')+'</div>'+
     (canCreate||state.user.role==='TECNICO'?'<p class="kanban-help">Arraste a OS para uma etapa permitida ou abra o cartão para realizar ações como orçamento e aprovação. No celular, abra o cartão para mudar a etapa.</p>':'')+
+    '<div class="os-board-toolbar"><label for="osBoardSearch">Buscar nas OS carregadas</label>'+
+    '<input id="osBoardSearch" type="search" autocomplete="off" placeholder="Nº da OS, cliente, equipamento ou problema">'+
+    '<small id="osBoardSearchCount" class="muted" aria-live="polite"></small></div>'+
     '<div class="kanban">'+columns+'</div>'+
     '<section class="card" style="margin-top:18px"><div class="section-head"><div><h2>Histórico de OS encerradas</h2><span class="muted">Entregues, canceladas, reprovadas e transferidas · consulta paginada ao banco</span></div></div>'+
     '<div class="action-row" style="margin-bottom:14px;flex-wrap:wrap">'+
@@ -99,6 +117,8 @@ async function renderWorkOrders({append=false}={}){
     '<button id="osArchiveMore" class="btn sm soft" type="button" hidden>Carregar mais</button></section>');
   const newOS=$('#newOS');if(newOS)newOS.onclick=openNewWorkOrder;
   bindOrderCards($('#content'));
+  $('#osBoardSearch').oninput=filterLoadedKanban;
+  filterLoadedKanban();
   const bindColumnMore=()=>{
     $$('[data-os-more]').forEach(button=>button.onclick=async()=>{
       const status=button.dataset.osMore;
@@ -117,6 +137,7 @@ async function renderWorkOrders({append=false}={}){
         const label=OS_COLUMNS.find(item=>item[0]===status)[1];
         renderRegion(column,osColumnContent(status,label,page.total,all));
         bindOrderCards(column);
+        filterLoadedKanban();
         const loadedCount=$('#osLoadedCount');
         if(loadedCount)loadedCount.textContent=osPagedRows.length+' de '+osTotal+' OS em fluxo carregadas';
         bindColumnMore();
