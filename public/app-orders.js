@@ -10,7 +10,7 @@ function filterLoadedKanban(){
   if(!input)return;
   const query=String(input.value||'').trim().toLocaleLowerCase('pt-BR');
   let visible=0;
-  $('.kanban .os-card').forEach(card=>{
+  document.querySelectorAll('.kanban .os-card').forEach(card=>{
     const matches=!query||card.textContent.toLocaleLowerCase('pt-BR').includes(query);
     card.hidden=!matches;
     if(matches)visible++;
@@ -36,7 +36,7 @@ function bindOrderCards(host=document){
     };
     card.ondragend=()=>{
       card.classList.remove('os-dragging');
-      $('.os-drop-target').forEach(column=>column.classList.remove('os-drop-target'));
+      document.querySelectorAll('.os-drop-target').forEach(column=>column.classList.remove('os-drop-target'));
     };
   });
   if(!canMove)return;
