@@ -64,7 +64,20 @@ try{
   await page.screenshot({path:path.join(outputDir,'01-dashboard.png'),fullPage:true});
 
   await navigateQa(page,'work-orders');
-  await page.locator('.os-card').first().waitFor({state:'visible'});
+  try{
+    await page.locator('.os-card').first().waitFor({state:'visible',timeout:9000});
+  }catch(cause){
+    const debug=await page.evaluate(()=>({
+      title:document.querySelector('#pageTitle')?.textContent,
+      content:document.querySelector('#content')?.textContent?.slice(0,1800),
+      cards:document.querySelectorAll('.os-card').length,
+      hiddenCards:[...document.querySelectorAll('.os-card')].filter(el=>el.hidden).length,
+      activeNav:[...document.querySelectorAll('#nav button.active')].map(el=>el.dataset.page),
+      status:document.querySelector('#serverStatus')?.textContent
+    }));
+    await writeFile(path.join(outputDir,'qa-os-diagnostic.json'),JSON.stringify(debug,null,2));
+    throw new Error('Falha ao abrir Kanban de OS: '+JSON.stringify(debug),{cause});
+  }
   const ordersText=(await page.locator('#content').textContent())||'';
   if(!ordersText.includes('João Silva')||!ordersText.includes('Dell'))throw new Error('Dados técnicos de demonstração não aparecem nas OS');
   await sleep(700);

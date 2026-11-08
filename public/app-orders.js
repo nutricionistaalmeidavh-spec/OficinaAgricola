@@ -5,8 +5,80 @@ let osPagedRows=[],osPageCursor=null,osTotal=0;
 function osCard(order){
   return '<button type="button" class="os-card" data-os="'+order.id+'" aria-label="Abrir OS '+order.os_number+'"><strong>OS #'+order.os_number+' · '+esc(order.customer_name)+'</strong><p>'+esc(order.machine_brand||'')+' '+esc(order.machine_model||'')+'<br>'+esc(order.problem_reported)+'</p>'+badge(order.status)+'</button>';
 }
+function filterLoadedKanban(){
+  const input=$('#osBoardSearch');
+  if(!input)return;
+  const query=String(input.value||'').trim().toLocaleLowerCase('pt-BR');
+  let visible=0;
+  document.querySelectorAll('.kanban .os-card').forEach(card=>{
+    const matches=!query||card.textContent.toLocaleLowerCase('pt-BR').includes(query);
+    card.hidden=!matches;
+    if(matches)visible++;
+  });
+  const count=$('#osBoardSearchCount');
+  if(count)count.textContent=query
+    ?visible+' resultado(s) entre '+osPagedRows.length+' OS carregadas'
+    :osPagedRows.length+' OS carregadas';
+}
 function bindOrderCards(host=document){
-  host.querySelectorAll('[data-os]').forEach(card=>card.onclick=()=>openWorkOrder(card.dataset.os));
+  const canMove=['ADMIN','ATENDIMENTO','TECNICO'].includes(state.user.role);
+  host.querySelectorAll('[data-os]').forEach(card=>{
+    card.onclick=()=>openWorkOrder(card.dataset.os);
+    if(!card.closest('.kanban'))return;
+    card.title=canMove?'Arraste para outra etapa ou abra a OS para consultar as ações':'Abrir detalhes da OS';
+    if(!canMove)return;
+    card.draggable=true;
+    card.ondragstart=event=>{
+      if(!event.dataTransfer)return;
+      event.dataTransfer.effectAllowed='move';
+      event.dataTransfer.setData('text/plain',card.dataset.os);
+      card.classList.add('os-dragging');
+    };
+    card.ondragend=()=>{
+      card.classList.remove('os-dragging');
+      document.querySelectorAll('.os-drop-target').forEach(column=>column.classList.remove('os-drop-target'));
+    };
+  });
+  if(!canMove)return;
+  host.querySelectorAll('[data-os-status]').forEach(column=>{
+    column.ondragover=event=>{
+      if(!event.dataTransfer?.types.includes('text/plain'))return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect='move';
+      column.classList.add('os-drop-target');
+    };
+    column.ondragleave=event=>{
+      if(!column.contains(event.relatedTarget))column.classList.remove('os-drop-target');
+    };
+    column.ondrop=async event=>{
+      event.preventDefault();
+      column.classList.remove('os-drop-target');
+      const id=Number(event.dataTransfer?.getData('text/plain'));
+      const target=column.dataset.osStatus;
+      if(!Number.isSafeInteger(id)||id<=0||!target)return;
+      const row=osPagedRows.find(item=>Number(item.id)===id);
+      if(!row||row.status===target)return;
+      try{
+        // O estado exibido não é uma fonte de verdade. Consultar a versão e as
+        // transições mais recentes antes de qualquer alteração de domínio.
+        const os=await api(`/api/work-orders/${id}`);
+        const throughQuote=['ORCAMENTO','AGUARDANDO_APROVACAO','APROVADA','REPROVADA'];
+        if(!os.availableTransitions?.includes(target)||throughQuote.includes(target)){
+          toast('Esta etapa exige uma ação específica da OS. Consulte as opções disponíveis.',true);
+          await openWorkOrder(id);
+          return;
+        }
+        if(!confirm(`Mover OS #${os.os_number} de ${os.status.replaceAll('_',' ')} para ${target.replaceAll('_',' ')}?`))return;
+        // Reutiliza POST /status, expectedVersion, requestId, checagens de
+        // permissão, justificativas, conflito 409 e atualização confirmada.
+        const button=document.createElement('button');
+        button.dataset.status=target;
+        await changeWorkOrderStatus(button,id,os);
+      }catch(error){
+        toast('Não foi possível mover a OS: '+error.message,true);
+      }
+    };
+  });
 }
 function osColumnContent(status,label,total,items){
  const cards=items.length?items.map(osCard).join(''):total>0?'<div class="empty">Há OS nesta etapa. Carregue as ordens para visualizar.</div>':'<div class="empty">Nenhuma OS nesta etapa.</div>';
@@ -29,6 +101,10 @@ async function renderWorkOrders({append=false}={}){
   }).join('');
   setContent('<div class="section-head"><div><h2>Fluxo da oficina</h2><span class="muted" id="osLoadedCount">'+orders.length+' de '+osTotal+' OS em fluxo carregadas</span></div>'+
     (canCreate?'<button id="newOS" class="btn primary">+ Abrir OS</button>':'')+'</div>'+
+    (canCreate||state.user.role==='TECNICO'?'<p class="kanban-help">Arraste a OS para uma etapa permitida ou abra o cartão para realizar ações como orçamento e aprovação. No celular, abra o cartão para mudar a etapa.</p>':'')+
+    '<div class="os-board-toolbar"><label for="osBoardSearch">Buscar nas OS carregadas</label>'+
+    '<input id="osBoardSearch" type="search" autocomplete="off" placeholder="Nº da OS, cliente, equipamento ou problema">'+
+    '<small id="osBoardSearchCount" class="muted" aria-live="polite"></small></div>'+
     '<div class="kanban">'+columns+'</div>'+
     '<section class="card" style="margin-top:18px"><div class="section-head"><div><h2>Histórico de OS encerradas</h2><span class="muted">Entregues, canceladas, reprovadas e transferidas · consulta paginada ao banco</span></div></div>'+
     '<div class="action-row" style="margin-bottom:14px;flex-wrap:wrap">'+
@@ -41,6 +117,8 @@ async function renderWorkOrders({append=false}={}){
     '<button id="osArchiveMore" class="btn sm soft" type="button" hidden>Carregar mais</button></section>');
   const newOS=$('#newOS');if(newOS)newOS.onclick=openNewWorkOrder;
   bindOrderCards($('#content'));
+  $('#osBoardSearch').oninput=filterLoadedKanban;
+  filterLoadedKanban();
   const bindColumnMore=()=>{
     $$('[data-os-more]').forEach(button=>button.onclick=async()=>{
       const status=button.dataset.osMore;
@@ -59,6 +137,7 @@ async function renderWorkOrders({append=false}={}){
         const label=OS_COLUMNS.find(item=>item[0]===status)[1];
         renderRegion(column,osColumnContent(status,label,page.total,all));
         bindOrderCards(column);
+        filterLoadedKanban();
         const loadedCount=$('#osLoadedCount');
         if(loadedCount)loadedCount.textContent=osPagedRows.length+' de '+osTotal+' OS em fluxo carregadas';
         bindColumnMore();
