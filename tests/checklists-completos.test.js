@@ -114,3 +114,21 @@ test('relatório de checklist inclui imagens vinculadas e assinatura sem executa
 function requireVm(){
   return vmModule;
 }
+
+
+test('clientes existentes recebem novos itens apenas quando preservam o modelo agrícola original',()=>{
+  const {db,order}=fixture();
+  try{
+    const old=createChecklistTemplate(db,{name:'Checklist de Entrada',kind:'ENTRADA',items:[
+      'Fotos gerais da máquina','Nível de combustível','Horímetro registrado','Avarias externas','Itens/acessórios entregues'
+    ]});
+    const inspection=createWorkOrderChecklist(db,order.id,old.id,[{position:3,response:'OK',note:'560h'}]);
+    seedDefaultChecklists(db);
+    const updated=getChecklistTemplate(db,old.id);
+    assert.match(updated.items.map(i=>i.label).join(' '),/Quilometragem/);
+    assert.equal(getWorkOrderChecklist(db,inspection.id).responses[0].label_snapshot,'Horímetro registrado');
+    const custom=createChecklistTemplate(db,{name:'Checklist de Entrada',kind:'ENTRADA',items:['Personalizado do cliente']});
+    seedDefaultChecklists(db);
+    assert.equal(getChecklistTemplate(db,custom.id).items[0].label,'Personalizado do cliente');
+  }finally{db.close();}
+});
