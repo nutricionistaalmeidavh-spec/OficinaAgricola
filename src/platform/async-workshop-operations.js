@@ -154,6 +154,7 @@ export function createAsyncWorkshopOperations(port){
    if(!await port.first('SELECT id FROM work_orders WHERE id=?',[osId]))
      fail('OS não encontrada',404);
    const template=await getChecklistTemplate(templateId);
+   if(!Number(template.active))fail('Modelo de checklist desativado',409);
    if(!Array.isArray(responses)||responses.length>100)fail('Respostas inválidas');
    const byPos=new Map(template.items.map(i=>[Number(i.position),i]));
    const seen=new Set(),cleaned=[];
