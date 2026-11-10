@@ -81,6 +81,7 @@ const ROUTES=[
  'PATCH /api/checklist-templates/:id /v1/checklist-templates/:id ADMIN',
  'GET /api/checklist-templates/:id /v1/checklist-templates/:id ALL',
  'GET /api/work-orders/:id/checklists /v1/orders/:id/checklists ALL',
+ 'GET /api/checklists/:id /v1/checklists/:id ALL',
  'POST /api/work-orders/:id/checklists /v1/orders/:id/checklists TECH order',
  'GET /api/work-orders/:id/attachments /v1/orders/:id/attachments ALL',
  'POST /api/work-orders/:id/attachments /v1/orders/:id/attachments TECH',
