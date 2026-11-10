@@ -122,6 +122,23 @@ export function updateChecklistTemplate(db,id,input={}){
   });
 }
 export function seedDefaultChecklists(db){
+  // Atualiza somente os modelos originais intocados de versões agrícolas.
+  // Rótulos já registrados em OS são snapshots e não sofrem alteração.
+  const legacy=[
+    ['ENTRADA',['Fotos gerais da máquina','Nível de combustível','Horímetro registrado','Avarias externas','Itens/acessórios entregues'],
+      ['Fotos do veículo ou equipamento','Quilometragem ou horímetro','Nível de combustível','Avarias, riscos e amassados','Objetos e acessórios recebidos','Pneus e iluminação','Relato do cliente']],
+    ['ENTREGA',['Serviço conferido','Vazamentos verificados','Teste funcional','Limpeza básica','Orientações ao cliente'],
+      ['Serviços e peças conferidos','Sem vazamentos após reparo','Teste funcional ou de rodagem','Luzes de advertência conferidas','Limpeza e acessórios conferidos','Orientações e garantia informadas']]
+  ];
+  for(const [kind,oldLabels,newLabels] of legacy){
+    const row=db.prepare('SELECT id FROM checklist_templates WHERE kind=? AND name=? ORDER BY id LIMIT 1')
+      .get(kind,kind==='ENTRADA'?'Checklist de Entrada':'Checklist de Entrega');
+    if(!row)continue;
+    const labels=db.prepare('SELECT label FROM checklist_template_items WHERE template_id=? ORDER BY position')
+      .all(row.id).map(item=>item.label);
+    if(JSON.stringify(labels)===JSON.stringify(oldLabels))
+      updateChecklistTemplate(db,row.id,{items:newLabels});
+  }
   const existing=db.prepare("SELECT COUNT(*) n FROM checklist_templates WHERE kind IN ('ENTRADA','ENTREGA')").get().n; if(existing>=2)return;
   if(!db.prepare("SELECT id FROM checklist_templates WHERE kind='ENTRADA'").get())createChecklistTemplate(db,{name:'Checklist de Entrada',kind:'ENTRADA',items:['Fotos do veículo ou equipamento','Quilometragem ou horímetro','Nível de combustível','Avarias, riscos e amassados','Objetos e acessórios recebidos','Pneus e iluminação','Relato do cliente']});
   if(!db.prepare("SELECT id FROM checklist_templates WHERE kind='ENTREGA'").get())createChecklistTemplate(db,{name:'Checklist de Entrega',kind:'ENTREGA',items:['Serviços e peças conferidos','Sem vazamentos após reparo','Teste funcional ou de rodagem','Luzes de advertência conferidas','Limpeza e acessórios conferidos','Orientações e garantia informadas']});
