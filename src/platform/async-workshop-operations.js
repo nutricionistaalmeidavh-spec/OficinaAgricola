@@ -96,8 +96,33 @@ export function createAsyncWorkshopOperations(port){
    return {...row,items:await port.all(
      'SELECT * FROM checklist_template_items WHERE template_id=? ORDER BY position',[row.id])};
  }
- async function listChecklistTemplates(){
-   return port.all('SELECT * FROM checklist_templates WHERE active=1 ORDER BY kind,name');
+ async function listChecklistTemplates({includeInactive=false}={}){
+   return port.all('SELECT * FROM checklist_templates '+(includeInactive?'':'WHERE active=1 ')+'ORDER BY kind,name');
+ }
+ async function updateChecklistTemplate(templateId,input={}){
+   const previous=await getChecklistTemplate(templateId);
+   const name=input.name===undefined?previous.name:clean(input.name);
+   const kind=input.kind===undefined?previous.kind:clean(input.kind);
+   const active=input.active===undefined?Number(previous.active):Number(input.active===true||input.active===1);
+   const items=input.items===undefined?previous.items:input.items;
+   if(!name||name.length>120||!KINDS.has(kind)||!Array.isArray(items)||!items.length||items.length>100)
+     fail('Modelo de checklist inválido');
+   const normalized=items.map((item,index)=>({
+     id:nextId(),position:index+1,label:clean(typeof item==='string'?item:item?.label),
+     required:typeof item==='object'&&item?.required===false?0:1
+   }));
+   if(normalized.some(item=>!item.label||item.label.length>240))fail('Item de checklist inválido');
+   const id=int(templateId);
+   const statements=[cmd('UPDATE checklist_templates SET name=?,kind=?,active=?,updated_at=? WHERE id=?',
+     [name,kind,active,now(),id])];
+   if(input.items!==undefined){
+     statements.push(cmd('DELETE FROM checklist_template_items WHERE template_id=?',[id]));
+     for(const item of normalized)statements.push(cmd(
+       'INSERT INTO checklist_template_items(id,template_id,position,label,required) VALUES(?,?,?,?,?)',
+       [item.id,id,item.position,item.label,item.required]));
+   }
+   await atomic(port,statements);
+   return getChecklistTemplate(id);
  }
  async function createChecklistTemplate({name,kind='PERSONALIZADO',items=[]}={}){
    const title=clean(name);
@@ -163,7 +188,7 @@ export function createAsyncWorkshopOperations(port){
  }
  return Object.freeze({
    createScheduleEvent,updateScheduleEvent,listSchedule,
-   createChecklistTemplate,getChecklistTemplate,listChecklistTemplates,
+   createChecklistTemplate,getChecklistTemplate,listChecklistTemplates,updateChecklistTemplate,
    createWorkOrderChecklist,getWorkOrderChecklist,listWorkOrderChecklists
  });
 }
