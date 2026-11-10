@@ -43,3 +43,36 @@ test('common adapter stores schedule and checklist completion atomically in loca
     'invalid checklist must not leave a partial write');
  }finally{db.close();}
 });
+
+
+test('native async: editar ou arquivar modelo mantém a OS histórica e bloqueia novos usos',async()=>{
+ const db=openDatabase(':memory:');
+ try{
+  migrate(db);migrateAssistencia(db);
+  const service=createAsyncWorkshopServices(createCommonDataAdapter({engine:'sqlite',db}));
+  const customer=await service.createCustomer({name:'Cliente'});
+  const machine=await service.createMachine({customerId:customer.id,type:'AUTOMOVEL'});
+  const order=await service.createWorkOrder({customerId:customer.id,machineId:machine.id,problemReported:'Revisão'});
+  const template=await service.createChecklistTemplate({
+   name:'Freios',kind:'PERSONALIZADO',items:[{label:'Pastilhas',required:true}]
+  });
+  const old=await service.createWorkOrderChecklist({
+   workOrderId:order.id,templateId:template.id,
+   responses:[{position:1,response:'ATENCAO',note:'Trocar'}]
+  });
+  await service.updateChecklistTemplate(template.id,{
+   name:'Freios revisado',items:[{label:'Disco',required:true}]
+  });
+  const historical=await service.getWorkOrderChecklist(old.id);
+  assert.equal(historical.responses[0].label_snapshot,'Pastilhas');
+  assert.equal(historical.template_name_snapshot,'Freios');
+  await service.updateChecklistTemplate(template.id,{active:false});
+  assert.equal((await service.listChecklistTemplates()).length,0);
+  assert.equal((await service.listChecklistTemplates({includeInactive:true})).length,1);
+  await assert.rejects(service.createWorkOrderChecklist({
+   workOrderId:order.id,templateId:template.id,responses:[{position:1,response:'OK'}]
+  }),/desativado/);
+  await service.updateChecklistTemplate(template.id,{active:true});
+  assert.equal((await service.listChecklistTemplates()).length,1);
+ }finally{db.close();}
+});
