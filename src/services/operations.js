@@ -132,6 +132,7 @@ export function createWorkOrderChecklist(db,workOrderId,templateId,responses=[],
     {templateId,responses},()=>{
     getWorkOrder(db,workOrderId);
     const template=getChecklistTemplate(db,templateId);
+    if(!Number(template.active))throw new Error('Modelo de checklist desativado');
     const byPos=new Map(template.items.map(i=>[Number(i.position),i]));
     if(!Array.isArray(responses))throw new Error('Respostas inválidas');
     const t=nowIso();
