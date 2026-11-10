@@ -22,7 +22,7 @@ import { renderDocument, renderPdfDocument, renderDiagnosticPdf } from './docume
 import {listDiagnosticAdapters} from './services/diagnostics.js';
 import {executeDiagnosticWorker,isLocalHardwareRequest} from './platform/diagnostic-hardware.js';
 import { createPart, listParts, listPartsPage,  updatePart, addInventoryMovement, consumePart, reverseWorkOrderPart, listWorkOrderParts, lowStockParts } from './services/inventory.js';
-import { createScheduleEvent, listSchedule, listSchedulePage,  updateScheduleEvent, createChecklistTemplate, getChecklistTemplate, listChecklistTemplates, updateChecklistTemplate, createWorkOrderChecklist, listWorkOrderChecklists, saveAttachment, listAttachments } from './services/operations.js';
+import { createScheduleEvent, listSchedule, listSchedulePage,  updateScheduleEvent, createChecklistTemplate, getChecklistTemplate, listChecklistTemplates, updateChecklistTemplate, getWorkOrderChecklist, createWorkOrderChecklist, listWorkOrderChecklists, saveAttachment, listAttachments } from './services/operations.js';
 import { saveRemoteAttachment, readRemoteAttachment } from './platform/remote-attachments.js';
 import {createCommonDataAdapter} from './platform/common-data-adapter.js';
 import {createPaymentCollection} from './platform/payment-collection.js';
@@ -160,11 +160,12 @@ function createRouter({db,storageDir,objectStore=null,diagnosticRunner=executeDi
   add('GET','/api/schedule',ROLE_ALL,({url})=>listSchedule(db,{from:url.searchParams.get('from')||undefined,to:url.searchParams.get('to')||undefined}));
   add('POST','/api/schedule',ROLE_TECH,({body})=>createScheduleEvent(db,body));
   add('PATCH','/api/schedule/:id',ROLE_TECH,({params,body})=>updateScheduleEvent(db,int(params.id),body));
-  add('GET','/api/checklist-templates',ROLE_ALL,({url,actor})=>listChecklistTemplates(db,{includeInactive:url.searchParams.get('all')==='1'&&actor?.role==='ADMIN'}));
+  add('GET','/api/checklist-templates',ROLE_ALL,({url,user})=>listChecklistTemplates(db,{includeInactive:url.searchParams.get('all')==='1'&&user?.role==='ADMIN'}));
   add('GET','/api/checklist-templates/:id',ROLE_ALL,({params})=>getChecklistTemplate(db,int(params.id)));
   add('POST','/api/checklist-templates',['ADMIN'],({body})=>createChecklistTemplate(db,body));
   add('PATCH','/api/checklist-templates/:id',['ADMIN'],({params,body})=>updateChecklistTemplate(db,int(params.id),body));
   add('GET','/api/work-orders/:id/checklists',ROLE_ALL,({params})=>listWorkOrderChecklists(db,int(params.id)));
+  add('GET','/api/checklists/:id',ROLE_ALL,({params})=>getWorkOrderChecklist(db,int(params.id)));
   add('POST','/api/work-orders/:id/checklists',ROLE_TECH,({params,body})=>createWorkOrderChecklist(db,int(params.id),int(body.templateId),body.responses||[]));
   add('GET','/api/work-orders/:id/attachments',ROLE_ALL,({params})=>listAttachments(db,int(params.id)));
   add('POST','/api/work-orders/:id/attachments',ROLE_TECH,({params,body})=>saveAttachment(db,int(params.id),{...body,storageDir}));
