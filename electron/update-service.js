@@ -40,14 +40,14 @@ function officialAssetUrl(value,tag,name){
  * O release/tag, o nome da arquitetura e o checksum são obrigatórios.
  * O canal comercial tem distribuição separada: não deve receber o instalador livre.
  */
-export function selectUpdate(release,currentVersion){
+export function selectUpdate(release,currentVersion,{isCommercial=false}={}){
   if(!release||release.draft||release.prerelease)return null;
   const tag=String(release.tag_name||'');
   if(!/^v\d+\.\d+\.\d+$/.test(tag))return null;
   try{if(compareVersions(tag,currentVersion)<=0)return null;}
   catch{return null;}
   const version=tag.slice(1);
-  const filename='ArtiSys-Oficina-Setup-'+version+'-Windows-x64.exe';
+  const filename='ArtiSys-Oficina-Setup-'+version+'-Windows-x64'+(isCommercial?'-Commercial':'')+'.exe';
   const assets=Array.isArray(release.assets)?release.assets:[];
   const exe=assets.find(asset=>asset?.name===filename&&asset.state==='uploaded');
   const checksum=assets.find(asset=>asset?.name===filename+'.sha256'&&asset.state==='uploaded');
@@ -55,7 +55,7 @@ export function selectUpdate(release,currentVersion){
   if(!officialAssetUrl(exe.browser_download_url,tag,filename)||
       !officialAssetUrl(checksum.browser_download_url,tag,filename+'.sha256'))return null;
   if(exe.size!==undefined&&(!Number.isSafeInteger(exe.size)||exe.size<1||exe.size>MAX_INSTALLER_BYTES))return null;
-  return {version,filename,downloadUrl:exe.browser_download_url,checksumUrl:checksum.browser_download_url,
+  return {version,filename,isCommercial,downloadUrl:exe.browser_download_url,checksumUrl:checksum.browser_download_url,
     digest:typeof exe.digest==='string'&&/^sha256:[0-9a-f]{64}$/i.test(exe.digest)?exe.digest.slice(7).toLowerCase():null};
 }
 
@@ -67,19 +67,23 @@ export function parseChecksum(contents,filename){
   throw Error('SHA256 de release ausente, incorreto ou com nome divergente');
 }
 
-export async function checkGitHubUpdate(currentVersion,{fetchImpl=globalThis.fetch}={}){
+export async function checkGitHubUpdate(currentVersion,{fetchImpl=globalThis.fetch,isCommercial=false}={}){
   const response=await fetchImpl(RELEASE_API,{
     headers:{Accept:'application/vnd.github+json','User-Agent':'ArtiSys-Oficina-Updater'},
     signal:AbortSignal.timeout(15000)
   });
   if(response.status===404)return null; // primeiro release ainda não foi publicado
   if(!response.ok)throw Error('GitHub Releases indisponível: HTTP '+response.status);
-  return selectUpdate(await response.json(),currentVersion);
+  return selectUpdate(await response.json(),currentVersion,{isCommercial});
 }
 
 export async function downloadVerifiedUpdate(update,directory,{fetchImpl=globalThis.fetch,onProgress=()=>{}}={}){
-  if(!update||!/^ArtiSys-Oficina-Setup-\d+\.\d+\.\d+-Windows-x64\.exe$/.test(update.filename))
+  if(!update||!/^ArtiSys-Oficina-Setup-\d+\.\d+\.\d+-Windows-x64(?:-Commercial)?\.exe$/.test(update.filename))
     throw Error('Pacote de atualização inválido');
+  // Nunca aceitar pacote de outra edição, mesmo se o manifesto for adulterado.
+  if(typeof update.isCommercial!=='boolean'||
+     update.isCommercial!==update.filename.endsWith('-Commercial.exe'))
+    throw Error('Edição do pacote de atualização incompatível');
   const tag='v'+update.version;
   if(!officialAssetUrl(update.downloadUrl,tag,update.filename)||
      !officialAssetUrl(update.checksumUrl,tag,update.filename+'.sha256'))
