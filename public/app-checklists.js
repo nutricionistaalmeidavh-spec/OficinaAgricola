@@ -115,10 +115,26 @@ async function viewWorkOrderChecklist(orderId,checklistId){
   showModal(checklist.template_name_snapshot,
     '<div class="form-stack"><p class="muted">OS vinculada · '+dt(checklist.created_at)+' · '+(checklist.completed_at?'Concluído':'Incompleto')+'</p>'+
     rows+'<div class="checklist-evidence-summary"><strong>'+photos.length+' foto(s)</strong><span>'+(signature?'Assinatura coletada':'Sem assinatura do cliente')+'</span></div>'+
+' <div class="checklist-gallery" id="ckEvidenceGallery" aria-label="Fotos e assinatura do checklist"></div>'+
     '<div class="action-row"><button type="button" class="btn" id="ckPhoto">+ Foto</button>'+
     '<button type="button" class="btn" id="ckSignature">Assinatura do cliente</button>'+
     '<button type="button" class="btn primary" id="ckPdf">Imprimir / Salvar PDF</button></div>'+
     '<p class="muted">A assinatura desenhada é uma evidência visual de ciência do cliente, não uma assinatura digital certificada.</p></div>');
+  const gallery=$('#ckEvidenceGallery');
+  if(attachments.length){
+    gallery.textContent='Carregando fotografias...';
+    Promise.all(attachments.filter(function(file){
+      return /^image\/(jpeg|png|webp)$/.test(String(file.mime_type||''));
+    }).map(async function(file){
+      const url=await checklistEmbeddedImage(file);
+      return {url:url,caption:String(file.caption||'').split(':').slice(3).join(':')};
+    })).then(function(images){
+      if(!gallery.isConnected)return;
+      gallery.innerHTML=images.map(function(image){
+        return '<figure><img src="'+image.url+'" alt="Evidência anexada" loading="lazy"><figcaption>'+esc(image.caption)+'</figcaption></figure>';
+      }).join('');
+    }).catch(function(error){if(gallery.isConnected)gallery.textContent='Não foi possível exibir as miniaturas: '+friendlyUiMessage(error.message);});
+  }
   $('#ckPhoto').onclick=function(){openChecklistPhotoModal(orderId,checklistId);};
   $('#ckSignature').onclick=function(){openChecklistSignatureModal(orderId,checklistId);};
   $('#ckPdf').onclick=function(){void printChecklistAsPdf(orderId,checklistId).catch(function(e){toast(e.message,true);});};
