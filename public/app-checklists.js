@@ -75,7 +75,7 @@ function openChecklistTemplateEditor(template){
     '<p class="muted">Itens obrigatórios precisam ser respondidos. O histórico de checklists concluídos não será modificado.</p>'+
     '<button type="submit" class="btn primary">Salvar modelo</button></form>',
     async function(fd){
-      const items=$$('.checklist-item-editor','#modalBody' in window?document:document).map(function(row){
+      const items=$('.checklist-item-editor',$('#ckEditorItems')).map(function(row){
         return {label:$('[data-ck-label]',row).value.trim(),required:$('[data-ck-required]',row).checked};
       });
       if(!items.length||items.some(function(item){return !item.label;}))throw new Error('Informe ao menos um item válido.');
