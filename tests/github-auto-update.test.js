@@ -70,3 +70,39 @@ test('empacotador permite upgrade preservando base PostgreSQL fora do diretório
   assert.match(workflow,/sha256/);
   assert.match(workflow,/smoke-postgres-portable/);
 });
+
+const commercialFilename='ArtiSys-Oficina-Setup-1.0.1-Windows-x64-Commercial.exe';
+const commercialUrl='https://github.com/'+UPDATE_REPOSITORY+'/releases/download/'+tag+'/'+commercialFilename;
+const commercialRelease={...release,assets:[
+  ...release.assets,
+  {name:commercialFilename,browser_download_url:commercialUrl,state:'uploaded'},
+  {name:commercialFilename+'.sha256',browser_download_url:commercialUrl+'.sha256',state:'uploaded'}
+]};
+
+test('seleciona atualização da mesma edição e recusa cruzamento comercial/livre',()=>{
+  assert.equal(selectUpdate(commercialRelease,'1.0.0',{isCommercial:true})?.filename,commercialFilename);
+  assert.equal(selectUpdate(commercialRelease,'1.0.0',{isCommercial:false})?.filename,filename);
+  assert.equal(selectUpdate(release,'1.0.0',{isCommercial:true}),null);
+  assert.equal(selectUpdate({...commercialRelease,assets:release.assets},'1.0.0',{isCommercial:true}),null);
+  assert.equal(selectUpdate(commercialRelease,'1.0.1',{isCommercial:true}),null);
+  assert.equal(selectUpdate({...commercialRelease,prerelease:true},'1.0.0',{isCommercial:true}),null);
+});
+
+test('edição comercial exige SHA256 específico do instalador comercial',async t=>{
+  const root=mkdtempSync(join(tmpdir(),'oficina-commercial-updater-'));
+  t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const bytes=Buffer.from('instalador comercial simulado');
+  const hash=createHash('sha256').update(bytes).digest('hex');
+  const fetchImpl=async requested=>requested===commercialUrl+'.sha256'
+    ?response(hash+'  '+commercialFilename)
+    :response(bytes);
+  const update=selectUpdate(commercialRelease,'1.0.0',{isCommercial:true});
+  const file=await downloadVerifiedUpdate(update,root,{fetchImpl});
+  assert.equal(readFileSync(file).toString(),bytes.toString());
+  assert.ok(file.endsWith(commercialFilename));
+  await assert.rejects(
+    downloadVerifiedUpdate(update,root,{fetchImpl:async requested=>requested===commercialUrl+'.sha256'
+      ?response(hash+'  '+filename):response(bytes)}),
+    /SHA256/i
+  );
+});

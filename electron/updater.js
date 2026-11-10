@@ -23,8 +23,8 @@ function installOnExit(installer){
 }
 
 export function startDesktopUpdates({getWindow,isCommercial=false}){
-  // Não tentar atualizar a versão comercial com um release da edição livre.
-  if(!app.isPackaged||process.platform!=='win32'||process.arch!=='x64'||isCommercial)return;
+  // Ambos os canais recebem atualizações somente da mesma edição.
+  if(!app.isPackaged||process.platform!=='win32'||process.arch!=='x64')return;
   let busy=false;
   let closingForUpdate=false;
 
@@ -34,7 +34,7 @@ export function startDesktopUpdates({getWindow,isCommercial=false}){
     let userRequestedDownload=false;
     const window=getWindow();
     try{
-      const update=await checkGitHubUpdate(app.getVersion());
+      const update=await checkGitHubUpdate(app.getVersion(),{isCommercial});
       if(!update||!window||window.isDestroyed())return;
       const question=await dialog.showMessageBox(window,{
         type:'info',

@@ -15,9 +15,10 @@ test('release gera instaladores livre e comercial distintos e verifica manifesto
  assert.match(workflow,/api\/setup\/initialize/);
 });
 
-test('edição comercial não recebe atualização da edição gratuita',()=>{
+test('edição comercial verifica atualizações sem aceitar instalador livre',()=>{
  const updater=readFileSync('electron/updater.js','utf8');
- assert.match(updater,/isCommercial\)return/);
+ assert.doesNotMatch(updater,/isCommercial\)return/);
+ assert.match(updater,/checkGitHubUpdate\(app\.getVersion\(\),\{isCommercial\}\)/);
 });
 
 test('edição NSIS transmite exigência de licença ao gateway PostgreSQL real',()=>{

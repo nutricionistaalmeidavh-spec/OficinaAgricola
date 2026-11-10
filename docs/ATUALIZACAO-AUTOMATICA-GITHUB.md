@@ -12,7 +12,7 @@ O aplicativo Electron empacotado consulta a última versão **estável** em `nut
 
 A atualização é do executável instalado: **não** se deve executar `git pull` nos computadores dos clientes. Não há uso de APIs pagas, servidor de atualizações proprietário, Git instalado no cliente, ou assinatura mensal obrigatória.
 
-**Separação de edições:** cada release oficial pode conter dois instaladores Windows distintos: `ArtiSys-Oficina-Setup-<versão>-Windows-x64.exe` (edição livre) e `ArtiSys-Oficina-Setup-<versão>-Windows-x64-Commercial.exe` (edição comercial), cada um com SHA-256 próprio. A edição comercial é montada explicitamente com `stage-oficina-edition.mjs --commercial`, instalada em ambiente de QA e validada pelo manifesto interno `commercialActivation=true`. A edição livre mantém `commercialActivation=false` e nunca pede licença. O atualizador automático continua **desativado na edição comercial**: o cliente comercial deve receber a nova versão pelo canal de distribuição específico, não pela atualização da edição livre.
+**Separação de edições:** cada release oficial pode conter dois instaladores Windows distintos: `ArtiSys-Oficina-Setup-<versão>-Windows-x64.exe` (edição livre) e `ArtiSys-Oficina-Setup-<versão>-Windows-x64-Commercial.exe` (edição comercial), cada um com SHA-256 próprio. A edição comercial é montada explicitamente com `stage-oficina-edition.mjs --commercial`, instalada em ambiente de QA e validada pelo manifesto interno `commercialActivation=true`. A edição livre mantém `commercialActivation=false` e nunca pede licença. A partir da **v1.0.4**, as duas edições verificam automaticamente a última release estável. A edição livre somente aceita `...Windows-x64.exe`; a edição comercial somente aceita `...Windows-x64-Commercial.exe`. O nome, a origem oficial HTTPS e o SHA-256 correspondente são obrigatórios; nenhuma edição pode instalar a outra. O fluxo de ativação comercial, PostgreSQL e arquivos locais não são alterados pela atualização.
 
 ## Como publicar uma versão oficial
 
@@ -26,7 +26,8 @@ Tags externas ainda podem disparar a compilação, mas são recusadas quando nã
 
 ## Limites e operação segura
 
-- O aplicativo deve já ter sido instalado com uma versão contendo este atualizador. Instalações antigas precisam receber essa versão inicial pelo instalador.
+- **Bootstrap comercial obrigatório:** versões comerciais anteriores à v1.0.4 têm a rotina de updates desabilitada. Para habilitá-la, entregar uma vez o instalador **comercial v1.0.4 ou posterior**. Daí em diante, futuras versões comerciais são notificadas pelo aplicativo. Nunca entregar o instalador livre para um cliente licenciado.
+- O aplicativo deve já ter sido instalado com uma versão contendo o atualizador para seu canal. Instalações antigas precisam receber essa versão inicial pelo instalador.
 - O GitHub Releases precisa estar acessível via HTTPS. A atualização não depende dele para operar offline.
 - A distribuição usa binários NSIS e verificação SHA-256. **Assinatura Authenticode para eliminar avisos do Windows é recomendada como evolução opcional**, mas não é dependência de serviço pago do núcleo.
 - Não há instalação automática enquanto o usuário trabalha: a instalação requer confirmação, para evitar perda de alterações ainda não salvas.
