@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import * as vmModule from 'node:vm';
 import {openDatabase,migrate} from '../src/db.js';
 import {createCustomer,createMachine} from '../src/services/catalog.js';
 import {createWorkOrder} from '../src/services/work-orders.js';
@@ -81,3 +82,35 @@ test('interface expõe gestão, assinatura, fotografia e relatório imprimível 
   assert.match(ui,/Imprimir \/ Salvar como PDF/);
   assert.match(orders,/data-check-view/);
 });
+
+
+test('relatório de checklist inclui imagens vinculadas e assinatura sem executar conteúdo do cliente',()=>{
+  const vm=requireVm();
+  const script=readFileSync(new URL('../public/app-checklists.js',import.meta.url),'utf8');
+  const safe=value=>String(value??'').replace(/[&<>"']/g,c=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'
+  }[c]));
+  const context=vm.createContext({esc:safe,dt:()=> '10/11/2026'});
+  vm.runInContext(script,context);
+  const html=vm.runInContext('checklistPrintHtml',context)(
+    {os_number:42,customer_name:'Cliente <script>alert(1)</script>',
+      machine_brand:'Carro',machine_model:'Teste'},
+    {name:'Oficina Teste'},
+    {template_name_snapshot:'Entrada',created_at:'2026-11-10',
+      completed_at:'2026-11-10',
+      responses:[{label_snapshot:'Pneus',response:'OK',note:'Sem avaria'}]},
+    [
+      {kind:'foto',src:'data:image/jpeg;base64,Zg==',note:'Foto dianteira',date:'2026-11-10'},
+      {kind:'assinatura',src:'data:image/jpeg;base64,Zg==',note:'Responsável',date:'2026-11-10'}
+    ]
+  );
+  assert.match(html,/Foto dianteira/);
+  assert.match(html,/Assinatura coletada/);
+  assert.match(html,/data:image\/jpeg;base64,Zg==/);
+  assert.match(html,/&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.doesNotMatch(html,/<script>alert\(1\)<\/script>/);
+});
+
+function requireVm(){
+  return vmModule;
+}
