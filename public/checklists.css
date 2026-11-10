@@ -23,3 +23,8 @@
  .checklist-item-editor>label{justify-content:flex-start}
  .checklist-manager .action-row{display:flex;flex-wrap:wrap}
 }
+
+.checklist-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,180px),1fr));gap:12px}
+.checklist-gallery figure{margin:0;min-width:0}
+.checklist-gallery img{width:100%;aspect-ratio:4/3;object-fit:contain;background:#fff;border:1px solid #d6e0e6;border-radius:10px}
+.checklist-gallery figcaption{font-size:.8rem;color:var(--muted,#647582);overflow-wrap:anywhere}
