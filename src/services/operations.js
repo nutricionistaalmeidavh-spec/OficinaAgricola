@@ -93,11 +93,55 @@ export function getChecklistTemplate(db,id){
   const t=db.prepare('SELECT * FROM checklist_templates WHERE id=?').get(id); if(!t)throw new Error('Modelo de checklist não encontrado');
   return {...t,items:db.prepare('SELECT * FROM checklist_template_items WHERE template_id=? ORDER BY position').all(id)};
 }
-export function listChecklistTemplates(db){return db.prepare('SELECT * FROM checklist_templates WHERE active=1 ORDER BY kind,name').all()}
+export function listChecklistTemplates(db,{includeInactive=false}={}){return db.prepare('SELECT * FROM checklist_templates '+(includeInactive?'':'WHERE active=1 ')+'ORDER BY kind,name').all()}
+
+export function updateChecklistTemplate(db,id,input={}){
+  const previous=getChecklistTemplate(db,id);
+  const name=input.name===undefined?previous.name:text(input.name);
+  const kind=input.kind===undefined?previous.kind:text(input.kind);
+  const active=input.active===undefined?Number(previous.active):Number(input.active===true||input.active===1);
+  const items=input.items===undefined?previous.items:input.items;
+  if(!name||name.length>120||!CHECKLIST_KINDS.has(kind)||!Array.isArray(items)||!items.length||items.length>100)
+    throw new Error('Modelo de checklist inválido');
+  const normalized=items.map((item,index)=>({
+    position:index+1,
+    label:text(typeof item==='string'?item:item?.label),
+    required:typeof item==='object'&&item?.required===false?0:1
+  }));
+  if(normalized.some(item=>!item.label||item.label.length>240))throw new Error('Item de checklist inválido');
+  return transaction(db,()=>{
+    db.prepare('UPDATE checklist_templates SET name=?,kind=?,active=?,updated_at=? WHERE id=?')
+      .run(name,kind,active,nowIso(),id);
+    if(input.items!==undefined){
+      db.prepare('DELETE FROM checklist_template_items WHERE template_id=?').run(id);
+      const insert=db.prepare('INSERT INTO checklist_template_items(template_id,position,label,required) VALUES(?,?,?,?)');
+      for(const item of normalized)insert.run(id,item.position,item.label,item.required);
+    }
+    // Instâncias anteriores guardam respostas e rótulos históricos independentes.
+    return getChecklistTemplate(db,id);
+  });
+}
 export function seedDefaultChecklists(db){
+  // Atualiza somente os modelos originais intocados de versões agrícolas.
+  // Rótulos já registrados em OS são snapshots e não sofrem alteração.
+  const legacy=[
+    ['ENTRADA',['Fotos gerais da máquina','Nível de combustível','Horímetro registrado','Avarias externas','Itens/acessórios entregues'],
+      ['Fotos do veículo ou equipamento','Quilometragem ou horímetro','Nível de combustível','Avarias, riscos e amassados','Objetos e acessórios recebidos','Pneus e iluminação','Relato do cliente']],
+    ['ENTREGA',['Serviço conferido','Vazamentos verificados','Teste funcional','Limpeza básica','Orientações ao cliente'],
+      ['Serviços e peças conferidos','Sem vazamentos após reparo','Teste funcional ou de rodagem','Luzes de advertência conferidas','Limpeza e acessórios conferidos','Orientações e garantia informadas']]
+  ];
+  for(const [kind,oldLabels,newLabels] of legacy){
+    const row=db.prepare('SELECT id FROM checklist_templates WHERE kind=? AND name=? ORDER BY id LIMIT 1')
+      .get(kind,kind==='ENTRADA'?'Checklist de Entrada':'Checklist de Entrega');
+    if(!row)continue;
+    const labels=db.prepare('SELECT label FROM checklist_template_items WHERE template_id=? ORDER BY position')
+      .all(row.id).map(item=>item.label);
+    if(JSON.stringify(labels)===JSON.stringify(oldLabels))
+      updateChecklistTemplate(db,row.id,{items:newLabels});
+  }
   const existing=db.prepare("SELECT COUNT(*) n FROM checklist_templates WHERE kind IN ('ENTRADA','ENTREGA')").get().n; if(existing>=2)return;
-  if(!db.prepare("SELECT id FROM checklist_templates WHERE kind='ENTRADA'").get())createChecklistTemplate(db,{name:'Checklist de Entrada',kind:'ENTRADA',items:['Fotos gerais da máquina','Nível de combustível','Horímetro registrado','Avarias externas','Itens/acessórios entregues']});
-  if(!db.prepare("SELECT id FROM checklist_templates WHERE kind='ENTREGA'").get())createChecklistTemplate(db,{name:'Checklist de Entrega',kind:'ENTREGA',items:['Serviço conferido','Vazamentos verificados','Teste funcional','Limpeza básica','Orientações ao cliente']});
+  if(!db.prepare("SELECT id FROM checklist_templates WHERE kind='ENTRADA'").get())createChecklistTemplate(db,{name:'Checklist de Entrada',kind:'ENTRADA',items:['Fotos do veículo ou equipamento','Quilometragem ou horímetro','Nível de combustível','Avarias, riscos e amassados','Objetos e acessórios recebidos','Pneus e iluminação','Relato do cliente']});
+  if(!db.prepare("SELECT id FROM checklist_templates WHERE kind='ENTREGA'").get())createChecklistTemplate(db,{name:'Checklist de Entrega',kind:'ENTREGA',items:['Serviços e peças conferidos','Sem vazamentos após reparo','Teste funcional ou de rodagem','Luzes de advertência conferidas','Limpeza e acessórios conferidos','Orientações e garantia informadas']});
 }
 export function createWorkOrderChecklist(db,workOrderId,templateId,responses=[],options={}){
   const requestId=options.requestId??null;
@@ -105,6 +149,7 @@ export function createWorkOrderChecklist(db,workOrderId,templateId,responses=[],
     {templateId,responses},()=>{
     getWorkOrder(db,workOrderId);
     const template=getChecklistTemplate(db,templateId);
+    if(!Number(template.active))throw new Error('Modelo de checklist desativado');
     const byPos=new Map(template.items.map(i=>[Number(i.position),i]));
     if(!Array.isArray(responses))throw new Error('Respostas inválidas');
     const t=nowIso();

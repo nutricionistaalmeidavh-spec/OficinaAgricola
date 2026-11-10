@@ -40,6 +40,7 @@ export function requiredNativeRoles(method,path){
  if(/^\/v1\/technicians(?:\/|$)/.test(route))return verb==='GET'?ALL:ADMIN;
  if(/^\/v1\/crm\/maintenance\/sync$/.test(route))return OFFICE;
  if(route==='/v1/checklist-templates'&&verb==='POST')return ADMIN;
+ if(/^\/v1\/checklist-templates\/[1-9]\d*$/.test(route)&&verb==='PATCH')return ADMIN;
  if(/^\/v1\/stock(?:\/|$)/.test(route))return OFFICE;
  if(/^\/v1\/(?:maintenance-plans|machines\/\d+\/(?:obd-scans|maintenance|maintenance-plans)|orders\/\d+\/(?:status|parts)|schedule)(?:\/|$)/.test(route))return TECH;
  return OFFICE;

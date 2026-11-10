@@ -1,0 +1,30 @@
+
+.checklist-manager{min-width:0}
+.checklist-template-row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between;border:1px solid var(--line,#d6e0e6);padding:12px;border-radius:12px;margin-top:8px}
+.checklist-template-row>div:first-child{display:grid;gap:4px;min-width:170px}
+.checklist-template-row small{color:var(--muted,#647582)}
+.checklist-item-editor{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;align-items:center;margin:8px 0}
+.checklist-item-editor>label{display:flex;align-items:center;gap:6px;font-size:.85rem}
+.checklist-item-editor input[type=checkbox],.checklist-consent input{width:auto;flex-shrink:0}
+.checklist-os-entries{display:grid;gap:8px;margin:10px 0}
+.checklist-os-entry{display:grid;gap:5px;text-align:left;padding:12px;background:var(--card,#fff);color:inherit;border:1px solid var(--line,#d6e0e6);border-radius:12px;width:100%;cursor:pointer}
+.checklist-os-entry:hover{border-color:var(--primary,#23637d)}
+.checklist-os-entry small{color:var(--muted,#647582)}
+.checklist-answer{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;border-bottom:1px solid var(--line,#d6e0e6);padding:10px 0}
+.checklist-answer span{font-weight:600}
+.checklist-answer small{grid-column:1/-1;color:var(--muted,#647582)}
+.checklist-evidence-summary{display:flex;gap:16px;justify-content:space-between;flex-wrap:wrap;padding:12px;border-radius:12px;background:var(--surface,#edf3f5)}
+.checklist-signature{display:block;width:100%;height:auto;aspect-ratio:720/260;max-height:280px;border:2px dashed #738a98;background:white;touch-action:none;cursor:crosshair;border-radius:10px}
+.checklist-consent{display:flex;gap:10px;align-items:flex-start}
+@media(max-width:640px){
+ .checklist-template-row,.checklist-template-row .action-row{width:100%}
+ .checklist-item-editor{grid-template-columns:minmax(0,1fr) auto}
+ .checklist-item-editor input[data-ck-label]{grid-column:1/-1}
+ .checklist-item-editor>label{justify-content:flex-start}
+ .checklist-manager .action-row{display:flex;flex-wrap:wrap}
+}
+
+.checklist-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,180px),1fr));gap:12px}
+.checklist-gallery figure{margin:0;min-width:0}
+.checklist-gallery img{width:100%;aspect-ratio:4/3;object-fit:contain;background:#fff;border:1px solid #d6e0e6;border-radius:10px}
+.checklist-gallery figcaption{font-size:.8rem;color:var(--muted,#647582);overflow-wrap:anywhere}
