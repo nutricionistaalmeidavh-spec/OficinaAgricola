@@ -82,7 +82,7 @@ test('interface expõe gestão, assinatura, fotografia e relatório imprimível 
   assert.match(ui,/Imprimir \/ Salvar como PDF/);
   assert.match(orders,/data-check-view/);
   // O resultado pode estar vazio: querySelector retornaria null e quebraria a abertura da OS.
-  assert.ok(orders.includes("$('[data-check-view]').forEach("));
+  assert.ok(orders.includes("$$('[data-check-view]').forEach("));
 });
 
 
