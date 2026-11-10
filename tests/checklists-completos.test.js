@@ -54,6 +54,7 @@ test('edição e desativação preservam rótulos e respostas anteriores de cada
     updateChecklistTemplate(db,template.id,{active:false});
     assert.equal(listChecklistTemplates(db).length,0);
     assert.equal(listChecklistTemplates(db,{includeInactive:true})[0].active,0);
+    assert.throws(()=>createWorkOrderChecklist(db,order.id,template.id,[{position:1,response:'OK'}]),/desativado/);
     assert.equal(getWorkOrderChecklist(db,historical.id).template_name_snapshot,'Inspeção mecânica');
     updateChecklistTemplate(db,template.id,{active:true});
     assert.equal(listChecklistTemplates(db).length,1);
