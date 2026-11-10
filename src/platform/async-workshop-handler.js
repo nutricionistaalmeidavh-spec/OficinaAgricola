@@ -226,12 +226,14 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
    if(schedule&&method==='PATCH')
      return json(await services.updateScheduleEvent(Number(schedule[1]),await dataFrom(request)));
    if(path==='/v1/checklist-templates'&&method==='GET')
-     return json(await services.listChecklistTemplates());
+     return json(await services.listChecklistTemplates({includeInactive:u.searchParams.get('all')==='1'&&actor?.role==='ADMIN'}));
    if(path==='/v1/checklist-templates'&&method==='POST')
      return json(await services.createChecklistTemplate(await dataFrom(request)),201);
    const template=path.match(/^\/v1\/checklist-templates\/([1-9]\d*)$/);
    if(template&&method==='GET')
      return json(await services.getChecklistTemplate(Number(template[1])));
+   if(template&&method==='PATCH')
+     return json(await services.updateChecklistTemplate(Number(template[1]),await dataFrom(request)));
    const checklists=path.match(/^\/v1\/orders\/([1-9]\d*)\/checklists$/);
    if(checklists&&method==='GET')
      return json(await services.listWorkOrderChecklists(Number(checklists[1])));
