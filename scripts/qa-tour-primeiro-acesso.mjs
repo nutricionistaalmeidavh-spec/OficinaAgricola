@@ -9,30 +9,29 @@ if (!sizes[viewportName]) throw new Error('Viewport invalido: ' + viewportName);
 
 const output = path.resolve(process.argv[3] || 'qa-artifacts/tour-' + viewportName);
 const temp = path.join(output, '.recording');
-const dbFile = '.qa/tour-primeiro-acesso-' + viewportName + '.sqlite';
-const storage = '.qa/tour-primeiro-acesso-' + viewportName + '-uploads';
+const postgresUrl = process.env.POSTGRES_TEST_URL;
+if (!postgresUrl) throw new Error('POSTGRES_TEST_URL obrigatoria: tour nao pode usar SQLite legado');
+const storage = path.join(output, 'storage');
 const port = viewportName === 'desktop' ? 3385 : 3386;
 const url = 'http://127.0.0.1:' + port;
 const phases = [];
 const consoleErrors = [];
 const logs = [];
 
-await mkdir('.qa', { recursive: true });
-await rm(dbFile, { force: true });
-await rm(storage, { recursive: true, force: true });
 await rm(output, { recursive: true, force: true });
 await mkdir(temp, { recursive: true });
 
-const server = spawn(process.execPath, ['src/start.js'], {
+const server = spawn(process.execPath, ['src/start-postgres-unified.js'], {
   env: {
     ...process.env,
-    HOST: '127.0.0.1',
-    PORT: String(port),
-    DATABASE_PATH: dbFile,
-    STORAGE_DIR: storage,
-    EVENT_LOG_PATH: '.qa/tour-primeiro-acesso-' + viewportName + '.jsonl',
-    NODE_ENV: 'production',
-    ADMIN_PASSWORD: ''
+    OFICINA_POSTGRES_REGISTRY_URL: postgresUrl,
+    OFICINA_POSTGRES_OPERATIONS_URL: postgresUrl,
+    OFICINA_POSTGRES_PORT: String(port),
+    OFICINA_REGISTRY_NEW_INSTALL: 'true',
+    OFICINA_POSTGRES_PROVISION_NEW_UNITS: 'true',
+    OFICINA_POSTGRES_SCHEMA_PREFIX: 'qatour',
+    OFICINA_POSTGRES_STORAGE_ROOT: storage,
+    OFICINA_QA_NATIVE_DEBUG: '1'
   },
   stdio: ['ignore', 'pipe', 'pipe']
 });
@@ -45,7 +44,10 @@ async function healthy() {
     if (server.exitCode !== null) throw new Error('Servidor local encerrou durante o tour');
     try {
       const response = await fetch(url + '/api/health');
-      if (response.ok) return;
+      if (response.ok) {
+        const health = await response.json();
+        if (health.engine === 'postgres' && health.operationalApiReady === true) return;
+      }
     } catch {}
     await sleep(250);
   }
