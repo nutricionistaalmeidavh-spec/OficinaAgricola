@@ -23,6 +23,20 @@ jobs:
       fail-fast: false
       matrix:
         viewport: [desktop, mobile]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: oficina_ci
+          POSTGRES_PASSWORD: ci-only-disposable
+          POSTGRES_DB: oficina_tour
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U oficina_ci -d oficina_tour"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -38,7 +52,9 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Verificar contrato do primeiro acesso
         run: node --test tests/first-access-wizard.test.js
-      - name: Gravar tour de ponta a ponta em banco local isolado
+      - name: Gravar tour de ponta a ponta em PostgreSQL descartavel
+        env:
+          POSTGRES_TEST_URL: postgresql://oficina_ci:ci-only-disposable@127.0.0.1:5432/oficina_tour
         run: node scripts/qa-tour-primeiro-acesso.mjs ${{ matrix.viewport }} "$PWD/qa-artifacts/tour-${{ matrix.viewport }}"
       - name: Guardar video, capturas, erros e logs
         if: always()
