@@ -1,0 +1,97 @@
+name: QA do instalador comercial PUBLICADO v1.0.7 - Windows
+on:
+  push:
+    branches: [qa/published-commercial-v107-e2e]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  published:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - name: Baixar e verificar hash SHA256 do instalador COMERCIAL publicado
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Path downloaded -Force | Out-Null
+          gh release download v1.0.7 --pattern 'ArtiSys-Oficina-Setup-1.0.7-Windows-x64-Commercial.exe' --dir downloaded
+          if($LASTEXITCODE -ne 0){throw 'Não baixou o exe comercial da release pública'}
+          $file=Join-Path (Get-Location).Path 'downloaded/ArtiSys-Oficina-Setup-1.0.7-Windows-x64-Commercial.exe'
+          $sha=(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($sha -ne 'ca8ad3710b80f3c3b0eeae318672d33a4d60a1870c40b5d17fd2cde4352e3bf7'){throw 'Release sha256 incorreto'}
+          $dir=Join-Path $env:RUNNER_TEMP 'Oficina107Commercial'
+          $inst=Start-Process -FilePath $file -ArgumentList @('/S',"/D=$dir") -Wait -PassThru
+          if($inst.ExitCode -ne 0){throw "Instalador comercial falhou: $($inst.ExitCode)"}
+          $edition=(Get-Content -LiteralPath (Join-Path $dir 'resources/oficina-edition.json') -Raw | ConvertFrom-Json)
+          if($edition.commercialActivation -ne $true){throw 'O arquivo baixado não é comercial'}
+          foreach($f in @('bin/initdb.exe','bin/pg_ctl.exe','bin/postgres.exe','bin/vcruntime140.dll','bin/vcruntime140_1.dll','bin/msvcp140.dll')){
+            if(-not(Test-Path -LiteralPath (Join-Path $dir 'resources/postgresql' $f))){throw "Componente PostgreSQL faltando: $f"}
+          }
+          Write-Host "PASS: instalador comercial público SHA256=$sha, instalação e dependências"
+      - name: Iniciar app PUBLICADO e validar PostgreSQL em perfil Unicode e reinicialização
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $app=Join-Path $env:RUNNER_TEMP 'Oficina107Commercial/ArtiSys Oficina.exe'
+          $original=$env:LOCALAPPDATA
+          $profile=Join-Path $env:RUNNER_TEMP 'Cliente José da Conceição/AppData/Local'
+          New-Item -ItemType Directory -Force -Path $profile | Out-Null
+          $env:LOCALAPPDATA=$profile
+          $pgroot=Join-Path $profile 'ArtiSys/Oficina/postgres'
+          $process=$null
+          function WaitForHealthy {
+            for($i=0;$i -lt 160;$i++){
+              Start-Sleep -Milliseconds 300
+              if($script:process.HasExited){throw "Oficina fechou com código $($script:process.ExitCode)"}
+              try{
+                $status=Invoke-RestMethod -Uri 'http://127.0.0.1:3344/api/health' -TimeoutSec 1
+                if($status.ok -and $status.engine -eq 'postgres' -and $status.operationalApiReady){return}
+              }catch{}
+            }
+            foreach($logName in @('postgres-process.log','postgres.log')){
+              $log=Join-Path $pgroot $logName
+              if(Test-Path $log){Get-Content -LiteralPath $log -Tail 16 | ForEach-Object {Write-Warning "$logName : $_"}}
+            }
+            throw 'Aplicativo comercial não abriu PostgreSQL em perfil acentuado'
+          }
+          function StopApp {
+            if($script:process -and -not $script:process.HasExited){
+              $null=$script:process.CloseMainWindow()
+              for($i=0;$i -lt 40;$i++){
+                Start-Sleep -Milliseconds 250
+                if($script:process.HasExited){break}
+              }
+              if(-not $script:process.HasExited){throw 'Aplicativo não encerrou com segurança'}
+            }
+            $script:process=$null
+          }
+          try{
+            $process=Start-Process -FilePath $app -PassThru
+            WaitForHealthy
+            $cluster=Join-Path $pgroot 'cluster/PG_VERSION'
+            $connection=Join-Path $pgroot 'connection.json'
+            if(-not(Test-Path $cluster) -or (Get-Content $cluster -Raw).Trim() -ne '16'){throw 'Banco PostgreSQL 16 ausente'}
+            if(-not(Test-Path $connection)){throw 'Credenciais não foram criadas'}
+            if(Test-Path (Join-Path $pgroot 'bootstrap.pending.json')){throw 'Instalação PostgreSQL ficou pendente'}
+            $hash=(Get-FileHash -LiteralPath $connection -Algorithm SHA256).Hash
+            $lic=Invoke-RestMethod -Uri 'http://127.0.0.1:3344/api/license/status' -TimeoutSec 10
+            if($lic.required -ne $true -or $lic.active -ne $false){throw 'Edição comercial liberou uso sem ativação'}
+            Write-Host 'PASS: primeiro acesso Unicode e gate de licença comercial'
+            StopApp
+            Start-Sleep -Seconds 3
+            $process=Start-Process -FilePath $app -PassThru
+            WaitForHealthy
+            if((Get-FileHash -LiteralPath $connection -Algorithm SHA256).Hash -ne $hash){throw 'Credenciais foram trocadas no reinício'}
+            Write-Host 'PASS: reabrir o mesmo .exe publicado preserva credenciais e PostgreSQL'
+          }finally{
+            if($process -and -not $process.HasExited){$null=$process.CloseMainWindow();Start-Sleep -Seconds 3;if(-not $process.HasExited){Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue}}
+            $env:LOCALAPPDATA=$original
+          }
