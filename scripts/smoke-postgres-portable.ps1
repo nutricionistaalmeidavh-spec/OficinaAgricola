@@ -127,7 +127,7 @@ try{
  $listener.Stop()
  $resumePassword=[Convert]::ToBase64String([System.Security.Cryptography.RandomNumberGenerator]::GetBytes(48)).TrimEnd('=').Replace('+','-').Replace('/','_')
  $resumeConfig=@{schemaVersion=1;user='oficina_local_owner';port=$resumePort;password=$resumePassword}
- [System.IO.File]::WriteAllText($resumeSecret,($resumeConfig|ConvertTo-Json -Compress),[System.Text.Encoding]::UTF8)
+ $resumeConfig | ConvertTo-Json -Compress | Set-Content -LiteralPath $resumeSecret -NoNewline -Encoding utf8NoBOM
  $resumePassword=$null
  $resumeHash=(Get-FileHash -LiteralPath $resumeSecret -Algorithm SHA256).Hash
  if(Test-Path (Join-Path $resumeProfile 'cluster\PG_VERSION')){
