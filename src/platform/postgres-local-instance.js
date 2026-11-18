@@ -167,10 +167,17 @@ export function createPortablePostgresController({
        if(await exists(cluster)){
          const contents=await readdir(cluster);
          if(contents.length){
-           if(!pending)
-             fail('Cluster PostgreSQL parcial sem marcador verificável; recuperação auditada necessária, nunca reinicializar dados');
-           // This cluster was created during a proven incomplete bootstrap.
-           // Preserve every byte for audit instead of deleting/reinitializing it.
+           // v1.0.4 had no pending marker. A failed initdb can leave a
+           // partially populated directory with connection.json already
+           // committed. PG_VERSION absent alone is NOT evidence that a
+           // pre-existing cluster is disposable: pg_control protects it.
+           const controlFile=join(cluster,'global','pg_control');
+           if(await exists(controlFile))
+             fail('Cluster PostgreSQL contém pg_control sem versão: recuperação auditada obrigatória; nunca reinicializar dados');
+           // Newer attempts are linked to the original credentials through
+           // bootstrap.pending.json. Legacy attempts have no such marker,
+           // but no PG_VERSION or pg_control means they cannot be a complete
+           // PostgreSQL installation. Preserve the directory for inspection.
            await rename(cluster,join(root,'cluster-interrupted-'+randomBytes(8).toString('hex')));
          }
        }
