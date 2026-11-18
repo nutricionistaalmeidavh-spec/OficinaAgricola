@@ -351,3 +351,39 @@ test('bundle Windows deve ser autossuficiente: DLLs VC++ presentes e verificadas
    }
  }finally{rmSync(f.root,{recursive:true,force:true});}
 });
+
+test('regressão Windows: pg_ctl timeout não pode abortar um PostgreSQL já iniciado e validado',async()=>{
+ const f=fixture(),dataRoot=join(f.root,'perfil Deus e fiél');
+ const cluster=join(dataRoot,'postgres','cluster');
+ let timedOut=0,queries=0;
+ const execute=async(file,args)=>{
+   if(file.endsWith('initdb.exe')){
+     mkdirSync(cluster,{recursive:true});writeFileSync(join(cluster,'PG_VERSION'),'16\n');
+   }
+   if(file.endsWith('pg_ctl.exe') && args.includes('start')){
+     timedOut++;throw Object.assign(new Error('pg_ctl startup timeout'),{code:'ETIMEDOUT'});
+   }
+ };
+ const Pool=class{
+   async query(sql,params){
+     queries++;
+     if(sql.includes("current_setting('data_directory')"))return {rows:[{
+       data_dir:cluster,server_port:'55642',username:'oficina_local_owner'
+     }]};
+     if(sql.includes('pg_database'))return {rows:[]};
+     if(sql.startsWith('CREATE DATABASE'))return {rows:[]};
+     throw Error('Unexpected SQL '+sql);
+   }
+   async end(){}
+ };
+ const manager=createPortablePostgresController({
+   resourcesPath:f.resources,dataRoot,platform:'win32',arch:'x64',execute,Pool,
+   choosePort:async()=>55642
+ });
+ try{
+   const ready=await manager.ensureReady();
+   assert.equal(ready.port,55642);
+   assert.equal(timedOut,1);
+   assert.ok(queries>0,'server is validated with real credentials, port, and data_dir');
+ }finally{await manager.stop().catch(()=>{});rmSync(f.root,{recursive:true,force:true});}
+});
