@@ -410,3 +410,77 @@ test('regressão: subprocesso PostgreSQL não aguarda pipe herdado por neto depo
    assert.match(readFileSync(logFile,'utf8'),/launcher-exited/);
  }finally{rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('Windows accented path: validate local PG cluster ID when data_directory text is mojibake',async()=>{
+ const f=fixture();
+ const dataRoot=join(f.root,'perfil-Deus e fiél');
+ const cluster=join(dataRoot,'postgres','cluster');
+ const sid=BigInt.asUintN(64,-1234567890123456789n);
+ const databases=new Set();
+ const execute=async(file)=>{
+   if(file.endsWith('initdb.exe')){
+     mkdirSync(join(cluster,'global'),{recursive:true});
+     writeFileSync(join(cluster,'PG_VERSION'),'16\n');
+     const control=Buffer.alloc(512);
+     control.writeBigUInt64LE(sid,0);
+     writeFileSync(join(cluster,'global','pg_control'),control);
+   }
+ };
+ const Pool=class{
+   async query(sql,params){
+     if(sql.includes("current_setting('data_directory')"))return {rows:[{
+       data_dir:'C:\\Users\\Deus e fiÃ©l\\AppData\\Local\\ArtiSys\\Oficina\\postgres\\cluster',
+       server_port:'55659',username:'oficina_local_owner'
+     }]};
+     if(sql.includes('pg_control_system()'))return {rows:[{system_id:'-1234567890123456789'}]};
+     if(sql.includes('pg_database'))return {rows:databases.has(params[0])?[{ok:1}]:[]};
+     if(sql.startsWith('CREATE DATABASE')){databases.add(sql.match(/"([^"]+)"/)[1]);return {rows:[]};}
+     throw Error('unexpected SQL: '+sql);
+   }
+   async end(){}
+ };
+ const manager=createPortablePostgresController({
+   resourcesPath:f.resources,dataRoot,platform:'win32',arch:'x64',
+   execute,Pool,choosePort:async()=>55659
+ });
+ try{
+   const config=await manager.ensureReady();
+   assert.equal(config.port,55659,'same verified local instance even with mojibake path');
+   assert.deepEqual([...databases].sort(),['oficina_operations','oficina_registry']);
+ }finally{await manager.stop().catch(()=>{});rmSync(f.root,{recursive:true,force:true});}
+});
+
+test('foreign PostgreSQL server stays rejected if cluster ID differs, even if port and owner match',async()=>{
+ const f=fixture();
+ const dataRoot=join(f.root,'accented-profile');
+ const cluster=join(dataRoot,'postgres','cluster');
+ const execute=async(file)=>{
+   if(file.endsWith('initdb.exe')){
+     mkdirSync(join(cluster,'global'),{recursive:true});
+     writeFileSync(join(cluster,'PG_VERSION'),'16\n');
+     const control=Buffer.alloc(512);
+     control.writeBigUInt64LE(123456789n,0);
+     writeFileSync(join(cluster,'global','pg_control'),control);
+   }
+ };
+ const Pool=class{
+   async query(sql){
+     if(sql.includes("current_setting('data_directory')"))return {rows:[{
+       data_dir:'D:\\different\\postgres\\cluster',
+       server_port:'55658',username:'oficina_local_owner'
+     }]};
+     if(sql.includes('pg_control_system()'))return {rows:[{system_id:'999999999'}]};
+     throw Error('database must not provision');
+   }
+   async end(){}
+ };
+ const manager=createPortablePostgresController({
+   resourcesPath:f.resources,dataRoot,platform:'win32',arch:'x64',
+   execute,Pool,choosePort:async()=>55658
+ });
+ try{
+   await assert.rejects(manager.ensureReady(),/Porta PostgreSQL ocupada|inicialização bloqueada/i);
+   assert.equal(readFileSync(join(cluster,'global','pg_control')).readBigUInt64LE(0),123456789n);
+ }finally{await manager.stop().catch(()=>{});rmSync(f.root,{recursive:true,force:true});}
+});
