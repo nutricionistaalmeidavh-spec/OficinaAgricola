@@ -1,0 +1,105 @@
+name: QA extra - executar release comercial 1.0.6 publicada no Windows
+on:
+  push:
+    branches: [qa/verify-published-106-real-windows]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  published-commercial-windows:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Baixar o MESMO .exe comercial publicado, verificar SHA256 e instalar
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $dir=Join-Path $env:RUNNER_TEMP 'released-oficina'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          gh release download v1.0.6 --pattern 'ArtiSys-Oficina-Setup-1.0.6-Windows-x64-Commercial.exe' --dir $dir
+          if($LASTEXITCODE -ne 0){throw 'GitHub Release v1.0.6 commercial não pôde ser baixada'}
+          $file=Join-Path $dir 'ArtiSys-Oficina-Setup-1.0.6-Windows-x64-Commercial.exe'
+          $expected='9ff760ed962555725e15f5f9ef6bb9a4b1f856f8a70f61a7312bc55b952300e4'
+          $actual=(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($expected -ne $actual){throw "Hash divergente: $actual"}
+          Write-Host "PASS: instalador comercial v1.0.6 idêntico ao release, SHA256=$actual"
+          $inst=Join-Path $env:RUNNER_TEMP 'Oficina106OfficialInstalled'
+          $p=Start-Process -FilePath $file -ArgumentList @('/S',"/D=$inst") -PassThru -Wait
+          if($p.ExitCode -ne 0){throw "Falha instalador oficial: $($p.ExitCode)"}
+          $edition=Get-Content (Join-Path $inst 'resources/oficina-edition.json') -Raw | ConvertFrom-Json
+          if($edition.commercialActivation -ne $true){throw 'EDIÇÃO COMERCIAL errada'}
+          foreach($file in @('initdb.exe','pg_ctl.exe','postgres.exe','vcruntime140.dll','vcruntime140_1.dll','msvcp140.dll')){
+            if(-not(Test-Path -LiteralPath (Join-Path $inst "resources/postgresql/bin/$file"))){throw "Bundle PostgreSQL incompleto: $file"}
+          }
+          Write-Host 'PASS: instalação do .exe publicado e DLLs incluídas'
+      - name: Iniciar o executável publicado sob cultura pt-BR em perfis reais acentuados
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $ProgressPreference='SilentlyContinue'
+          Set-Culture pt-BR
+          Write-Host "Culture=$(Get-Culture)"
+          $cp=& chcp.com 1252
+          Write-Host "Codepage=$cp"
+          $app=Join-Path $env:RUNNER_TEMP 'Oficina106OfficialInstalled/ArtiSys Oficina.exe'
+          if(-not(Test-Path -LiteralPath $app)){throw 'App não instalado'}
+          $original=$env:LOCALAPPDATA
+          $cases=@(
+            'C:\Users\Deus e fiél\AppData\Local',
+            'C:\Users\João da Silva\AppData\Local',
+            (Join-Path $env:RUNNER_TEMP 'Cliente sem acentos/AppData/Local')
+          )
+          foreach($testProfile in $cases){
+            $p=$null
+            try{
+              Write-Host "CASE: Windows profile $(Split-Path (Split-Path (Split-Path $testProfile -Parent) -Parent) -Leaf)"
+              $env:LOCALAPPDATA=$testProfile
+              New-Item -ItemType Directory -Path $testProfile -Force | Out-Null
+              if(Test-Path (Join-Path $testProfile 'ArtiSys/Oficina/postgres/connection.json')){throw 'A instalação deveria estar limpa'}
+              $p=Start-Process -FilePath $app -PassThru
+              $healthy=$false
+              for($i=0;$i -lt 180;$i++){
+                Start-Sleep -Milliseconds 500
+                if($p.HasExited){break}
+                try{
+                  $h=Invoke-RestMethod 'http://127.0.0.1:3344/api/health' -TimeoutSec 1
+                  if($h.ok -and $h.engine -eq 'postgres' -and $h.operationalApiReady -eq $true){$healthy=$true;break}
+                }catch{}
+              }
+              $root=Join-Path $testProfile 'ArtiSys/Oficina/postgres'
+              if(-not $healthy){
+                $state=@{
+                  processExited=$p.HasExited
+                  pgVersion=Test-Path (Join-Path $root 'cluster/PG_VERSION')
+                  pending=Test-Path (Join-Path $root 'bootstrap.pending.json')
+                  diag=Test-Path (Join-Path $root 'bootstrap-diagnostic.json')
+                }
+                Write-Warning ("STATE: "+($state|ConvertTo-Json -Compress))
+                foreach($logName in @('postgres.log','postgres-process.log')){
+                  $log=Join-Path $root $logName
+                  if(Test-Path $log){Get-Content $log -Tail 25 | ForEach-Object {Write-Warning "$logName : $_"}}
+                }
+                throw 'O .exe comercial publicado NÃO inicializou neste perfil'
+              }
+              $v=(Get-Content (Join-Path $root 'cluster/PG_VERSION') -Raw).Trim()
+              if($v -ne '16'){throw 'Banco PostgreSQL não inicializado corretamente'}
+              if(Test-Path (Join-Path $root 'bootstrap.pending.json')){throw 'Bootstrap PostgreSQL ficou incompleto'}
+              $licensed=Invoke-RestMethod 'http://127.0.0.1:3344/api/license/status' -TimeoutSec 10
+              if($licensed.required -ne $true -or $licensed.active -ne $false){throw 'Ativação comercial não está sendo exigida'}
+              $setup=Invoke-WebRequest -Uri 'http://127.0.0.1:3344/api/setup/initialize' -Method POST -ContentType 'application/json' -Body '{}' -SkipHttpErrorCheck
+              if([int]$setup.StatusCode -ne 403){throw 'Sem licença foi permitido criar admin'}
+              Write-Host "PASS: v1.0.6 oficial abriu no Windows, PostgreSQL inicializado e licença exigida"
+            }finally{
+              if($p -and -not $p.HasExited){
+                $null=$p.CloseMainWindow()
+                Start-Sleep -Seconds 2
+                if(-not $p.HasExited){Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue}
+              }
+              $env:LOCALAPPDATA=$original
+              Start-Sleep -Seconds 3
+            }
+          }
+          Write-Host 'PASS: todos os perfis Windows concluídos com o .exe comercial publicado.'
