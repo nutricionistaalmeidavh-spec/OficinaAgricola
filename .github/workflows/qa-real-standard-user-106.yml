@@ -49,9 +49,9 @@ jobs:
           $log=Join-Path $env:PUBLIC 'ArtisysOficinaQA/results.log'
           try {
             $user=[Environment]::UserName
-            $home=[Environment]::GetFolderPath('UserProfile')
+            $profileHome=[Environment]::GetFolderPath('UserProfile')
             $local=[Environment]::GetFolderPath('LocalApplicationData')
-            "ACTUAL user=$user home=$home local=$local" | Add-Content -LiteralPath $log -Encoding utf8
+            "ACTUAL user=$user home=$profileHome local=$local" | Add-Content -LiteralPath $log -Encoding utf8
             if($user -ne 'Deus e fiél'){throw 'Wrong Windows logon account'}
             if($local -notmatch 'Deus e fiél'){throw 'The REAL profile path must have an accent'}
             $ident=[Security.Principal.WindowsIdentity]::GetCurrent()
