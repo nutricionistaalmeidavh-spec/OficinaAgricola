@@ -146,7 +146,7 @@ test('regressão: primeira instalação interrompida antes do PG_VERSION retoma 
    execute,Pool,choosePort:async()=>55631
  });
  try{
-   await assert.rejects(manager.ensureReady(),/simulated initdb interruption/);
+   await assert.rejects(manager.ensureReady(),/Falha ao preparar PostgreSQL 16/);
    const credentialPath=join(postgresRoot,'connection.json');
    const before=readFileSync(credentialPath,'utf8');
    const result=await manager.ensureReady();
@@ -240,7 +240,7 @@ test('regressão: bootstrap parcial com marcador preserva arquivos interrompidos
    execute,Pool,choosePort:async()=>55633
  });
  try{
-   await assert.rejects(manager.ensureReady(),/simulated partial cluster/);
+   await assert.rejects(manager.ensureReady(),/Falha ao preparar PostgreSQL 16/);
    await manager.ensureReady();
    const folders=readdirSync(postgresRoot).filter(x=>x.startsWith('cluster-interrupted-'));
    assert.equal(folders.length,1);
