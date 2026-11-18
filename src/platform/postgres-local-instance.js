@@ -27,8 +27,14 @@ async function ephemeralPort(){
    });
  });
 }
+// initdb can exceed one minute on slower disks or when Windows Defender
+// inspects the embedded PostgreSQL binaries during the first installation.
+export function postgresExecutableTimeout(file){
+ return /(?:^|[\\/])initdb\.exe$/i.test(file)?300_000:60_000;
+}
 async function defaultExecute(file,args){
- return exec(file,args,{windowsHide:true,timeout:60_000,maxBuffer:1024*1024});
+ return exec(file,args,{windowsHide:true,
+   timeout:postgresExecutableTimeout(file),maxBuffer:1024*1024});
 }
 function connectionUrl(port,password,db){
  return 'postgresql://'+USER+':'+encodeURIComponent(password)+
