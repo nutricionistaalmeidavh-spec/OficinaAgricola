@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,writeFileSync,mkdirSync,rmSync,readFileSync,existsSync} from 'node:fs';
+import {mkdtempSync,writeFileSync,mkdirSync,rmSync,readFileSync,existsSync,readdirSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {verifyPostgresWindowsBundle} from '../src/platform/postgres-windows-bundle.js';
-import {createPortablePostgresController} from '../src/platform/postgres-local-instance.js';
+import {createPortablePostgresController,postgresExecutableTimeout} from '../src/platform/postgres-local-instance.js';
 
 function fixture(){
  const root=mkdtempSync(join(tmpdir(),'oficina-pg-bundle-'));
@@ -109,5 +109,216 @@ test('existing cluster missing credentials fails closed rather than resetting da
  try{
    await assert.rejects(manager.ensureReady(),/credenciais|recuperação/i);
    assert.equal(readFileSync(join(cluster,'PG_VERSION'),'utf8').trim(),'16');
+ }finally{rmSync(f.root,{recursive:true,force:true});}
+});
+
+
+test('regressão: primeira instalação interrompida antes do PG_VERSION retoma sem trocar credenciais',async()=>{
+ const f=fixture();
+ const dataRoot=join(f.root,'perfil');
+ const postgresRoot=join(dataRoot,'postgres');
+ let initdbAttempts=0;
+ const created=new Set();
+ const execute=async (program,args)=>{
+   if(program.endsWith('initdb.exe')){
+     initdbAttempts++;
+     if(initdbAttempts===1)throw Error('simulated initdb interruption');
+     mkdirSync(join(postgresRoot,'cluster'),{recursive:true});
+     writeFileSync(join(postgresRoot,'cluster','PG_VERSION'),'16\n');
+   }
+ };
+ const Pool=class{
+   async query(sql,params){
+     if(sql.includes("current_setting('data_directory')"))return {rows:[{
+       data_dir:join(postgresRoot,'cluster'),server_port:'55631',username:'oficina_local_owner'
+     }]};
+     if(sql.includes('pg_database'))return {rows:created.has(params[0])?[{present:1}]:[]};
+     if(sql.startsWith('CREATE DATABASE')){
+       created.add(sql.match(/"([^"]+)"/)[1]);return {rows:[]};
+     }
+     throw Error('Unexpected SQL '+sql);
+   }
+   async end(){}
+ };
+ const manager=createPortablePostgresController({
+   resourcesPath:f.resources,dataRoot,platform:'win32',arch:'x64',
+   execute,Pool,choosePort:async()=>55631
+ });
+ try{
+   await assert.rejects(manager.ensureReady(),/simulated initdb interruption/);
+   const credentialPath=join(postgresRoot,'connection.json');
+   const before=readFileSync(credentialPath,'utf8');
+   const result=await manager.ensureReady();
+   assert.equal(result.newInstall,true);
+   assert.equal(readFileSync(credentialPath,'utf8'),before);
+   assert.equal(initdbAttempts,2);
+   assert.deepEqual([...created].sort(),['oficina_operations','oficina_registry']);
+   assert.equal(existsSync(join(postgresRoot,'bootstrap.pending.json')),false);
+ }finally{await manager.stop().catch(()=>{});rmSync(f.root,{recursive:true,force:true});}
+});
+
+test('regressão: primeira instalação interrompida depois do initdb retoma criação dos bancos',async()=>{
+ const f=fixture();
+ const dataRoot=join(f.root,'perfil');
+ const postgresRoot=join(dataRoot,'postgres');
+ let failProvision=true,initdbAttempts=0;
+ const created=new Set();
+ const execute=async program=>{
+   if(program.endsWith('initdb.exe')){
+     initdbAttempts++;
+     mkdirSync(join(postgresRoot,'cluster'),{recursive:true});
+     writeFileSync(join(postgresRoot,'cluster','PG_VERSION'),'16\n');
+   }
+ };
+ const Pool=class{
+   async query(sql,params){
+     if(sql.includes("current_setting('data_directory')"))return {rows:[{
+       data_dir:join(postgresRoot,'cluster'),server_port:'55632',username:'oficina_local_owner'
+     }]};
+     if(sql.includes('pg_database')){
+       if(failProvision)throw Error('simulated provisioning interruption');
+       return {rows:created.has(params[0])?[{present:1}]:[]};
+     }
+     if(sql.startsWith('CREATE DATABASE')){
+       created.add(sql.match(/"([^"]+)"/)[1]);return {rows:[]};
+     }
+     throw Error('Unexpected SQL '+sql);
+   }
+   async end(){}
+ };
+ const options={
+   resourcesPath:f.resources,dataRoot,platform:'win32',arch:'x64',
+   execute,Pool,choosePort:async()=>55632
+ };
+ const first=createPortablePostgresController(options);
+ try{
+   await assert.rejects(first.ensureReady(),/simulated provisioning interruption/);
+   assert.ok(existsSync(join(postgresRoot,'cluster','PG_VERSION')));
+   failProvision=false;
+   const restarted=createPortablePostgresController(options);
+   const result=await restarted.ensureReady();
+   assert.equal(result.newInstall,true);
+   assert.equal(initdbAttempts,1,'não reinicializar cluster já criado');
+   assert.deepEqual([...created].sort(),['oficina_operations','oficina_registry']);
+   assert.equal(existsSync(join(postgresRoot,'bootstrap.pending.json')),false);
+   await restarted.stop();
+ }finally{await first.stop().catch(()=>{});rmSync(f.root,{recursive:true,force:true});}
+});
+
+test('regressão: bootstrap parcial com marcador preserva arquivos interrompidos e retoma',async()=>{
+ const f=fixture();
+ const dataRoot=join(f.root,'perfil');
+ const postgresRoot=join(dataRoot,'postgres');
+ let tries=0;
+ const databases=new Set();
+ const execute=async program=>{
+   if(program.endsWith('initdb.exe')){
+     tries++;
+     const path=join(postgresRoot,'cluster');
+     mkdirSync(path,{recursive:true});
+     if(tries===1){
+       writeFileSync(join(path,'arquivo-parcial'),'preservar');
+       throw Error('simulated partial cluster');
+     }
+     writeFileSync(join(path,'PG_VERSION'),'16\n');
+   }
+ };
+ const Pool=class{
+   async query(sql,params){
+     if(sql.includes("current_setting('data_directory')"))return {rows:[{
+       data_dir:join(postgresRoot,'cluster'),server_port:'55633',username:'oficina_local_owner'
+     }]};
+     if(sql.includes('pg_database'))return {rows:databases.has(params[0])?[{present:1}]:[]};
+     if(sql.startsWith('CREATE DATABASE')){databases.add(sql.match(/"([^"]+)"/)[1]);return {rows:[]};}
+     throw Error('Unexpected SQL '+sql);
+   }
+   async end(){}
+ };
+ const manager=createPortablePostgresController({
+   resourcesPath:f.resources,dataRoot,platform:'win32',arch:'x64',
+   execute,Pool,choosePort:async()=>55633
+ });
+ try{
+   await assert.rejects(manager.ensureReady(),/simulated partial cluster/);
+   await manager.ensureReady();
+   const folders=readdirSync(postgresRoot).filter(x=>x.startsWith('cluster-interrupted-'));
+   assert.equal(folders.length,1);
+   assert.equal(readFileSync(join(postgresRoot,folders[0],'arquivo-parcial'),'utf8'),'preservar');
+ }finally{await manager.stop().catch(()=>{});rmSync(f.root,{recursive:true,force:true});}
+});
+
+test('initdb possui prazo maior que os comandos curtos, inclusive em caminho Windows',()=>{
+ assert.equal(postgresExecutableTimeout('C:\\Program Files\\PostgreSQL\\bin\\initdb.exe'),300_000);
+ assert.equal(postgresExecutableTimeout('/opt/postgresql/bin/initdb.exe'),300_000);
+ assert.equal(postgresExecutableTimeout('C:\\Postgres\\bin\\pg_ctl.exe'),60_000);
+});
+
+
+test('v1.0.4: cluster parcial sem PG_VERSION nem marcador recupera sem apagar arquivos originais',async()=>{
+ const f=fixture();
+ const dataRoot=join(f.root,'legacy');
+ const root=join(dataRoot,'postgres');
+ const cluster=join(root,'cluster');
+ mkdirSync(cluster,{recursive:true});
+ writeFileSync(join(cluster,'arquivo-parcial'),'bytes-originais-intactos');
+ const password='a'.repeat(48);
+ const original=JSON.stringify({schemaVersion:1,user:'oficina_local_owner',port:55635,password});
+ writeFileSync(join(root,'connection.json'),original);
+ let initialized=0;
+ const databases=new Set();
+ const exec=async file=>{
+   if(file.endsWith('initdb.exe')){
+     initialized++;
+     mkdirSync(cluster,{recursive:true});
+     writeFileSync(join(cluster,'PG_VERSION'),'16\n');
+   }
+ };
+ const Pool=class{
+   async query(sql,params){
+     if(sql.includes("current_setting('data_directory')"))return {rows:[{
+       data_dir:cluster,server_port:'55635',username:'oficina_local_owner'
+     }]};
+     if(sql.includes('pg_database'))return {rows:databases.has(params[0])?[{ok:1}]:[]};
+     if(sql.startsWith('CREATE DATABASE')){databases.add(sql.match(/"([^"]+)"/)[1]);return {rows:[]};}
+     throw Error('Unexpected SQL '+sql);
+   }
+   async end(){}
+ };
+ const manager=createPortablePostgresController({
+   resourcesPath:f.resources,dataRoot,platform:'win32',arch:'x64',
+   execute:exec,Pool,choosePort:async()=>{throw Error('must keep existing port');}
+ });
+ try{
+   const config=await manager.ensureReady();
+   assert.equal(config.newInstall,true);
+   assert.equal(initialized,1);
+   assert.deepEqual([...databases].sort(),['oficina_operations','oficina_registry']);
+   const saved=readdirSync(root).filter(x=>x.startsWith('cluster-interrupted-'));
+   assert.equal(saved.length,1);
+   assert.equal(readFileSync(join(root,saved[0],'arquivo-parcial'),'utf8'),'bytes-originais-intactos');
+   assert.equal(readFileSync(join(root,'connection.json'),'utf8'),original);
+ }finally{await manager.stop().catch(()=>{});rmSync(f.root,{recursive:true,force:true});}
+});
+
+test('versão PG_VERSION ausente em cluster existente com pg_control nunca é reinicializada',async()=>{
+ const f=fixture();
+ const dataRoot=join(f.root,'profile');
+ const root=join(dataRoot,'postgres');
+ const cluster=join(root,'cluster');
+ mkdirSync(join(cluster,'global'),{recursive:true});
+ writeFileSync(join(cluster,'global','pg_control'),'original-protected');
+ writeFileSync(join(root,'connection.json'),JSON.stringify({
+   schemaVersion:1,user:'oficina_local_owner',port:55636,password:'b'.repeat(48)
+ }));
+ let executed=0;
+ const manager=createPortablePostgresController({
+   resourcesPath:f.resources,dataRoot,platform:'win32',arch:'x64',
+   execute:async()=>{executed++;throw Error('must not run initdb');},
+   Pool:class{},choosePort:async()=>55636
+ });
+ try{
+   await assert.rejects(manager.ensureReady(),/recuperação|marcador/i);
+   assert.equal(executed,0);
+   assert.equal(readFileSync(join(cluster,'global','pg_control'),'utf8'),'original-protected');
  }finally{rmSync(f.root,{recursive:true,force:true});}
 });

@@ -1,7 +1,7 @@
-import {randomBytes} from 'node:crypto';
+import {randomBytes,createHash} from 'node:crypto';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
-import {mkdir,readFile,writeFile,rename,unlink,stat,open} from 'node:fs/promises';
+import {mkdir,readFile,writeFile,rename,unlink,stat,open,readdir} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
 import {createServer} from 'node:net';
 import {verifyPostgresWindowsBundle} from './postgres-windows-bundle.js';
@@ -27,8 +27,14 @@ async function ephemeralPort(){
    });
  });
 }
+// initdb can exceed one minute on slower disks or when Windows Defender
+// inspects the embedded PostgreSQL binaries during the first installation.
+export function postgresExecutableTimeout(file){
+ return /(?:^|[\\/])initdb\.exe$/i.test(file)?300_000:60_000;
+}
 async function defaultExecute(file,args){
- return exec(file,args,{windowsHide:true,timeout:60_000,maxBuffer:1024*1024});
+ return exec(file,args,{windowsHide:true,
+   timeout:postgresExecutableTimeout(file),maxBuffer:1024*1024});
 }
 function connectionUrl(port,password,db){
  return 'postgresql://'+USER+':'+encodeURIComponent(password)+
@@ -53,7 +59,8 @@ export function createPortablePostgresController({
     typeof choosePort!=='function')
    throw Error('Provisionador PostgreSQL local exige recursos, diretório e driver');
  const root=resolve(dataRoot,'postgres'),cluster=join(root,'cluster'),
-   connectionFile=join(root,'connection.json'),logFile=join(root,'postgres.log');
+   connectionFile=join(root,'connection.json'),logFile=join(root,'postgres.log'),
+   pendingFile=join(root,'bootstrap.pending.json');
  let owned=false,activeConfig=null,binaries=null;
  async function lock(action){
    await mkdir(root,{recursive:true,mode:0o700});
@@ -101,6 +108,23 @@ export function createPortablePostgresController({
      }
    });
  }
+ function bootstrapMarker(config){
+   // Fingerprint ties a bootstrap attempt to exactly the original credentials.
+   // The marker contains no secret and is removed only after both databases exist.
+   return {schemaVersion:1,configDigest:createHash('sha256')
+     .update(JSON.stringify([config.user,config.port,config.password]))
+     .digest('hex')};
+ }
+ async function isBootstrapPending(config){
+   if(!(await exists(pendingFile)))return false;
+   let marker;
+   try{marker=JSON.parse(await readFile(pendingFile,'utf8'));}
+   catch{fail('Marcador PostgreSQL de instalação inicial inválido; recuperação auditada necessária');}
+   const expected=bootstrapMarker(config);
+   if(marker.schemaVersion!==1||marker.configDigest!==expected.configDigest)
+     fail('Marcador PostgreSQL não corresponde às credenciais; recuperação auditada necessária');
+   return true;
+ }
  async function ensureReady(){
    if(activeConfig)return activeConfig;
    return lock(async()=>{
@@ -110,8 +134,9 @@ export function createPortablePostgresController({
      const pgVersion=join(cluster,'PG_VERSION');
      const hasVersion=await exists(pgVersion);
      const hasConfig=await exists(connectionFile);
-     if(hasVersion!==hasConfig)
-       fail('Instalação PostgreSQL incompleta; recuperação auditada necessária, nunca reinicializar dados');
+     // A cluster without its credentials may contain real customer data.
+     if(hasVersion&&!hasConfig)
+       fail('Cluster PostgreSQL sem credenciais; recuperação auditada necessária, nunca reinicializar dados');
      let config;
      if(hasConfig){
        try{config=JSON.parse(await readFile(connectionFile,'utf8'));}
@@ -119,19 +144,53 @@ export function createPortablePostgresController({
        if(config.schemaVersion!==1||config.user!==USER||
           !validPort(config.port)||!validSecret(config.password))
          fail('Credenciais PostgreSQL inválidas; recuperação manual obrigatória');
-       if((await readFile(pgVersion,'utf8')).trim()!=='16')
+       if(hasVersion&&(await readFile(pgVersion,'utf8')).trim()!=='16')
          fail('Cluster PostgreSQL tem versão incompatível; migração de versão obrigatória');
      }else{
-       if(await exists(cluster))
-         fail('Diretório PostgreSQL já existe sem marcador: recuperação manual obrigatória');
+       // A crashed installation can leave a pending marker before credentials
+       // are written. Never reuse a non-empty orphan cluster in this case.
+       if((await exists(cluster))&&(await readdir(cluster)).length)
+         fail('Diretório PostgreSQL já existe sem credenciais: recuperação manual obrigatória');
        const port=await choosePort();
        if(!validPort(port))fail('Porta local PostgreSQL inválida');
        config={schemaVersion:1,user:USER,port,
          password:randomBytes(48).toString('base64url')};
-       // The secret is persisted BEFORE initdb; a crash must not silently
-       // rotate the password of an already initialized cluster.
+       if(await exists(pendingFile))await unlink(pendingFile);
+       // Record intent before credentials so interrupted first installs can resume.
+       await atomicPrivateJson(pendingFile,bootstrapMarker(config));
        await atomicPrivateJson(connectionFile,config);
+     }
+     let pending=await isBootstrapPending(config);
+     if(!hasVersion){
+       // v1.0.4 wrote connection.json BEFORE initdb. If initdb failed and
+       // cleaned its cluster, resume safely with the SAME credentials.
+       if(await exists(cluster)){
+         const contents=await readdir(cluster);
+         if(contents.length){
+           // v1.0.4 had no pending marker. A failed initdb can leave a
+           // partially populated directory with connection.json already
+           // committed. PG_VERSION absent alone is NOT evidence that a
+           // pre-existing cluster is disposable: pg_control protects it.
+           const controlFile=join(cluster,'global','pg_control');
+           if(await exists(controlFile))
+             fail('Cluster PostgreSQL contém pg_control sem versão: recuperação auditada obrigatória; nunca reinicializar dados');
+           // Newer attempts are linked to the original credentials through
+           // bootstrap.pending.json. Legacy attempts have no such marker,
+           // but no PG_VERSION or pg_control means they cannot be a complete
+           // PostgreSQL installation. Preserve the directory for inspection.
+           await rename(cluster,join(root,'cluster-interrupted-'+randomBytes(8).toString('hex')));
+         }
+       }
+       if(!pending){
+         await atomicPrivateJson(pendingFile,bootstrapMarker(config));
+         pending=true;
+       }
        const secretFile=join(root,'bootstrap.pw');
+       // A hard crash can leave this ephemeral file behind. It belongs only
+       // to the pending bootstrap and must not prevent a subsequent retry.
+       await unlink(secretFile).catch(error=>{
+         if(error.code!=='ENOENT')throw error;
+       });
        try{
          await writeFile(secretFile,config.password+'\n',{flag:'wx',mode:0o600});
          await execute(join(bundle.bin,'initdb.exe'),[
@@ -141,7 +200,7 @@ export function createPortablePostgresController({
          ]);
        }finally{await unlink(secretFile).catch(()=>{});}
        if(!(await exists(pgVersion)))
-         fail('initdb não criou um cluster PostgreSQL verificável');
+         fail('initdb não criou um cluster PostgreSQL verificável; inicialização pendente para recuperação');
      }
      const pgCtl=join(bundle.bin,'pg_ctl.exe');
      let running=false;
@@ -160,9 +219,12 @@ export function createPortablePostgresController({
        owned=true;
      }
      await verifyRunning(config);
-     await provisionDatabases(config,{fresh:!hasConfig});
+     await provisionDatabases(config,{fresh:pending});
+     // Do not treat an interrupted fresh installation as an existing,
+     // provisioned customer database until both DBs have been verified.
+     if(pending)await unlink(pendingFile);
      activeConfig=Object.freeze({
-       newInstall:!hasConfig,
+       newInstall:pending,
        port:config.port,
        registryUrl:connectionUrl(config.port,config.password,REGISTRY),
        operationsUrl:connectionUrl(config.port,config.password,OPERATIONS)
