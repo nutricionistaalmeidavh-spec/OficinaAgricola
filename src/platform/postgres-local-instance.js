@@ -32,6 +32,21 @@ async function ephemeralPort(){
 export function postgresExecutableTimeout(file){
  return /(?:^|[\\/])initdb\.exe$/i.test(file)?300_000:60_000;
 }
+function processFailureDiagnostic(error){
+ const numeric=typeof error?.code==='number'?error.code:null;
+ const code=numeric===null?String(error?.code??'unknown'):
+   '0x'+(numeric>>>0).toString(16).padStart(8,'0').toUpperCase();
+ const label=code==='0xC0000135'?' (DLL do Visual C++ ausente no Windows)':'';
+ // Include executable stderr/stdout for offline support; never include
+ // command-line arguments or PostgreSQL connection credentials.
+ const safe=value=>String(value??'').slice(-6000)
+   .replace(/postgresql:\/\/[^\s"'<>]+/gi,'[CONNECTION_REDACTED]')
+   .replace(/--pwfile=[^\s"'<>]+/gi,'--pwfile=[REDACTED]');
+ return {code,signal:String(error?.signal??''),killed:Boolean(error?.killed),
+   stdout:safe(error?.stdout),stderr:safe(error?.stderr),
+   detail:'Código '+code+label};
+}
+
 async function defaultExecute(file,args){
  return exec(file,args,{windowsHide:true,
    timeout:postgresExecutableTimeout(file),maxBuffer:1024*1024});
@@ -193,11 +208,21 @@ export function createPortablePostgresController({
        });
        try{
          await writeFile(secretFile,config.password+'\n',{flag:'wx',mode:0o600});
-         await execute(join(bundle.bin,'initdb.exe'),[
-           '-D',cluster,'-U',USER,'--encoding=UTF8',
-           '--auth-host=scram-sha-256','--auth-local=scram-sha-256',
-           '--pwfile='+secretFile,'--no-instructions'
-         ]);
+         try{
+           await execute(join(bundle.bin,'initdb.exe'),[
+             '-D',cluster,'-U',USER,'--encoding=UTF8',
+             '--auth-host=scram-sha-256','--auth-local=scram-sha-256',
+             '--pwfile='+secretFile,'--no-instructions'
+           ]);
+         }catch(error){
+           const diagnostic=processFailureDiagnostic(error);
+           await atomicPrivateJson(join(root,'bootstrap-diagnostic.json'),{
+             schemaVersion:1,stage:'initdb',...diagnostic
+           }).catch(()=>{});
+           fail('Falha ao preparar PostgreSQL 16: '+diagnostic.detail+
+             '. Diagnóstico privado: postgres/bootstrap-diagnostic.json. '+
+             'Não exclua a pasta do banco nem as credenciais.');
+         }
        }finally{await unlink(secretFile).catch(()=>{});}
        if(!(await exists(pgVersion)))
          fail('initdb não criou um cluster PostgreSQL verificável; inicialização pendente para recuperação');
@@ -213,10 +238,26 @@ export function createPortablePostgresController({
      if(!running){
        const opts='-h 127.0.0.1 -p '+config.port+
          ' -c listen_addresses=127.0.0.1 -c password_encryption=scram-sha-256';
-       await execute(pgCtl,[
-         '-D',cluster,'-l',logFile,'-o',opts,'-w','-t','45','start'
-       ]);
        owned=true;
+       try{
+         await execute(pgCtl,[
+           '-D',cluster,'-l',logFile,'-o',opts,'-w','-t','45','start'
+         ]);
+       }catch(error){
+         // pg_ctl on Windows can time out reading startup state from a
+         // Unicode profile even after postgres.exe is already listening.
+         // Never assume success: authenticate and verify the exact data
+         // directory, database superuser and port before proceeding.
+         try{await verifyRunning(config);}
+         catch{
+           const diagnostic=processFailureDiagnostic(error);
+           await atomicPrivateJson(join(root,'bootstrap-diagnostic.json'),{
+             schemaVersion:1,stage:'pg_ctl start',...diagnostic
+           }).catch(()=>{});
+           fail('Falha ao iniciar PostgreSQL: '+diagnostic.detail+
+             '. Consulte postgres/postgres.log e postgres/bootstrap-diagnostic.json.');
+         }
+       }
      }
      await verifyRunning(config);
      await provisionDatabases(config,{fresh:pending});
