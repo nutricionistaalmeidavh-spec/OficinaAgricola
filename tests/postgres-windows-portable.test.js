@@ -1,4 +1,5 @@
 import test from 'node:test';
+import * as portableProcess from '../src/platform/postgres-local-instance.js';
 import assert from 'node:assert/strict';
 import {mkdtempSync,writeFileSync,mkdirSync,rmSync,readFileSync,existsSync,readdirSync} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -386,4 +387,26 @@ test('regressão Windows: pg_ctl timeout não pode abortar um PostgreSQL já ini
    assert.equal(timedOut,1);
    assert.ok(queries>0,'server is validated with real credentials, port, and data_dir');
  }finally{await manager.stop().catch(()=>{});rmSync(f.root,{recursive:true,force:true});}
+});
+
+
+test('regressão: subprocesso PostgreSQL não aguarda pipe herdado por neto depois que comando sai',async()=>{
+ const root=mkdtempSync(join(tmpdir(),'oficina-pg-no-pipes-'));
+ const logFile=join(root,'postgres-process.log');
+ // initdb/pg_ctl can launch a child that inherits stdio on Windows. execFile
+ // waits for inherited stdout pipes until timeout even when the tool exited.
+ const launcher=[
+  'const {spawn}=require("node:child_process");',
+  'const grandchild=spawn(process.execPath,["-e","setTimeout(()=>{},3000)"],',
+  '{detached:true,stdio:"inherit"});',
+  'grandchild.unref(); console.log("launcher-exited");'
+ ].join('');
+ try{
+   const start=Date.now();
+   await portableProcess.runPortablePostgresProcess(process.execPath,['-e',launcher],{
+     logFile,timeoutMs:1500
+   });
+   assert.ok(Date.now()-start<1500,'do not wait for inherited descendant pipe');
+   assert.match(readFileSync(logFile,'utf8'),/launcher-exited/);
+ }finally{rmSync(root,{recursive:true,force:true});}
 });
