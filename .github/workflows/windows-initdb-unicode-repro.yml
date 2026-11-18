@@ -80,3 +80,17 @@ jobs:
           $cluster=Join-Path $env:LOCALAPPDATA 'ArtiSys/Oficina/postgres/cluster/PG_VERSION'
           Write-Host "Unicode real app: ready=$ready clusterVersion=$(Test-Path $cluster)"
           if(-not $ready){throw 'Unicoded application bootstrap failed'}
+      - name: Encontrar redistribuiveis oficiais MSVC no builder
+        shell: pwsh
+        run: |
+          $base='C:\Program Files\Microsoft Visual Studio\2022'
+          Get-ChildItem $base -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+            $redist=Join-Path $_.FullName 'VC/Redist/MSVC'
+            if(Test-Path $redist){
+              Get-ChildItem $redist -Directory | ForEach-Object {
+                $dir=Join-Path $_.FullName 'x64/Microsoft.VC143.CRT'
+                Write-Host "REDIST_PATH=$dir exists=$(Test-Path $dir)"
+                if(Test-Path $dir){Get-ChildItem $dir -Filter '*.dll' | ForEach-Object {Write-Host "REDIST_DLL=$($_.Name)"}}
+              }
+            }
+          }
