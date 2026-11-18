@@ -1,7 +1,8 @@
 import {randomBytes,createHash} from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {mkdir,readFile,writeFile,rename,unlink,stat,open,readdir} from 'node:fs/promises';
-import {resolve,join} from 'node:path';
+import {resolve,join,win32} from 'node:path';
+import {prepareWindowsPostgresAlias} from './windows-postgres-alias.js';
 import {createServer} from 'node:net';
 import {verifyPostgresWindowsBundle} from './postgres-windows-bundle.js';
 
@@ -115,7 +116,8 @@ export function createPortablePostgresController({
  const root=resolve(dataRoot,'postgres'),cluster=join(root,'cluster'),
    connectionFile=join(root,'connection.json'),logFile=join(root,'postgres.log'),
    pendingFile=join(root,'bootstrap.pending.json');
- let owned=false,activeConfig=null,binaries=null;
+ let owned=false,activeConfig=null,binaries=null,pgAlias=null,runningExisting=false;
+ const nativePath=file=>pgAlias?.active?win32.join(pgAlias.root,file):join(root,file);
  const executeLogged=(file,args)=>execute(file,args,{logFile:join(root,'postgres-process.log')});
  async function lock(action){
    await mkdir(root,{recursive:true,mode:0o700});
@@ -205,6 +207,14 @@ export function createPortablePostgresController({
      const bundle=verifyPostgresWindowsBundle({resourcesPath,platform,arch});
      if(!bundle.valid)fail('PostgreSQL embarcado ausente/inválido: '+bundle.reason);
      binaries=bundle;
+     // Use only an ASCII alias for PostgreSQL's native Windows executables.
+     // Actual data and credentials remain at their original LocalAppData paths.
+     // The alias survives while the backend runs and is released after stop.
+     if(platform==='win32'&&process.platform==='win32'&&!pgAlias)
+       pgAlias=await prepareWindowsPostgresAlias(root,{platform});
+     const nativeCluster=nativePath('cluster');
+     const nativeLogFile=nativePath('postgres.log');
+     const nativeSecretFile=nativePath('bootstrap.pw');
      const pgVersion=join(cluster,'PG_VERSION');
      const hasVersion=await exists(pgVersion);
      const hasConfig=await exists(connectionFile);
@@ -269,9 +279,9 @@ export function createPortablePostgresController({
          await writeFile(secretFile,config.password+'\n',{flag:'wx',mode:0o600});
          try{
            await executeLogged(join(bundle.bin,'initdb.exe'),[
-             '-D',cluster,'-U',USER,'--encoding=UTF8',
+             '-D',nativeCluster,'-U',USER,'--encoding=UTF8',
              '--auth-host=scram-sha-256','--auth-local=scram-sha-256',
-             '--pwfile='+secretFile,'--no-instructions'
+             '--pwfile='+nativeSecretFile,'--no-instructions'
            ]);
          }catch(error){
            const diagnostic=processFailureDiagnostic(error);
@@ -290,8 +300,9 @@ export function createPortablePostgresController({
      let running=false;
      if(hasVersion){
        try{
-         await executeLogged(pgCtl,['status','-D',cluster]);
+         await executeLogged(pgCtl,['status','-D',nativeCluster]);
          running=true;
+         runningExisting=true;
        }catch{running=false;}
      }
      if(!running){
@@ -300,7 +311,7 @@ export function createPortablePostgresController({
        owned=true;
        try{
          await executeLogged(pgCtl,[
-           '-D',cluster,'-l',logFile,'-o',opts,'-w','-t','45','start'
+           '-D',nativeCluster,'-l',nativeLogFile,'-o',opts,'-w','-t','45','start'
          ]);
        }catch(error){
          // pg_ctl on Windows can time out reading startup state from a
@@ -333,12 +344,18 @@ export function createPortablePostgresController({
    });
  }
  async function stop(){
-   if(!owned||!binaries)return;
+   if(!binaries)return;
+   if(runningExisting&&!owned)return; // Never stop or unmap an instance not started by us.
+   const shouldStop=owned;
    owned=false;
    try{
-     await executeLogged(join(binaries.bin,'pg_ctl.exe'),[
-       '-D',cluster,'-m','fast','-w','-t','30','stop'
-     ]);
+     if(shouldStop){
+       await executeLogged(join(binaries.bin,'pg_ctl.exe'),[
+         '-D',nativePath('cluster'),'-m','fast','-w','-t','30','stop'
+       ]);
+     }
+     if(pgAlias?.active)await pgAlias.release();
+     pgAlias=null;
    }finally{activeConfig=null;}
  }
  return Object.freeze({ensureReady,stop});
