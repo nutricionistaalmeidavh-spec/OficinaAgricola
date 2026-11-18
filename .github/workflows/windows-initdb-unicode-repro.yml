@@ -54,3 +54,10 @@ jobs:
             if($scenario.name -ne 'ascii-control' -and $exit -ne 0){Write-Host "REPRODUCED_FAILURE $($scenario.name)"}
             Remove-Item -LiteralPath $pw -Force
           }
+      - name: Diagnosticar dependencias do pacote PostgreSQL
+        shell: pwsh
+        run: |
+          $bin=Join-Path $env:RUNNER_TEMP 'OficinaCommercial/resources/postgresql/bin'
+          foreach($dll in @('vcruntime140.dll','vcruntime140_1.dll','msvcp140.dll','libcrypto-3-x64.dll')){
+            Write-Host "DLL $dll no-pacote=$(Test-Path (Join-Path $bin $dll)) no-windows=$(Test-Path (Join-Path $env:WINDIR 'System32' $dll))"
+          }
