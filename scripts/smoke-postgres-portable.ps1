@@ -6,7 +6,7 @@ $installDir=Join-Path $env:RUNNER_TEMP 'artisys-oficina-clean-install'
 $app=Join-Path $installDir 'ArtiSys Oficina.exe'
 if (-not (Test-Path $app)) { throw 'App Windows não instalado' }
 $bundle=Join-Path $installDir 'resources\postgresql'
-foreach($file in @('postgresql-bundle.json','bin\initdb.exe','bin\pg_ctl.exe','bin\postgres.exe','share\postgres.bki')){
+foreach($file in @('postgresql-bundle.json','bin\initdb.exe','bin\pg_ctl.exe','bin\postgres.exe','share\postgres.bki','bin\vcruntime140.dll','bin\vcruntime140_1.dll','bin\msvcp140.dll')){
  if (-not (Test-Path (Join-Path $bundle $file))) {throw "PostgreSQL não embarcado: $file"}
 }
 $originalLocal=$env:LOCALAPPDATA
