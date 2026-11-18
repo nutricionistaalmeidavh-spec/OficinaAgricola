@@ -111,6 +111,34 @@ try{
  Remove-Item -LiteralPath $sentinel -Force
  Write-Host 'PASS: Reinstalação PostgreSQL preservou administrador, cliente, cluster e anexos'
 
+ # Reproduzir a exata falha da v1.0.4: o connection.json já existe, mas o
+ # initdb foi interrompido antes de criar PG_VERSION. Nenhum dado é apagado.
+ Stop-Officina
+ $resumeRoot=Join-Path $env:RUNNER_TEMP 'artisys-postgres-interrupted-first-install'
+ $resumeProfile=Join-Path $resumeRoot 'ArtiSys\Oficina\postgres'
+ New-Item -ItemType Directory -Path $resumeProfile -Force | Out-Null
+ $resumeSecret=Join-Path $resumeProfile 'connection.json'
+ Copy-Item -LiteralPath $secret -Destination $resumeSecret
+ $resumeHash=(Get-FileHash -LiteralPath $resumeSecret -Algorithm SHA256).Hash
+ if(Test-Path (Join-Path $resumeProfile 'cluster\PG_VERSION')){
+   throw 'Fixture da instalação interrompida não está limpa'
+ }
+ $env:LOCALAPPDATA=$resumeRoot
+ Start-Officina
+ if(-not(Test-Path (Join-Path $resumeProfile 'cluster\PG_VERSION'))){
+   throw 'Falha ao retomar initdb interrompido da v1.0.4'
+ }
+ if((Get-FileHash -LiteralPath $resumeSecret -Algorithm SHA256).Hash -ne $resumeHash){
+   throw 'Recuperação da instalação inicial trocou credenciais'
+ }
+ $resumeSetup=Invoke-RestMethod 'http://127.0.0.1:3344/api/setup/status'
+ if($resumeSetup.required -ne $true){throw 'Instalação recuperada não voltou ao primeiro acesso'}
+ if(Test-Path (Join-Path $resumeProfile 'bootstrap.pending.json')){
+   throw 'Marcador de bootstrap não foi concluído após recuperação'
+ }
+ Stop-Officina
+ Write-Host 'PASS: v1.0.4 interrompida antes de PG_VERSION foi recuperada sem apagar dados ou rotacionar credenciais'
+
  Write-Host 'PASS: PostgreSQL 16 offline instalado automaticamente pelo Oficina, login e dados persistentes sem npm/terminal.'
 }finally{
  Stop-Officina
