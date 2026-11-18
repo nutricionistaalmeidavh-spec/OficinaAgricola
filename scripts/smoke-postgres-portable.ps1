@@ -27,6 +27,24 @@ function Start-Officina {
      }
    }catch{}
  }
+ # Diagnóstico seguro do runner: não mostrar connection.json nem password.
+ $profile=Join-Path $env:LOCALAPPDATA 'ArtiSys\\Oficina\\postgres'
+ $status=@{
+   pg_version=Test-Path (Join-Path $profile 'cluster\\PG_VERSION')
+   credentials=Test-Path (Join-Path $profile 'connection.json')
+   pending=Test-Path (Join-Path $profile 'bootstrap.pending.json')
+   bootstrap_lock=Test-Path (Join-Path $profile 'bootstrap.lock')
+ }
+ Write-Warning ('PostgreSQL first-launch state: '+($status | ConvertTo-Json -Compress))
+ $pglog=Join-Path $profile 'postgres.log'
+ if(Test-Path $pglog){
+   Get-Content -LiteralPath $pglog -Tail 35 | ForEach-Object { Write-Warning ('PGLOG: '+$_) }
+ }
+ $diag=Join-Path $profile 'bootstrap-diagnostic.json'
+ if(Test-Path $diag){
+   $d=Get-Content -LiteralPath $diag -Raw | ConvertFrom-Json
+   Write-Warning ('BOOTSTRAP: stage='+$d.stage+' code='+$d.code+' signal='+$d.signal)
+ }
  throw 'PostgreSQL não iniciou automaticamente no Windows limpo'
 }
 function Stop-Officina {
