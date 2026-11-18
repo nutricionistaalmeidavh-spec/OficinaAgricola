@@ -1,0 +1,113 @@
+name: QA real published Oficina 1.0.6 - standard Windows user
+on:
+  push:
+    branches: [qa/real-windows-standard-user-106]
+permissions:
+  contents: read
+jobs:
+  real-profile:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Instalar .exe comercial publicado em Program Files
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Path downloaded -Force | Out-Null
+          gh release download v1.0.6 --pattern 'ArtiSys-Oficina-Setup-1.0.6-Windows-x64-Commercial.exe' --dir downloaded
+          if($LASTEXITCODE -ne 0){throw 'Failed to download release'}
+          $setup=(Get-ChildItem downloaded -Filter '*.exe' | Select-Object -First 1).FullName
+          $checksum=(Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($checksum -ne '9ff760ed962555725e15f5f9ef6bb9a4b1f856f8a70f61a7312bc55b952300e4'){throw 'SHA256 mismatch'}
+          $target='C:\Program Files\ArtiSys Oficina'
+          $p=Start-Process -FilePath $setup -ArgumentList @('/S',"/D=$target") -Wait -PassThru
+          if($p.ExitCode -ne 0){throw "NSIS exit $($p.ExitCode)"}
+          foreach($file in @('ArtiSys Oficina.exe','resources/postgresql/bin/initdb.exe','resources/postgresql/bin/vcruntime140.dll')){
+            if(-not(Test-Path (Join-Path $target $file))){throw "Missing $file"}
+          }
+          Write-Host "PASS: published commercial installed in Program Files; SHA256=$checksum"
+      - name: Criar conta Windows real sem admin e testar PostgreSQL no perfil próprio
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $account='Deus e fiél'
+          $pwText=[Convert]::ToBase64String([System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32))+'x7!'
+          $secure=ConvertTo-SecureString $pwText -AsPlainText -Force
+          New-LocalUser -Name $account -Password $secure -AccountNeverExpires -PasswordNeverExpires -Description 'Ephemeral QA PostgreSQL profile'
+          $credential=[System.Management.Automation.PSCredential]::new("$env:COMPUTERNAME\$account",$secure)
+          $publicDir=Join-Path $env:PUBLIC 'ArtisysOficinaQA'
+          New-Item -ItemType Directory -Path $publicDir -Force | Out-Null
+          & icacls.exe $publicDir /grant "${account}:(OI)(CI)M" /T
+          if($LASTEXITCODE -ne 0){throw 'Unable to grant output folder to standard user'}
+          $worker=Join-Path $publicDir 'worker.ps1'
+          $log=Join-Path $publicDir 'results.log'
+          $script=@'
+          $ErrorActionPreference='Stop'
+          $log=Join-Path $env:PUBLIC 'ArtisysOficinaQA/results.log'
+          try {
+            $user=[Environment]::UserName
+            $home=[Environment]::GetFolderPath('UserProfile')
+            $local=[Environment]::GetFolderPath('LocalApplicationData')
+            "ACTUAL user=$user home=$home local=$local" | Add-Content -LiteralPath $log -Encoding utf8
+            if($user -ne 'Deus e fiél'){throw 'Wrong Windows logon account'}
+            if($local -notmatch 'Deus e fiél'){throw 'The REAL profile path must have an accent'}
+            $ident=[Security.Principal.WindowsIdentity]::GetCurrent()
+            $principal=[Security.Principal.WindowsPrincipal]::new($ident)
+            $admin=$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+            "ACTUAL isAdministrator=$admin" | Add-Content -LiteralPath $log -Encoding utf8
+            if($admin){throw 'This user unexpectedly has admin rights'}
+            $dir=Join-Path $local 'ArtiSys/OficinaQA/postgres'
+            New-Item -ItemType Directory -Force -Path $dir | Out-Null
+            $pwfile=Join-Path $dir 'bootstrap.pw'
+            [System.IO.File]::WriteAllText($pwfile,'TestePostgres123!',[Text.Encoding]::ASCII)
+            $cluster=Join-Path $dir 'cluster'
+            $init='C:\Program Files\ArtiSys Oficina\resources\postgresql\bin\initdb.exe'
+            $messages=& $init '-D' $cluster '-U' oficina_local_owner '--encoding=UTF8' '--auth-host=scram-sha-256' '--auth-local=scram-sha-256' "--pwfile=$pwfile" '--no-instructions' 2>&1
+            $result=$LASTEXITCODE
+            Remove-Item $pwfile -Force -ErrorAction SilentlyContinue
+            if($result -ne 0){
+              $messages | Select-Object -Last 20 | ForEach-Object { "INITDB: $_" | Add-Content -LiteralPath $log -Encoding utf8 }
+              throw "initdb under real accented non-admin Windows user failed: exit=$result"
+            }
+            if(-not (Test-Path (Join-Path $cluster 'PG_VERSION'))){throw 'PG_VERSION missing'}
+            "PASS: initdb under actual non-admin accented Windows user" | Add-Content -LiteralPath $log -Encoding utf8
+            $app='C:\Program Files\ArtiSys Oficina\ArtiSys Oficina.exe'
+            $proc=Start-Process -FilePath $app -PassThru
+            $healthy=$false
+            for($i=0;$i -lt 130;$i++){
+              Start-Sleep -Milliseconds 500
+              if($proc.HasExited){break}
+              try{
+                $h=Invoke-RestMethod 'http://127.0.0.1:3344/api/health' -TimeoutSec 1
+                if($h.ok -and $h.engine -eq 'postgres' -and $h.operationalApiReady){$healthy=$true;break}
+              }catch{}
+            }
+            if(-not $healthy){
+              $pglog=Join-Path $local 'ArtiSys/Oficina/postgres/postgres-process.log'
+              if(Test-Path $pglog){Get-Content $pglog -Tail 30 | ForEach-Object {"PGLOG: $_" | Add-Content -LiteralPath $log -Encoding utf8}}
+              throw 'Commercial app did not become healthy for standard Windows user'
+            }
+            $license=Invoke-RestMethod 'http://127.0.0.1:3344/api/license/status'
+            if($license.required -ne $true -or $license.active -ne $false){throw 'Commercial license gate failed'}
+            "PASS: REAL commercial Oficina v1.0.6 + PostgreSQL healthy and commercial license gate" | Add-Content -LiteralPath $log -Encoding utf8
+            if(-not $proc.HasExited){$null=$proc.CloseMainWindow()}
+          } catch {
+            "FAIL: $($_.Exception.Message)" | Add-Content -LiteralPath $log -Encoding utf8
+            exit 1
+          }
+          '@
+          [System.IO.File]::WriteAllText($worker,$script,[System.Text.UTF8Encoding]::new($false))
+          $pwText=$null
+          try{
+            $p=Start-Process -FilePath 'C:\Program Files\PowerShell\7\pwsh.exe' -Credential $credential -LoadUserProfile -ArgumentList @('-NoProfile','-NonInteractive','-File',"`"$worker`"") -Wait -PassThru
+            Write-Host "Standard-user subprocess exit=$($p.ExitCode)"
+            if(Test-Path $log){Get-Content -LiteralPath $log}
+            if($p.ExitCode -ne 0){throw 'Real standard user PostgreSQL QA failed'}
+            if(-not (Test-Path $log) -or -not (Select-String -Path $log -Pattern 'PASS: REAL commercial Oficina v1.0.6')){throw 'Success marker missing'}
+          }finally{
+            $credential=$null
+            $secure=$null
+          }
