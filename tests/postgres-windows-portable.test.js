@@ -338,6 +338,16 @@ test('bundle Windows deve ser autossuficiente: DLLs VC++ presentes e verificadas
      assert.equal(verify().valid,false,dll+' missing must be blocked');
      writeFileSync(p,original);
      assert.equal(verify().valid,true,dll+' restored');
+   const manifestFile=join(f.bundle,'postgresql-bundle.json');
+   const manifest=JSON.parse(readFileSync(manifestFile,'utf8'));
+   delete manifest.files['bin/'+dll];
+   writeFileSync(manifestFile,JSON.stringify(manifest));
+   rmSync(p);
+   assert.equal(verify().valid,false,dll+' removed from manifest must still fail');
+   writeFileSync(p,original);
+   manifest.files['bin/'+dll]=createHash('sha256').update(original).digest('hex');
+   writeFileSync(manifestFile,JSON.stringify(manifest));
+   assert.equal(verify().valid,true,dll+' restore manifest');
    }
  }finally{rmSync(f.root,{recursive:true,force:true});}
 });
