@@ -210,7 +210,7 @@ export function createPortablePostgresController({
      // Use only an ASCII alias for PostgreSQL's native Windows executables.
      // Actual data and credentials remain at their original LocalAppData paths.
      // The alias survives while the backend runs and is released after stop.
-     if(platform==='win32'&&process.platform==='win32'&&!pgAlias)
+     if(platform==='win32'&&process.platform==='win32'&&execute===defaultExecute&&!pgAlias)
        pgAlias=await prepareWindowsPostgresAlias(root,{platform});
      const nativeCluster=nativePath('cluster');
      const nativeLogFile=nativePath('postgres.log');
