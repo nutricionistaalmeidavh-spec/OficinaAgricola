@@ -6,7 +6,10 @@ import {join,resolve,sep} from 'node:path';
 // like ACBr DLLs. No client-side npm, internet or global database installer.
 const REQUIRED=Object.freeze([
  'bin/initdb.exe','bin/pg_ctl.exe','bin/postgres.exe','bin/psql.exe',
- 'share/postgres.bki'
+ 'share/postgres.bki',
+ // The GitHub runner has Microsoft CRT globally. Customer Windows may not.
+ // Embed locally so the portable database does not silently rely on it.
+ 'bin/vcruntime140.dll','bin/vcruntime140_1.dll','bin/msvcp140.dll'
 ]);
 export function verifyPostgresWindowsBundle({
  resourcesPath,platform=process.platform,arch=process.arch
