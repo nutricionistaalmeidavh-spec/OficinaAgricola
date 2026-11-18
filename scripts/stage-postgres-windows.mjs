@@ -39,23 +39,37 @@ const CRT_DLLS=['vcruntime140.dll','vcruntime140_1.dll','msvcp140.dll'];
 function findRedistributableCRT(){
  const custom=process.env.OFICINA_MSVC_REDIST_DIR;
  const roots=custom?[resolve(custom)]:[];
- const pf=process.env.ProgramFiles||'C:\\Program Files';
- for(const edition of ['Enterprise','Professional','Community','BuildTools']){
-   const versions=join(pf,'Microsoft Visual Studio','2022',edition,'VC','Redist','MSVC');
-   if(!existsSync(versions))continue;
-   for(const candidate of readdirSync(versions,{withFileTypes:true})
-     .filter(e=>e.isDirectory()).map(e=>e.name).sort().reverse()){
-     for(const family of ['Microsoft.VC143.CRT','Microsoft.VC142.CRT'])
-       roots.push(join(versions,candidate,'x64',family));
+ if(process.env.VCToolsRedistDir){
+   for(const family of ['Microsoft.VC143.CRT','Microsoft.VC145.CRT','Microsoft.VC142.CRT'])
+     roots.push(join(process.env.VCToolsRedistDir,'x64',family));
+ }
+ // Recent GitHub Windows images vary between VS 2022, 2026 and BuildTools;
+ // some installations live under Program Files (x86).
+ const programRoots=[process.env.ProgramFiles,process.env['ProgramFiles(x86)'],
+   process.env.ProgramW6432,'C:\\Program Files','C:\\Program Files (x86)']
+   .filter(Boolean);
+ const editions=['Enterprise','Professional','Community','BuildTools'];
+ for(const pf of [...new Set(programRoots)]){
+   for(const year of ['2022','2026','18','2019']){
+     for(const edition of editions){
+       const versions=join(pf,'Microsoft Visual Studio',year,edition,'VC','Redist','MSVC');
+       if(!existsSync(versions))continue;
+       for(const candidate of readdirSync(versions,{withFileTypes:true})
+         .filter(e=>e.isDirectory()).map(e=>e.name).sort().reverse()){
+         for(const family of ['Microsoft.VC143.CRT','Microsoft.VC145.CRT','Microsoft.VC142.CRT'])
+           roots.push(join(versions,candidate,'x64',family));
+       }
+     }
    }
  }
- for(const dir of roots){
+ for(const dir of [...new Set(roots)]){
    if(CRT_DLLS.every(name=>existsSync(join(dir,name))&&statSync(join(dir,name)).isFile()))
      return dir;
  }
- throw Error('Redistribuíveis Microsoft VC++ x64 ausentes do builder. '+
-   'Instale Visual Studio Build Tools com pacote CRT de redistribuição ou configure OFICINA_MSVC_REDIST_DIR. '+
-   'Não usar System32 como origem; cliente não deve instalar dependências manualmente.');
+ throw Error('Redistribuíveis Microsoft VC++ x64 não foram localizados no builder. '+
+   'Diretórios de redistribuição detectados: '+JSON.stringify(roots.slice(0,12))+
+   '. Use OFICINA_MSVC_REDIST_DIR apontando ao diretório CRT x64 do Visual Studio. '+
+   'Não usar System32 como origem nem depender de instalação no cliente.');
 }
 const crtSource=findRedistributableCRT();
 for(const dll of CRT_DLLS){
