@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {verifyPostgresWindowsBundle} from '../src/platform/postgres-windows-bundle.js';
-import {createPortablePostgresController} from '../src/platform/postgres-local-instance.js';
+import {createPortablePostgresController,postgresExecutableTimeout} from '../src/platform/postgres-local-instance.js';
 
 function fixture(){
  const root=mkdtempSync(join(tmpdir(),'oficina-pg-bundle-'));
@@ -245,4 +245,10 @@ test('regressão: bootstrap parcial com marcador preserva arquivos interrompidos
    assert.equal(folders.length,1);
    assert.equal(readFileSync(join(postgresRoot,folders[0],'arquivo-parcial'),'utf8'),'preservar');
  }finally{await manager.stop().catch(()=>{});rmSync(f.root,{recursive:true,force:true});}
+});
+
+test('initdb possui prazo maior que os comandos curtos, inclusive em caminho Windows',()=>{
+ assert.equal(postgresExecutableTimeout('C:\\Program Files\\PostgreSQL\\bin\\initdb.exe'),300_000);
+ assert.equal(postgresExecutableTimeout('/opt/postgresql/bin/initdb.exe'),300_000);
+ assert.equal(postgresExecutableTimeout('C:\\Postgres\\bin\\pg_ctl.exe'),60_000);
 });
