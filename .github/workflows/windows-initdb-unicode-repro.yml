@@ -61,3 +61,22 @@ jobs:
           foreach($dll in @('vcruntime140.dll','vcruntime140_1.dll','msvcp140.dll','libcrypto-3-x64.dll')){
             Write-Host "DLL $dll no-pacote=$(Test-Path (Join-Path $bin $dll)) no-windows=$(Test-Path (Join-Path $env:WINDIR 'System32' $dll))"
           }
+      - name: Testar aplicativo real em perfil com acento
+        shell: pwsh
+        run: |
+          $exe=Join-Path $env:RUNNER_TEMP 'OficinaCommercial/ArtiSys Oficina.exe'
+          $env:LOCALAPPDATA=Join-Path $env:RUNNER_TEMP 'Cliente Deus e fiél'
+          New-Item -ItemType Directory -Force -Path $env:LOCALAPPDATA | Out-Null
+          $p=Start-Process -FilePath $exe -PassThru
+          $ready=$false
+          for($i=0;$i -lt 80;$i++){
+            Start-Sleep -Milliseconds 350
+            if($p.HasExited){break}
+            try{
+              $health=Invoke-RestMethod 'http://127.0.0.1:3344/api/health' -TimeoutSec 1
+              if($health.ok -and $health.engine -eq 'postgres'){$ready=$true;break}
+            }catch{}
+          }
+          $cluster=Join-Path $env:LOCALAPPDATA 'ArtiSys/Oficina/postgres/cluster/PG_VERSION'
+          Write-Host "Unicode real app: ready=$ready clusterVersion=$(Test-Path $cluster)"
+          if(-not $ready){throw 'Unicoded application bootstrap failed'}
