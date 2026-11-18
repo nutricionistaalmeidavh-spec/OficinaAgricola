@@ -190,8 +190,19 @@ try{
  if(-not(Test-Path $unicodePg)){
    throw 'Perfil Windows acentuado não inicializou cluster PostgreSQL'
  }
+ # Verificar que os executáveis PG usam um drive ASCII, nunca uma rota
+ # unicode de LOCAlAPPDATA, sem mover dados do cliente.
+ $mapped=$false
+ foreach($letter in 'ZYXWVUTSRQP'.ToCharArray()){
+   $aliasCheck=("{0}:\\cluster\\PG_VERSION" -f $letter)
+   if(Test-Path -LiteralPath $aliasCheck){
+     $mapped=$true
+     break
+   }
+ }
+ if(-not $mapped){throw 'PostgreSQL não usou alias ASCII SUBST no perfil acentuado'}
  Stop-Officina
- Write-Host 'PASS: Perfil Windows com espaços e acentos iniciou o aplicativo comercial.'
+ Write-Host 'PASS: Perfil Windows acentuado usou alias ASCII sem mover dados nem perder acesso.'
  
  Write-Host 'PASS: PostgreSQL 16 offline instalado automaticamente pelo Oficina, login e dados persistentes sem npm/terminal.'
 }finally{
