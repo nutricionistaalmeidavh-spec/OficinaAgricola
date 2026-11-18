@@ -1,0 +1,52 @@
+name: QA nativo SUBST Unicode para PostgreSQL
+on:
+  push:
+    branches: [qa/native-subst-107]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-subst:
+    runs-on: windows-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+      - name: Testar alias real em pasta de perfil acentuada, leitura e escrita
+        shell: pwsh
+        run: |
+          $env:ALIAS_ROOT=Join-Path $env:RUNNER_TEMP 'Deus e fiél/AppData/Local/ArtiSys/Oficina/postgres'
+          New-Item -ItemType Directory -Path $env:ALIAS_ROOT -Force | Out-Null
+          $js=@'
+          import {prepareWindowsPostgresAlias} from './src/platform/windows-postgres-alias.js';
+          import {readFile,writeFile,realpath,stat} from 'node:fs/promises';
+          import {join,win32} from 'node:path';
+          import {execFileSync} from 'node:child_process';
+          const root=process.env.ALIAS_ROOT;
+          const physical=join(root,'confirm.txt');
+          await writeFile(physical,'verificacao-107');
+          let alias=null;
+          try{
+            console.log('root:',root);
+            alias=await prepareWindowsPostgresAlias(root,{platform:'win32'});
+            console.log('alias:',alias.root,'active:',alias.active);
+            console.log('realpath alias:',await realpath(alias.root));
+            console.log('phys stat:',(await stat(root)).ino,'virtual stat:',(await stat(alias.root)).ino);
+            if((await readFile(win32.join(alias.root,'confirm.txt'),'utf8'))!=='verificacao-107')
+              throw Error('Alias points to wrong data directory');
+            await writeFile(win32.join(alias.root,'fromAlias.txt'),'sucesso');
+            if((await readFile(join(root,'fromAlias.txt'),'utf8'))!=='sucesso')
+              throw Error('Original user data not preserved');
+            console.log('PASS: ASCII SUBST maps accented data transparently');
+          }catch(e){
+            console.log('subst mapping:',execFileSync('subst.exe',[],{encoding:'utf8'}).slice(0,2000));
+            throw e;
+          }finally{
+            if(alias)await alias.release();
+          }
+          '@
+          $js | Set-Content -Path .\qa-test-subst.mjs -Encoding utf8NoBOM
+          node .\qa-test-subst.mjs
+          if($LASTEXITCODE -ne 0){throw 'Native Unicode alias QA failed'}
