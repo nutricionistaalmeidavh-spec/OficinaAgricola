@@ -79,7 +79,19 @@ jobs:
           }
           $cluster=Join-Path $env:LOCALAPPDATA 'ArtiSys/Oficina/postgres/cluster/PG_VERSION'
           Write-Host "Unicode real app: ready=$ready clusterVersion=$(Test-Path $cluster)"
-          if(-not $ready){throw 'Unicoded application bootstrap failed'}
+          if(-not $ready){
+            $root=Join-Path $env:LOCALAPPDATA 'ArtiSys/Oficina/postgres'
+            $pglog=Join-Path $root 'postgres.log'
+            $config=Join-Path $root 'connection.json'
+            $pending=Join-Path $root 'bootstrap.pending.json'
+            Write-Host "Diagnostics: connection=$(Test-Path $config), pending=$(Test-Path $pending), pglog=$(Test-Path $pglog), processExited=$($p.HasExited)"
+            if(Test-Path $config){
+              $cfg=Get-Content -LiteralPath $config -Raw | ConvertFrom-Json
+              Write-Host "Configured PG port: $($cfg.port)"
+            }
+            if(Test-Path $pglog){Get-Content -LiteralPath $pglog -Tail 35 | ForEach-Object { Write-Host "PGLOG: $_" }}
+            throw 'Unicoded application bootstrap failed'
+          }
       - name: Encontrar redistribuiveis oficiais MSVC no builder
         shell: pwsh
         run: |
