@@ -4,7 +4,7 @@
 import {createHash} from 'node:crypto';
 import {
  cpSync,existsSync,readFileSync,readdirSync,rmSync,mkdirSync,
- writeFileSync,lstatSync,statSync
+ writeFileSync,lstatSync,statSync,copyFileSync
 } from 'node:fs';
 import {resolve,join,relative,sep} from 'node:path';
 import {verifyPostgresWindowsBundle} from '../src/platform/postgres-windows-bundle.js';
@@ -31,6 +31,55 @@ for(const dir of ['bin','lib','share']){
    recursive:true,force:false,errorOnExist:true,dereference:false
  });
 }
+// PostgreSQL 16 binaries from EDB are built against the MSVC runtime.
+// The CI Windows image happens to have it globally; clean customer PCs may not.
+// Stage legally redistributable CRT files from Visual Studio's REDIST tree,
+// never from the runner's System32 folder.
+const CRT_DLLS=['vcruntime140.dll','vcruntime140_1.dll','msvcp140.dll'];
+function findRedistributableCRT(){
+ const custom=process.env.OFICINA_MSVC_REDIST_DIR;
+ const roots=custom?[resolve(custom)]:[];
+ if(process.env.VCToolsRedistDir){
+   for(const family of ['Microsoft.VC143.CRT','Microsoft.VC145.CRT','Microsoft.VC142.CRT'])
+     roots.push(join(process.env.VCToolsRedistDir,'x64',family));
+ }
+ // Recent GitHub Windows images vary between VS 2022, 2026 and BuildTools;
+ // some installations live under Program Files (x86).
+ const programRoots=[process.env.ProgramFiles,process.env['ProgramFiles(x86)'],
+   process.env.ProgramW6432,'C:\\Program Files','C:\\Program Files (x86)']
+   .filter(Boolean);
+ const editions=['Enterprise','Professional','Community','BuildTools'];
+ for(const pf of [...new Set(programRoots)]){
+   for(const year of ['2022','2026','18','2019']){
+     for(const edition of editions){
+       const versions=join(pf,'Microsoft Visual Studio',year,edition,'VC','Redist','MSVC');
+       if(!existsSync(versions))continue;
+       for(const candidate of readdirSync(versions,{withFileTypes:true})
+         .filter(e=>e.isDirectory()).map(e=>e.name).sort().reverse()){
+         for(const family of ['Microsoft.VC143.CRT','Microsoft.VC145.CRT','Microsoft.VC142.CRT'])
+           roots.push(join(versions,candidate,'x64',family));
+       }
+     }
+   }
+ }
+ for(const dir of [...new Set(roots)]){
+   if(CRT_DLLS.every(name=>existsSync(join(dir,name))&&statSync(join(dir,name)).isFile()))
+     return dir;
+ }
+ throw Error('Redistribuíveis Microsoft VC++ x64 não foram localizados no builder. '+
+   'Diretórios de redistribuição detectados: '+JSON.stringify(roots.slice(0,12))+
+   '. Use OFICINA_MSVC_REDIST_DIR apontando ao diretório CRT x64 do Visual Studio. '+
+   'Não usar System32 como origem nem depender de instalação no cliente.');
+}
+const crtSource=findRedistributableCRT();
+for(const dll of CRT_DLLS){
+ const targetDll=join(target,'bin',dll);
+ // Fail closed on unexpected duplicates: do not override PostgreSQL-owned DLLs.
+ if(existsSync(targetDll))throw Error('CRT já existe no bundle: '+dll);
+ copyFileSync(join(crtSource,dll),targetDll);
+}
+console.log('MSVC CRT x64 redistribuível embarcado:',CRT_DLLS.join(', '));
+
 const files={};
 function walk(dir){
  for(const ent of readdirSync(dir,{withFileTypes:true})){
@@ -53,6 +102,8 @@ const LICENSE=[
  'PostgreSQL License: https://www.postgresql.org/about/licence/',
  'Binary source: '+source,
  'Version: 16; Windows x64; no paid service or remote installer required.',
+ 'Visual C++ runtime DLLs: Microsoft redistributable CRT from Visual Studio REDIST tree.',
+ 'Microsoft Visual C++ runtime is free of charge but proprietary; no paid service.',
  'Packaged dependencies retain their original licenses. Review vendor notices'
 ].join('\n')+'\n';
 writeFileSync(join(target,'THIRD_PARTY_LICENSES.txt'),LICENSE);

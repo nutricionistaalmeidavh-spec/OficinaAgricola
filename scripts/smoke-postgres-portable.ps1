@@ -6,7 +6,7 @@ $installDir=Join-Path $env:RUNNER_TEMP 'artisys-oficina-clean-install'
 $app=Join-Path $installDir 'ArtiSys Oficina.exe'
 if (-not (Test-Path $app)) { throw 'App Windows não instalado' }
 $bundle=Join-Path $installDir 'resources\postgresql'
-foreach($file in @('postgresql-bundle.json','bin\initdb.exe','bin\pg_ctl.exe','bin\postgres.exe','share\postgres.bki')){
+foreach($file in @('postgresql-bundle.json','bin\initdb.exe','bin\pg_ctl.exe','bin\postgres.exe','share\postgres.bki','bin\vcruntime140.dll','bin\vcruntime140_1.dll','bin\msvcp140.dll')){
  if (-not (Test-Path (Join-Path $bundle $file))) {throw "PostgreSQL não embarcado: $file"}
 }
 $originalLocal=$env:LOCALAPPDATA
@@ -26,6 +26,24 @@ function Start-Officina {
        return
      }
    }catch{}
+ }
+ # Diagnóstico seguro do runner: não mostrar connection.json nem password.
+ $profile=Join-Path $env:LOCALAPPDATA 'ArtiSys\\Oficina\\postgres'
+ $status=@{
+   pg_version=Test-Path (Join-Path $profile 'cluster\\PG_VERSION')
+   credentials=Test-Path (Join-Path $profile 'connection.json')
+   pending=Test-Path (Join-Path $profile 'bootstrap.pending.json')
+   bootstrap_lock=Test-Path (Join-Path $profile 'bootstrap.lock')
+ }
+ Write-Warning ('PostgreSQL first-launch state: '+($status | ConvertTo-Json -Compress))
+ $pglog=Join-Path $profile 'postgres.log'
+ if(Test-Path $pglog){
+   Get-Content -LiteralPath $pglog -Tail 35 | ForEach-Object { Write-Warning ('PGLOG: '+$_) }
+ }
+ $diag=Join-Path $profile 'bootstrap-diagnostic.json'
+ if(Test-Path $diag){
+   $d=Get-Content -LiteralPath $diag -Raw | ConvertFrom-Json
+   Write-Warning ('BOOTSTRAP: stage='+$d.stage+' code='+$d.code+' signal='+$d.signal)
  }
  throw 'PostgreSQL não iniciou automaticamente no Windows limpo'
 }
@@ -163,6 +181,18 @@ try{
  Stop-Officina
  Write-Host 'PASS: v1.0.4 interrompida antes de PG_VERSION foi recuperada sem apagar dados ou rotacionar credenciais'
 
+ # Regressão cliente real: conta Windows pode conter espaços e acentos,
+ # o que fez o app empacotado desligar um PostgreSQL já iniciado.
+ $unicodeRoot=Join-Path $env:RUNNER_TEMP 'oficina-perfil-Deus e fiél'
+ $env:LOCALAPPDATA=$unicodeRoot
+ Start-Officina
+ $unicodePg=Join-Path $unicodeRoot 'ArtiSys\Oficina\postgres\cluster\PG_VERSION'
+ if(-not(Test-Path $unicodePg)){
+   throw 'Perfil Windows acentuado não inicializou cluster PostgreSQL'
+ }
+ Stop-Officina
+ Write-Host 'PASS: Perfil Windows com espaços e acentos iniciou o aplicativo comercial.'
+ 
  Write-Host 'PASS: PostgreSQL 16 offline instalado automaticamente pelo Oficina, login e dados persistentes sem npm/terminal.'
 }finally{
  Stop-Officina

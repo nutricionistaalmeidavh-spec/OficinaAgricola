@@ -67,10 +67,27 @@ jobs:
         run: ./scripts/build-diagnostic-bridge.ps1
       - name: Preparar binários PostgreSQL 16 OSS somente no builder
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           if (-not (Test-Path 'C:\Program Files\PostgreSQL\16\bin\initdb.exe')) {
-            choco install postgresql16 --version=16.15.5 -y --no-progress --params '/NoPath'
-            if ($LASTEXITCODE -ne 0) { throw 'Falha PostgreSQL 16 no builder Windows' }
+            # Reuse exact upstream PostgreSQL 16.15 binaries already verified
+            # in the prior offline v1.0.5 artifact. Avoid Chocolatey's
+            # 10-minute global server installation on every ephemeral runner.
+            $sourceDir=Join-Path $env:RUNNER_TEMP 'postgres-source-v105'
+            $downloadDir=Join-Path $env:RUNNER_TEMP 'postgres-source-download'
+            New-Item -ItemType Directory -Force -Path $downloadDir | Out-Null
+            gh release download v1.0.5 --pattern 'ArtiSys-Oficina-Setup-1.0.5-Windows-x64-Commercial.exe' --dir $downloadDir
+            if($LASTEXITCODE -ne 0){throw 'Fonte PostgreSQL offline v1.0.5 não encontrada'}
+            $exe=Join-Path $downloadDir 'ArtiSys-Oficina-Setup-1.0.5-Windows-x64-Commercial.exe'
+            $actual=(Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+            if($actual -ne 'a170ee37fd100473d283f714f2acc23401dbe05502cd786ea4f43418283a9484'){
+              throw 'Hash SHA256 do PostgreSQL fonte diverge do release original aprovado'
+            }
+            $installed=Start-Process -FilePath $exe -ArgumentList @('/S',"/D=$sourceDir") -Wait -PassThru
+            if($installed.ExitCode -ne 0){throw 'Falha extrair fonte PostgreSQL da versão aprovada'}
+            $env:OFICINA_POSTGRES_SOURCE_DIR=Join-Path $sourceDir 'resources/postgresql'
           }
           node scripts/stage-postgres-windows.mjs
           if ($LASTEXITCODE -ne 0) { throw 'Falha staging PostgreSQL Windows offline' }

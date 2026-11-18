@@ -1,12 +1,10 @@
 import {randomBytes,createHash} from 'node:crypto';
-import {execFile} from 'node:child_process';
-import {promisify} from 'node:util';
+import {spawn} from 'node:child_process';
 import {mkdir,readFile,writeFile,rename,unlink,stat,open,readdir} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
 import {createServer} from 'node:net';
 import {verifyPostgresWindowsBundle} from './postgres-windows-bundle.js';
 
-const exec=promisify(execFile);
 const fail=message=>{throw Error(message);};
 const USER='oficina_local_owner';
 const REGISTRY='oficina_registry';
@@ -32,10 +30,66 @@ async function ephemeralPort(){
 export function postgresExecutableTimeout(file){
  return /(?:^|[\\/])initdb\.exe$/i.test(file)?300_000:60_000;
 }
-async function defaultExecute(file,args){
- return exec(file,args,{windowsHide:true,
-   timeout:postgresExecutableTimeout(file),maxBuffer:1024*1024});
+function processFailureDiagnostic(error){
+ const numeric=typeof error?.code==='number'?error.code:null;
+ const code=numeric===null?String(error?.code??'unknown'):
+   '0x'+(numeric>>>0).toString(16).padStart(8,'0').toUpperCase();
+ const label=code==='0xC0000135'?' (DLL do Visual C++ ausente no Windows)':'';
+ // Include executable stderr/stdout for offline support; never include
+ // command-line arguments or PostgreSQL connection credentials.
+ const safe=value=>String(value??'').slice(-6000)
+   .replace(/postgresql:\/\/[^\s"'<>]+/gi,'[CONNECTION_REDACTED]')
+   .replace(/--pwfile=[^\s"'<>]+/gi,'--pwfile=[REDACTED]');
+ return {code,signal:String(error?.signal??''),killed:Boolean(error?.killed),
+   stdout:safe(error?.stdout),stderr:safe(error?.stderr),
+   detail:'Código '+code+label};
 }
+
+// PostgreSQL initdb and pg_ctl spawn subprocesses. On Windows their children
+// can inherit stdout/stderr pipe handles, so execFile() waits for pipe EOF
+// even if the command itself has exited. This caused false startup timeouts.
+// Direct stdout/stderr into a private FILE instead of pipes and wait only for
+// the invoked executable's exit; no terminal or paid runtime is required.
+export async function runPortablePostgresProcess(file,args,{
+ logFile,timeoutMs=postgresExecutableTimeout(file)
+}={}){
+ if(typeof logFile!=='string'||!logFile.trim())throw Error('Arquivo de diagnóstico PostgreSQL obrigatório');
+ const output=await open(logFile,'a',0o600);
+ try{
+   return await new Promise((resolve,reject)=>{
+     const child=spawn(file,args,{
+       windowsHide:true,stdio:['ignore',output.fd,output.fd]
+     });
+     let timedOut=false;
+     const timer=setTimeout(()=>{
+       timedOut=true;
+       child.kill();
+     },timeoutMs);
+     child.once('error',error=>{
+       clearTimeout(timer);
+       reject(error);
+     });
+     child.once('close',(code,signal)=>{
+       clearTimeout(timer);
+       if(timedOut){
+         reject(Object.assign(new Error('PostgreSQL subprocess timed out'),{
+           code:'ETIMEDOUT',killed:true,signal
+         }));
+       }else if(code!==0){
+         reject(Object.assign(new Error('PostgreSQL process failed with exit code '+code),{
+           code,signal
+         }));
+       }else resolve({stdout:'',stderr:''});
+     });
+   });
+ }finally{await output.close();}
+}
+async function defaultExecute(file,args,options={}){
+ return runPortablePostgresProcess(file,args,{
+   logFile:options.logFile,timeoutMs:postgresExecutableTimeout(file)
+ });
+}
+
 function connectionUrl(port,password,db){
  return 'postgresql://'+USER+':'+encodeURIComponent(password)+
   '@127.0.0.1:'+port+'/'+db;
@@ -62,6 +116,7 @@ export function createPortablePostgresController({
    connectionFile=join(root,'connection.json'),logFile=join(root,'postgres.log'),
    pendingFile=join(root,'bootstrap.pending.json');
  let owned=false,activeConfig=null,binaries=null;
+ const executeLogged=(file,args)=>execute(file,args,{logFile:join(root,'postgres-process.log')});
  async function lock(action){
    await mkdir(root,{recursive:true,mode:0o700});
    const lockFile=join(root,'bootstrap.lock');
@@ -92,9 +147,28 @@ export function createPortablePostgresController({
        "current_setting('port') AS server_port,current_user AS username");
      const row=result.rows?.[0];
      if(!row||String(row.username)!==USER||
-        Number(row.server_port)!==config.port||
-        resolve(String(row.data_dir)).toLowerCase()!==resolve(cluster).toLowerCase())
+        Number(row.server_port)!==config.port)
        fail('Porta PostgreSQL ocupada por outro servidor; inicialização bloqueada');
+     if(resolve(String(row.data_dir)).toLowerCase()!==resolve(cluster).toLowerCase()){
+       // PostgreSQL's Windows locale may report a non-ASCII data_directory
+       // with different text encoding than Node's Unicode fs paths. Compare
+       // the actual cluster's immutable system identifier instead of
+       // relaxing ownership verification or silently trusting the port.
+       let localSystemId;
+       try{
+         const control=await readFile(join(cluster,'global','pg_control'));
+         if(control.length<16)throw Error('pg_control incomplete');
+         localSystemId=control.readBigUInt64LE(0);
+       }catch{
+         fail('Diretório PostgreSQL divergente e pg_control local não verificável');
+       }
+       const idResult=await pool.query(
+         'SELECT system_identifier::text AS system_id FROM pg_control_system()');
+       const remoteId=String(idResult.rows?.[0]?.system_id??'');
+       if(!/^-?\d{1,20}$/.test(remoteId)||
+          BigInt.asUintN(64,BigInt(remoteId))!==localSystemId)
+         fail('Porta PostgreSQL ocupada por outro servidor; inicialização bloqueada');
+     }
    });
  }
  async function provisionDatabases(config,{fresh=false}={}){
@@ -193,11 +267,21 @@ export function createPortablePostgresController({
        });
        try{
          await writeFile(secretFile,config.password+'\n',{flag:'wx',mode:0o600});
-         await execute(join(bundle.bin,'initdb.exe'),[
-           '-D',cluster,'-U',USER,'--encoding=UTF8',
-           '--auth-host=scram-sha-256','--auth-local=scram-sha-256',
-           '--pwfile='+secretFile,'--no-instructions'
-         ]);
+         try{
+           await executeLogged(join(bundle.bin,'initdb.exe'),[
+             '-D',cluster,'-U',USER,'--encoding=UTF8',
+             '--auth-host=scram-sha-256','--auth-local=scram-sha-256',
+             '--pwfile='+secretFile,'--no-instructions'
+           ]);
+         }catch(error){
+           const diagnostic=processFailureDiagnostic(error);
+           await atomicPrivateJson(join(root,'bootstrap-diagnostic.json'),{
+             schemaVersion:1,stage:'initdb',...diagnostic
+           }).catch(()=>{});
+           fail('Falha ao preparar PostgreSQL 16: '+diagnostic.detail+
+             '. Diagnóstico privado: postgres/bootstrap-diagnostic.json. '+
+             'Não exclua a pasta do banco nem as credenciais.');
+         }
        }finally{await unlink(secretFile).catch(()=>{});}
        if(!(await exists(pgVersion)))
          fail('initdb não criou um cluster PostgreSQL verificável; inicialização pendente para recuperação');
@@ -206,17 +290,33 @@ export function createPortablePostgresController({
      let running=false;
      if(hasVersion){
        try{
-         await execute(pgCtl,['status','-D',cluster]);
+         await executeLogged(pgCtl,['status','-D',cluster]);
          running=true;
        }catch{running=false;}
      }
      if(!running){
        const opts='-h 127.0.0.1 -p '+config.port+
          ' -c listen_addresses=127.0.0.1 -c password_encryption=scram-sha-256';
-       await execute(pgCtl,[
-         '-D',cluster,'-l',logFile,'-o',opts,'-w','-t','45','start'
-       ]);
        owned=true;
+       try{
+         await executeLogged(pgCtl,[
+           '-D',cluster,'-l',logFile,'-o',opts,'-w','-t','45','start'
+         ]);
+       }catch(error){
+         // pg_ctl on Windows can time out reading startup state from a
+         // Unicode profile even after postgres.exe is already listening.
+         // Never assume success: authenticate and verify the exact data
+         // directory, database superuser and port before proceeding.
+         try{await verifyRunning(config);}
+         catch{
+           const diagnostic=processFailureDiagnostic(error);
+           await atomicPrivateJson(join(root,'bootstrap-diagnostic.json'),{
+             schemaVersion:1,stage:'pg_ctl start',...diagnostic
+           }).catch(()=>{});
+           fail('Falha ao iniciar PostgreSQL: '+diagnostic.detail+
+             '. Consulte postgres/postgres.log e postgres/bootstrap-diagnostic.json.');
+         }
+       }
      }
      await verifyRunning(config);
      await provisionDatabases(config,{fresh:pending});
@@ -236,7 +336,7 @@ export function createPortablePostgresController({
    if(!owned||!binaries)return;
    owned=false;
    try{
-     await execute(join(binaries.bin,'pg_ctl.exe'),[
+     await executeLogged(join(binaries.bin,'pg_ctl.exe'),[
        '-D',cluster,'-m','fast','-w','-t','30','stop'
      ]);
    }finally{activeConfig=null;}
