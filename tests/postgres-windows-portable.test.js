@@ -252,3 +252,73 @@ test('initdb possui prazo maior que os comandos curtos, inclusive em caminho Win
  assert.equal(postgresExecutableTimeout('/opt/postgresql/bin/initdb.exe'),300_000);
  assert.equal(postgresExecutableTimeout('C:\\Postgres\\bin\\pg_ctl.exe'),60_000);
 });
+
+
+test('v1.0.4: cluster parcial sem PG_VERSION nem marcador recupera sem apagar arquivos originais',async()=>{
+ const f=fixture();
+ const dataRoot=join(f.root,'legacy');
+ const root=join(dataRoot,'postgres');
+ const cluster=join(root,'cluster');
+ mkdirSync(cluster,{recursive:true});
+ writeFileSync(join(cluster,'arquivo-parcial'),'bytes-originais-intactos');
+ const password='a'.repeat(48);
+ const original=JSON.stringify({schemaVersion:1,user:'oficina_local_owner',port:55635,password});
+ writeFileSync(join(root,'connection.json'),original);
+ let initialized=0;
+ const databases=new Set();
+ const exec=async file=>{
+   if(file.endsWith('initdb.exe')){
+     initialized++;
+     mkdirSync(cluster,{recursive:true});
+     writeFileSync(join(cluster,'PG_VERSION'),'16\n');
+   }
+ };
+ const Pool=class{
+   async query(sql,params){
+     if(sql.includes("current_setting('data_directory')"))return {rows:[{
+       data_dir:cluster,server_port:'55635',username:'oficina_local_owner'
+     }]};
+     if(sql.includes('pg_database'))return {rows:databases.has(params[0])?[{ok:1}]:[]};
+     if(sql.startsWith('CREATE DATABASE')){databases.add(sql.match(/"([^"]+)"/)[1]);return {rows:[]};}
+     throw Error('Unexpected SQL '+sql);
+   }
+   async end(){}
+ };
+ const manager=createPortablePostgresController({
+   resourcesPath:f.resources,dataRoot,platform:'win32',arch:'x64',
+   execute:exec,Pool,choosePort:async()=>{throw Error('must keep existing port');}
+ });
+ try{
+   const config=await manager.ensureReady();
+   assert.equal(config.newInstall,true);
+   assert.equal(initialized,1);
+   assert.deepEqual([...databases].sort(),['oficina_operations','oficina_registry']);
+   const saved=readdirSync(root).filter(x=>x.startsWith('cluster-interrupted-'));
+   assert.equal(saved.length,1);
+   assert.equal(readFileSync(join(root,saved[0],'arquivo-parcial'),'utf8'),'bytes-originais-intactos');
+   assert.equal(readFileSync(join(root,'connection.json'),'utf8'),original);
+ }finally{await manager.stop().catch(()=>{});rmSync(f.root,{recursive:true,force:true});}
+});
+
+test('versão PG_VERSION ausente em cluster existente com pg_control nunca é reinicializada',async()=>{
+ const f=fixture();
+ const dataRoot=join(f.root,'profile');
+ const root=join(dataRoot,'postgres');
+ const cluster=join(root,'cluster');
+ mkdirSync(join(cluster,'global'),{recursive:true});
+ writeFileSync(join(cluster,'global','pg_control'),'original-protected');
+ writeFileSync(join(root,'connection.json'),JSON.stringify({
+   schemaVersion:1,user:'oficina_local_owner',port:55636,password:'b'.repeat(48)
+ }));
+ let executed=0;
+ const manager=createPortablePostgresController({
+   resourcesPath:f.resources,dataRoot,platform:'win32',arch:'x64',
+   execute:async()=>{executed++;throw Error('must not run initdb');},
+   Pool:class{},choosePort:async()=>55636
+ });
+ try{
+   await assert.rejects(manager.ensureReady(),/recuperação|marcador/i);
+   assert.equal(executed,0);
+   assert.equal(readFileSync(join(cluster,'global','pg_control'),'utf8'),'original-protected');
+ }finally{rmSync(f.root,{recursive:true,force:true});}
+});
