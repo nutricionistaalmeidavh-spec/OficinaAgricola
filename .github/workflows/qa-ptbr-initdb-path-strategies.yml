@@ -1,0 +1,73 @@
+name: Diagnosticar initdb pt-BR Unicode com executavel comercial oficial
+on:
+  push:
+    branches: [qa/postgres-ptbr-path-experiments]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  strategies:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Instalar artefato comercial v1.0.6 com hash aprovado
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          New-Item -ItemType Directory -Path downloaded -Force | Out-Null
+          gh release download v1.0.6 --pattern 'ArtiSys-Oficina-Setup-1.0.6-Windows-x64-Commercial.exe' --dir downloaded
+          if($LASTEXITCODE -ne 0){throw 'Download failed'}
+          $setup=(Get-ChildItem downloaded -Filter '*.exe' | Select-Object -First 1).FullName
+          $sum=(Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($sum -ne '9ff760ed962555725e15f5f9ef6bb9a4b1f856f8a70f61a7312bc55b952300e4'){throw 'Hash mismatch'}
+          $dest=Join-Path $env:RUNNER_TEMP 'Postgres16Installed'
+          $p=Start-Process -FilePath $setup -ArgumentList @('/S',"/D=$dest") -PassThru -Wait
+          if($p.ExitCode -ne 0){throw 'Install failed'}
+          Write-Host 'PASS: real commercial v1.0.6 executable installed'
+      - name: Experimentar initdb absolutas versus relativas com locale brasileiro
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Set-Culture pt-BR
+          chcp.com 1252
+          $init=Join-Path $env:RUNNER_TEMP 'Postgres16Installed/resources/postgresql/bin/initdb.exe'
+          if(-not (Test-Path $init)){throw 'initdb missing'}
+          $unicode='C:\Users\Deus e fiél\AppData\Local\ArtiSys\Oficina\postgres'
+          $ascii=Join-Path $env:RUNNER_TEMP 'oficina-ascii'
+          New-Item -ItemType Directory -Force -Path $unicode,$ascii | Out-Null
+          $results=@{}
+          function RunCase([string]$name,[string]$root,[string]$dataArg,[string]$pwArg,[string[]]$extra=@()){
+            $folder=Join-Path $root $name
+            New-Item -ItemType Directory -Force -Path $folder | Out-Null
+            $pw=Join-Path $folder 'bootstrap.pw'
+            [System.IO.File]::WriteAllText($pw,'SenhaLocalForte123!', [System.Text.Encoding]::ASCII)
+            Push-Location $folder
+            try{
+              $dir=if($dataArg -eq 'relative'){'cluster'}else{Join-Path $folder 'cluster'}
+              $pwval=if($pwArg -eq 'relative'){'bootstrap.pw'}else{$pw}
+              Write-Host "CASE $name data=$dataArg pw=$pwArg"
+              $oldPref=$ErrorActionPreference
+              $ErrorActionPreference='Continue'
+              $output=& $init '-D' $dir '-U' 'oficina_local_owner' '--encoding=UTF8' '--auth-host=scram-sha-256' '--auth-local=scram-sha-256' "--pwfile=$pwval" '--no-instructions' @extra 2>&1
+              $rc=$LASTEXITCODE
+              $ErrorActionPreference=$oldPref
+              if($rc -ne 0){$output | Select-Object -Last 9 | ForEach-Object {Write-Host "initdb: $_"}}
+              $version=Join-Path $folder 'cluster/PG_VERSION'
+              Write-Host "RESULT $name exit=$rc pgVersion=$(Test-Path $version)"
+              $script:results[$name]=($rc -eq 0 -and (Test-Path $version))
+            }finally{Pop-Location}
+          }
+          RunCase 'ascii-absolute' $ascii 'absolute' 'absolute'
+          RunCase 'unicode-absolute' $unicode 'absolute' 'absolute'
+          RunCase 'unicode-relative' $unicode 'relative' 'relative'
+          RunCase 'unicode-relative-c-locale' $unicode 'relative' 'relative' @('--locale=C')
+          RunCase 'unicode-precreated' $unicode 'absolute' 'absolute'
+          $alias=Join-Path $env:RUNNER_TEMP 'oficina-ascii-junction'
+          if(Test-Path $alias){throw 'Alias should not exist'}
+          New-Item -ItemType Junction -Path $alias -Target $unicode | Out-Null
+          RunCase 'unicode-junction-ascii' $alias 'absolute' 'absolute'
+          Write-Host ('SUMMARY '+($results|ConvertTo-Json -Compress))
+          if(-not $results['ascii-absolute']){throw 'Control ASCII failed'}
+          if(-not ($results['unicode-relative'] -or $results['unicode-relative-c-locale'] -or $results['unicode-junction-ascii'])){throw 'No Unicode-safe bootstrap found'}
