@@ -118,13 +118,37 @@ try{
  $resumeProfile=Join-Path $resumeRoot 'ArtiSys\Oficina\postgres'
  New-Item -ItemType Directory -Path $resumeProfile -Force | Out-Null
  $resumeSecret=Join-Path $resumeProfile 'connection.json'
- Copy-Item -LiteralPath $secret -Destination $resumeSecret
+ # Simular o connection.json escrito pela v1.0.4 ANTES de executar initdb.
+ # Usar nova porta: copiar a configuração de um cluster que já funcionou
+ # pode reutilizar sua porta enquanto o primeiro PostgreSQL encerra.
+ $listener=[System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback,0)
+ $listener.Start()
+ $resumePort=$listener.LocalEndpoint.Port
+ $listener.Stop()
+ $resumePassword=[Convert]::ToBase64String([System.Security.Cryptography.RandomNumberGenerator]::GetBytes(48)).TrimEnd('=').Replace('+','-').Replace('/','_')
+ $resumeConfig=@{schemaVersion=1;user='oficina_local_owner';port=$resumePort;password=$resumePassword}
+ [System.IO.File]::WriteAllText($resumeSecret,($resumeConfig|ConvertTo-Json -Compress),[System.Text.Encoding]::UTF8)
+ $resumePassword=$null
  $resumeHash=(Get-FileHash -LiteralPath $resumeSecret -Algorithm SHA256).Hash
  if(Test-Path (Join-Path $resumeProfile 'cluster\PG_VERSION')){
    throw 'Fixture da instalação interrompida não está limpa'
  }
  $env:LOCALAPPDATA=$resumeRoot
- Start-Officina
+ try{
+   Start-Officina
+ }catch{
+   Write-Warning ("Recovery first launch failed: "+$_.Exception.Message)
+   $resumeVersion=Test-Path (Join-Path $resumeProfile 'cluster\PG_VERSION')
+   $resumePending=Test-Path (Join-Path $resumeProfile 'bootstrap.pending.json')
+   Write-Warning ("Diagnostic: PG_VERSION="+$resumeVersion+" pending="+$resumePending+" pgport="+$resumePort)
+   $pglog=Join-Path $resumeProfile 'postgres.log'
+   if(Test-Path $pglog){
+     Get-Content -LiteralPath $pglog -Tail 30 | ForEach-Object {
+       Write-Warning ("PostgreSQL log: "+($_ -replace 'postgresql://[^\s]+','postgresql://[REDACTED]'))
+     }
+   }
+   throw
+ }
  if(-not(Test-Path (Join-Path $resumeProfile 'cluster\PG_VERSION'))){
    throw 'Falha ao retomar initdb interrompido da v1.0.4'
  }
