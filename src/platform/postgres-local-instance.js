@@ -147,9 +147,28 @@ export function createPortablePostgresController({
        "current_setting('port') AS server_port,current_user AS username");
      const row=result.rows?.[0];
      if(!row||String(row.username)!==USER||
-        Number(row.server_port)!==config.port||
-        resolve(String(row.data_dir)).toLowerCase()!==resolve(cluster).toLowerCase())
+        Number(row.server_port)!==config.port)
        fail('Porta PostgreSQL ocupada por outro servidor; inicialização bloqueada');
+     if(resolve(String(row.data_dir)).toLowerCase()!==resolve(cluster).toLowerCase()){
+       // PostgreSQL's Windows locale may report a non-ASCII data_directory
+       // with different text encoding than Node's Unicode fs paths. Compare
+       // the actual cluster's immutable system identifier instead of
+       // relaxing ownership verification or silently trusting the port.
+       let localSystemId;
+       try{
+         const control=await readFile(join(cluster,'global','pg_control'));
+         if(control.length<16)throw Error('pg_control incomplete');
+         localSystemId=control.readBigUInt64LE(0);
+       }catch{
+         fail('Diretório PostgreSQL divergente e pg_control local não verificável');
+       }
+       const idResult=await pool.query(
+         'SELECT system_identifier::text AS system_id FROM pg_control_system()');
+       const remoteId=String(idResult.rows?.[0]?.system_id??'');
+       if(!/^-?\d{1,20}$/.test(remoteId)||
+          BigInt.asUintN(64,BigInt(remoteId))!==localSystemId)
+         fail('Porta PostgreSQL ocupada por outro servidor; inicialização bloqueada');
+     }
    });
  }
  async function provisionDatabases(config,{fresh=false}={}){
