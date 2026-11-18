@@ -58,7 +58,7 @@ test('a drive mapping changed externally must never be removed',async()=>{
   platform:'win32',isDriveAvailable:async()=>true,
   mount:async()=>{},
   unmount:async()=>{unmounted=true;},
-  mappedRoot:async()=>++lookups<=12?null:lookups===13?path:'C:\\Unrelated-Drive'
+  mappedRoot:async()=>++lookups<=11?null:lookups===12?path:'C:\\Unrelated-Drive'
  });
  await alias.release();
  assert.equal(unmounted,false);
