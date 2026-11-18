@@ -163,6 +163,18 @@ try{
  Stop-Officina
  Write-Host 'PASS: v1.0.4 interrompida antes de PG_VERSION foi recuperada sem apagar dados ou rotacionar credenciais'
 
+ # Regressão cliente real: conta Windows pode conter espaços e acentos,
+ # o que fez o app empacotado desligar um PostgreSQL já iniciado.
+ $unicodeRoot=Join-Path $env:RUNNER_TEMP 'oficina-perfil-Deus e fiél'
+ $env:LOCALAPPDATA=$unicodeRoot
+ Start-Officina
+ $unicodePg=Join-Path $unicodeRoot 'ArtiSys\Oficina\postgres\cluster\PG_VERSION'
+ if(-not(Test-Path $unicodePg)){
+   throw 'Perfil Windows acentuado não inicializou cluster PostgreSQL'
+ }
+ Stop-Officina
+ Write-Host 'PASS: Perfil Windows com espaços e acentos iniciou o aplicativo comercial.'
+ 
  Write-Host 'PASS: PostgreSQL 16 offline instalado automaticamente pelo Oficina, login e dados persistentes sem npm/terminal.'
 }finally{
  Stop-Officina
