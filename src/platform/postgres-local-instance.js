@@ -1,12 +1,10 @@
 import {randomBytes,createHash} from 'node:crypto';
-import {execFile} from 'node:child_process';
-import {promisify} from 'node:util';
+import {spawn} from 'node:child_process';
 import {mkdir,readFile,writeFile,rename,unlink,stat,open,readdir} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
 import {createServer} from 'node:net';
 import {verifyPostgresWindowsBundle} from './postgres-windows-bundle.js';
 
-const exec=promisify(execFile);
 const fail=message=>{throw Error(message);};
 const USER='oficina_local_owner';
 const REGISTRY='oficina_registry';
@@ -47,10 +45,51 @@ function processFailureDiagnostic(error){
    detail:'Código '+code+label};
 }
 
-async function defaultExecute(file,args){
- return exec(file,args,{windowsHide:true,
-   timeout:postgresExecutableTimeout(file),maxBuffer:1024*1024});
+// PostgreSQL initdb and pg_ctl spawn subprocesses. On Windows their children
+// can inherit stdout/stderr pipe handles, so execFile() waits for pipe EOF
+// even if the command itself has exited. This caused false startup timeouts.
+// Direct stdout/stderr into a private FILE instead of pipes and wait only for
+// the invoked executable's exit; no terminal or paid runtime is required.
+export async function runPortablePostgresProcess(file,args,{
+ logFile,timeoutMs=postgresExecutableTimeout(file)
+}={}){
+ if(typeof logFile!=='string'||!logFile.trim())throw Error('Arquivo de diagnóstico PostgreSQL obrigatório');
+ const output=await open(logFile,'a',0o600);
+ try{
+   return await new Promise((resolve,reject)=>{
+     const child=spawn(file,args,{
+       windowsHide:true,stdio:['ignore',output.fd,output.fd]
+     });
+     let timedOut=false;
+     const timer=setTimeout(()=>{
+       timedOut=true;
+       child.kill();
+     },timeoutMs);
+     child.once('error',error=>{
+       clearTimeout(timer);
+       reject(error);
+     });
+     child.once('close',(code,signal)=>{
+       clearTimeout(timer);
+       if(timedOut){
+         reject(Object.assign(new Error('PostgreSQL subprocess timed out'),{
+           code:'ETIMEDOUT',killed:true,signal
+         }));
+       }else if(code!==0){
+         reject(Object.assign(new Error('PostgreSQL process failed with exit code '+code),{
+           code,signal
+         }));
+       }else resolve({stdout:'',stderr:''});
+     });
+   });
+ }finally{await output.close();}
 }
+async function defaultExecute(file,args,options={}){
+ return runPortablePostgresProcess(file,args,{
+   logFile:options.logFile,timeoutMs:postgresExecutableTimeout(file)
+ });
+}
+
 function connectionUrl(port,password,db){
  return 'postgresql://'+USER+':'+encodeURIComponent(password)+
   '@127.0.0.1:'+port+'/'+db;
@@ -77,6 +116,7 @@ export function createPortablePostgresController({
    connectionFile=join(root,'connection.json'),logFile=join(root,'postgres.log'),
    pendingFile=join(root,'bootstrap.pending.json');
  let owned=false,activeConfig=null,binaries=null;
+ const executeLogged=(file,args)=>execute(file,args,{logFile:join(root,'postgres-process.log')});
  async function lock(action){
    await mkdir(root,{recursive:true,mode:0o700});
    const lockFile=join(root,'bootstrap.lock');
@@ -209,7 +249,7 @@ export function createPortablePostgresController({
        try{
          await writeFile(secretFile,config.password+'\n',{flag:'wx',mode:0o600});
          try{
-           await execute(join(bundle.bin,'initdb.exe'),[
+           await executeLogged(join(bundle.bin,'initdb.exe'),[
              '-D',cluster,'-U',USER,'--encoding=UTF8',
              '--auth-host=scram-sha-256','--auth-local=scram-sha-256',
              '--pwfile='+secretFile,'--no-instructions'
@@ -231,7 +271,7 @@ export function createPortablePostgresController({
      let running=false;
      if(hasVersion){
        try{
-         await execute(pgCtl,['status','-D',cluster]);
+         await executeLogged(pgCtl,['status','-D',cluster]);
          running=true;
        }catch{running=false;}
      }
@@ -240,7 +280,7 @@ export function createPortablePostgresController({
          ' -c listen_addresses=127.0.0.1 -c password_encryption=scram-sha-256';
        owned=true;
        try{
-         await execute(pgCtl,[
+         await executeLogged(pgCtl,[
            '-D',cluster,'-l',logFile,'-o',opts,'-w','-t','45','start'
          ]);
        }catch(error){
@@ -277,7 +317,7 @@ export function createPortablePostgresController({
    if(!owned||!binaries)return;
    owned=false;
    try{
-     await execute(join(binaries.bin,'pg_ctl.exe'),[
+     await executeLogged(join(binaries.bin,'pg_ctl.exe'),[
        '-D',cluster,'-m','fast','-w','-t','30','stop'
      ]);
    }finally{activeConfig=null;}
