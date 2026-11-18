@@ -1,0 +1,98 @@
+name: QA final da release comercial publicada v1.0.7
+on:
+  push:
+    branches: [qa/released-commercial-107]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  release-windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Baixar instalador COMERCIAL publicado e validar checksum SHA256 oficial
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Path released -Force | Out-Null
+          gh release download v1.0.7 --pattern 'ArtiSys-Oficina-Setup-1.0.7-Windows-x64-Commercial.exe' --dir released
+          if($LASTEXITCODE -ne 0){throw 'Não foi possível obter a release 1.0.7 comercial'}
+          $file=(Get-ChildItem released -Filter '*.exe' | Select-Object -First 1).FullName
+          $sha=(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($sha -ne 'ca8ad3710b80f3c3b0eeae318672d33a4d60a1870c40b5d17fd2cde4352e3bf7'){throw 'SHA256 divergente do asset oficial'}
+          $destination=Join-Path $env:RUNNER_TEMP 'ArtisysOficinaCommercial107'
+          $installer=Start-Process -FilePath $file -ArgumentList @('/S',"/D=$destination") -Wait -PassThru
+          if($installer.ExitCode -ne 0){throw 'Falha ao instalar executável comercial'}
+          $edition=Get-Content (Join-Path $destination 'resources/oficina-edition.json') -Raw | ConvertFrom-Json
+          if($edition.commercialActivation -ne $true){throw 'Instalador gratuito foi baixado por engano'}
+          foreach($name in @('initdb.exe','pg_ctl.exe','postgres.exe','vcruntime140.dll','vcruntime140_1.dll','msvcp140.dll')){
+            if(-not(Test-Path (Join-Path $destination "resources/postgresql/bin/$name"))){throw "PostgreSQL incompleto: $name"}
+          }
+          Write-Host "PASS: .exe comercial oficial v1.0.7 instalado, hash confirmado: $sha"
+      - name: Primeiro acesso e REABERTURA Windows com nome acentuado e licenciamento comercial
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $app=Join-Path $env:RUNNER_TEMP 'ArtisysOficinaCommercial107/ArtiSys Oficina.exe'
+          $oldLocal=$env:LOCALAPPDATA
+          $env:LOCALAPPDATA=Join-Path $env:RUNNER_TEMP 'Perfil Deus e fiél/AppData/Local'
+          New-Item -ItemType Directory -Path $env:LOCALAPPDATA -Force | Out-Null
+          $db=Join-Path $env:LOCALAPPDATA 'ArtiSys/Oficina/postgres'
+          if(Test-Path (Join-Path $db 'connection.json')){throw 'QA precisa de perfil limpo'}
+          $p=$null
+          function Open-App {
+            $script:p=Start-Process -FilePath $app -PassThru
+            for($i=0;$i -lt 120;$i++){
+              Start-Sleep -Milliseconds 450
+              if($script:p.HasExited){throw "Oficina encerrou no primeiro acesso: $($script:p.ExitCode)"}
+              try{
+                $health=Invoke-RestMethod 'http://127.0.0.1:3344/api/health' -TimeoutSec 1
+                if($health.ok -and $health.engine -eq 'postgres' -and $health.operationalApiReady){
+                  return
+                }
+              }catch{}
+            }
+            throw 'Oficina não iniciou a API e o PostgreSQL'
+          }
+          function Close-App {
+            if($script:p -and -not $script:p.HasExited){
+              $null=$script:p.CloseMainWindow()
+              for($i=0;$i -lt 70;$i++){
+                Start-Sleep -Milliseconds 200
+                if($script:p.HasExited){break}
+              }
+              if(-not $script:p.HasExited){Stop-Process -Id $script:p.Id -Force}
+            }
+            $script:p=$null
+          }
+          try{
+            Open-App
+            if((Get-Content (Join-Path $db 'cluster/PG_VERSION') -Raw).Trim() -ne '16'){throw 'Cluster PostgreSQL não foi criado'}
+            if(Test-Path (Join-Path $db 'bootstrap.pending.json')){throw 'Bootstrap não terminou'}
+            $license=Invoke-RestMethod 'http://127.0.0.1:3344/api/license/status'
+            if($license.required -ne $true -or $license.active -ne $false){throw 'Edição comercial não bloqueou uso sem licença'}
+            $auth=Join-Path $db 'connection.json'
+            $firstHash=(Get-FileHash -LiteralPath $auth -Algorithm SHA256).Hash
+            $foundAlias=$false
+            foreach($letter in 'ZYXWVUTSRQP'.ToCharArray()){
+              $candidate=("{0}:\cluster\PG_VERSION" -f $letter)
+              if(Test-Path -LiteralPath $candidate){$foundAlias=$true;break}
+            }
+            if(-not $foundAlias){throw 'PostgreSQL não utilizou o alias ASCII do perfil Unicode'}
+            Write-Host 'PASS: PRIMEIRA ABERTURA do instalador comercial publicado, PostgreSQL 16 e licença'
+            Close-App
+            Open-App
+            if((Get-FileHash -LiteralPath $auth -Algorithm SHA256).Hash -ne $firstHash){throw 'Reabertura alterou credenciais ou recriou banco'}
+            if(Test-Path (Join-Path $db 'bootstrap.pending.json')){throw 'Reabertura deixou bootstrap pendente'}
+            Write-Host 'PASS: REABERTURA comercial com dados persistentes no perfil acentuado'
+          }catch{
+            $log=Join-Path $db 'postgres-process.log'
+            if(Test-Path $log){Get-Content -LiteralPath $log -Tail 30 | ForEach-Object {Write-Warning "PGLOG: $_"}}
+            throw
+          }finally{
+            Close-App
+            $env:LOCALAPPDATA=$oldLocal
+          }
