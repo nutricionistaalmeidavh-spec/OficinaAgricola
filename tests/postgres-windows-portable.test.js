@@ -14,7 +14,8 @@ function fixture(){
  mkdirSync(join(bundle,'share'),{recursive:true});
  const files=['bin/initdb.exe','bin/pg_ctl.exe','bin/postgres.exe','bin/psql.exe',
   'share/postgres.bki','share/locale/en@boldquot/LC_MESSAGES/gettext-runtime.mo',
-  'share/timezone/Etc/GMT+0'];
+  'share/timezone/Etc/GMT+0','bin/vcruntime140.dll',
+  'bin/vcruntime140_1.dll','bin/msvcp140.dll'];
  const hashes={};
  for(const file of files){
    const content=Buffer.from('test portable binary '+file);
@@ -320,5 +321,23 @@ test('versão PG_VERSION ausente em cluster existente com pg_control nunca é re
    await assert.rejects(manager.ensureReady(),/recuperação|marcador/i);
    assert.equal(executed,0);
    assert.equal(readFileSync(join(cluster,'global','pg_control'),'utf8'),'original-protected');
+ }finally{rmSync(f.root,{recursive:true,force:true});}
+});
+
+test('bundle Windows deve ser autossuficiente: DLLs VC++ presentes e verificadas por SHA256',()=>{
+ const f=fixture();
+ try{
+   const verify=()=>verifyPostgresWindowsBundle({
+     resourcesPath:f.resources,platform:'win32',arch:'x64'
+   });
+   assert.equal(verify().valid,true,'bundle completo precisa funcionar');
+   for(const dll of ['vcruntime140.dll','vcruntime140_1.dll','msvcp140.dll']){
+     const p=join(f.bundle,'bin',dll);
+     const original=readFileSync(p);
+     rmSync(p);
+     assert.equal(verify().valid,false,dll+' missing must be blocked');
+     writeFileSync(p,original);
+     assert.equal(verify().valid,true,dll+' restored');
+   }
  }finally{rmSync(f.root,{recursive:true,force:true});}
 });
