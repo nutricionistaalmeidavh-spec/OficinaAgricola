@@ -68,6 +68,17 @@ jobs:
           if(Test-Path $alias){throw 'Alias should not exist'}
           New-Item -ItemType Junction -Path $alias -Target $unicode | Out-Null
           RunCase 'unicode-junction-ascii' $alias 'absolute' 'absolute'
+          # Separar falha de permissão em C:\\Users de falha de Unicode
+          $asciiUsers='C:\Users\OficinaQAASCII\AppData\Local\ArtiSys\Oficina\postgres'
+          $tempUnicode=Join-Path $env:RUNNER_TEMP 'Usuario Deus e fiél/AppData/Local/ArtiSys/Oficina/postgres'
+          New-Item -ItemType Directory -Force -Path $asciiUsers,$tempUnicode | Out-Null
+          $canWrite=Join-Path $unicode 'unicode-node-write-test.txt'
+          [System.IO.File]::WriteAllText($canWrite,'write-ok')
+          Write-Host "OS_WRITE_UNICODE=$(Test-Path $canWrite) OWNER=$((Get-Acl $unicode).Owner)"
+          icacls.exe $unicode
+          RunCase 'ascii-inside-cusers' $asciiUsers 'absolute' 'absolute'
+          RunCase 'unicode-inside-temp' $tempUnicode 'absolute' 'absolute'
+          RunCase 'unicode-relative-temp' $tempUnicode 'relative' 'relative'
           Write-Host ('SUMMARY '+($results|ConvertTo-Json -Compress))
           if(-not $results['ascii-absolute']){throw 'Control ASCII failed'}
-          if(-not ($results['unicode-relative'] -or $results['unicode-relative-c-locale'] -or $results['unicode-junction-ascii'])){throw 'No Unicode-safe bootstrap found'}
+          if(-not ($results['unicode-relative'] -or $results['unicode-relative-c-locale'] -or $results['unicode-junction-ascii'] -or $results['unicode-inside-temp'])){throw 'No Unicode-safe bootstrap found'}
