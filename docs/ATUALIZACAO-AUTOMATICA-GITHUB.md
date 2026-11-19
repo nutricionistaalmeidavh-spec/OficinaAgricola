@@ -2,7 +2,7 @@
 
 ## Funcionamento para o cliente (Windows x64)
 
-O aplicativo Electron empacotado consulta a última versão **estável** em `nutricionistaalmeidavh-spec/OficinaAgricola` (GitHub Releases) após o PostgreSQL local iniciar e, depois, a cada 6 horas enquanto estiver aberto.
+O aplicativo Electron empacotado consulta a última versão **estável** em `nutricionistaalmeidavh-spec/OficinaAgricola` (GitHub Releases) após o PostgreSQL local iniciar e, depois, a cada 5 minutos enquanto estiver aberto.
 
 1. Sem internet ou sem release publicada, o sistema continua funcionando offline, sem alterar dados e sem bloquear o usuário.
 2. Quando encontra uma versão superior à versão instalada, pergunta se o usuário quer baixar.

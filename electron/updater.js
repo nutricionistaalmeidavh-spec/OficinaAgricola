@@ -3,7 +3,7 @@ import {spawn} from 'node:child_process';
 import {join} from 'node:path';
 import {checkGitHubUpdate,downloadVerifiedUpdate} from './update-service.js';
 
-const CHECK_INTERVAL_MS=6*60*60*1000;
+const CHECK_INTERVAL_MS=5*60*1000;
 
 function installOnExit(installer){
   // NSIS substitui apenas o diretório do aplicativo. O PostgreSQL, uploads,
