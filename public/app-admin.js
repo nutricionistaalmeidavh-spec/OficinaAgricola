@@ -170,9 +170,12 @@ $('#recoveryRequestForm').addEventListener('submit',async e=>{
   button.disabled=true;error.textContent='';
   try{
     const email=String(new FormData(form).get('email')||'').trim().toLowerCase();
-    await api('/api/auth/recovery/request',{method:'POST',body:{email}});
+    const result=await api('/api/auth/recovery/request',{method:'POST',body:{email}});
     passwordRecoveryEmail=email;
     showRecoveryConfirm();
+    $('#recoveryDeliveryNote').textContent=result.delivery==='manual'
+      ?'O envio automático ainda não está ativo. Solicite o código à ArtiSys para concluir a recuperação.'
+      :'Se o e-mail estiver vinculado à licença, verifique a caixa de entrada e o spam.';
     $('#recoveryConfirmForm input[name="code"]').focus();
   }catch(err){error.textContent=friendlyUiMessage(err.message);}
   finally{button.disabled=false;}
