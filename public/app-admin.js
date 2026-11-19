@@ -159,6 +159,49 @@ function table(headers,rows){return `<div class="table-wrap"><table><thead><tr>$
 
 const pendingRecovery=$('#pendingCommands');
 if(pendingRecovery)pendingRecovery.onclick=()=>void openPendingCommands();
+let passwordRecoveryEmail='';
+$('#forgotPasswordBtn').onclick=()=>showRecovery();
+$('#recoveryBackBtn').onclick=()=>showLogin();
+$('#recoveryResendBtn').onclick=()=>showRecovery();
+$('#recoveryRequestForm').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const form=e.currentTarget,button=$('button[type="submit"]',form),error=$('#recoveryRequestError');
+  if(button.disabled)return;
+  button.disabled=true;error.textContent='';
+  try{
+    const email=String(new FormData(form).get('email')||'').trim().toLowerCase();
+    const result=await api('/api/auth/recovery/request',{method:'POST',body:{email}});
+    passwordRecoveryEmail=email;
+    showRecoveryConfirm();
+    $('#recoveryDeliveryNote').textContent=result.delivery==='manual'
+      ?'O envio automático ainda não está ativo. Solicite o código à ArtiSys para concluir a recuperação.'
+      :'Se o e-mail estiver vinculado à licença, verifique a caixa de entrada e o spam.';
+    $('#recoveryConfirmForm input[name="code"]').focus();
+  }catch(err){error.textContent=friendlyUiMessage(err.message);}
+  finally{button.disabled=false;}
+});
+$('#recoveryConfirmForm').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const form=e.currentTarget,button=$('button[type="submit"]',form),error=$('#recoveryConfirmError');
+  if(button.disabled)return;
+  error.textContent='';
+  const data=formObj(new FormData(form));
+  if(data.password!==data.confirmPassword){error.textContent='As senhas não coincidem';return;}
+  button.disabled=true;
+  try{
+    const result=await api('/api/auth/recovery/confirm',{method:'POST',body:{
+      email:passwordRecoveryEmail,code:data.code,
+      password:data.password,confirmPassword:data.confirmPassword
+    }});
+    if(!result.updated)throw Error('Recuperação não confirmada');
+    $('#loginForm input[name="username"]').value=result.username||'';
+    passwordRecoveryEmail='';form.reset();
+    $('#recoveryRequestForm').reset();
+    showLogin();
+    toast('Senha alterada. Entre com sua nova senha.');
+  }catch(err){error.textContent=friendlyUiMessage(err.message);}
+  finally{button.disabled=false;}
+});
 $('#licenseForm').addEventListener('submit',async e=>{
   e.preventDefault();
   const form=e.currentTarget,button=$('button[type="submit"]',form),error=$('#licenseError');

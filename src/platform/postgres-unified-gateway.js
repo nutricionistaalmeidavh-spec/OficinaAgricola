@@ -86,6 +86,32 @@ export function createPostgresUnifiedGateway({
      try{return json(await licenseControl.activate(data));}
      catch(error){return json({error:error.message||'Central de licenças indisponível'},error.status||503);}
    }
+   if((path==='/api/auth/recovery/request'||path==='/api/auth/recovery/confirm')&&method==='POST'){
+     if(!licenseControl?.required)fail('Recuperação em nuvem disponível somente na edição comercial',404);
+     if(!['localhost','127.0.0.1','[::1]'].includes(u.hostname))
+       fail('Recuperação permitida somente na máquina principal',403);
+     const active=await licenseControl.status();
+     if(!active.active)fail('Ativação comercial necessária',403);
+     const input=await readPayload(request,2048);
+     const email=String(input.email||'').trim().toLowerCase();
+     if(path.endsWith('/request')){
+       const answer=await licenseControl.requestRecovery({email});
+       return json({accepted:answer.accepted===true,delivery:answer.delivery==='manual'?'manual':'email'},202);
+     }
+     const password=input.password,code=String(input.code||'');
+     if(typeof password!=='string'||password.length<12||password.length>128||
+        !/[a-z]/.test(password)||!/[A-Z]/.test(password)||
+        !/[0-9]/.test(password)||!/[^a-zA-Z0-9]/.test(password)||
+        password!==input.confirmPassword)
+       fail('A senha deve ter 12 a 128 caracteres, maiúscula, minúscula, número e símbolo, com confirmação idêntica',400);
+     if(!/^[0-9]{6}$/.test(code))fail('Código de seis dígitos inválido',400);
+     if(typeof registry.recoverInitialAdminPassword!=='function')
+       fail('Recuperação de administrador indisponível',503);
+     const verified=await licenseControl.verifyRecovery({email,code});
+     if(verified.verified!==true)fail('Código inválido ou expirado',400);
+     const result=await registry.recoverInitialAdminPassword(password);
+     return json({updated:result.updated===true,username:result.username},200);
+   }
    if(licenseControl?.required&&!(path==='/api/setup/status'&&method==='GET')){
      const status=await licenseControl.status();
      if(!status.active)fail('Ativação comercial necessária. Informe e-mail e código da ArtiSys.',403);

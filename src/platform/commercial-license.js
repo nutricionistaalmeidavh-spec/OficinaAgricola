@@ -111,5 +111,35 @@ export function createOficinaCommercialLicense({
   statePromise=Promise.resolve(await save(next));
   return result(next,{at:now()});
  }
- return Object.freeze({required:true,status,activate});
+ async function accountForRecovery(email){
+  const state=await get();
+  const address=String(email||'').trim().toLowerCase();
+  if(!emailOk(address)||!state.licenseId||!state.active||
+     state.accountEmail!==address||
+     (state.expiresAt&&Date.parse(state.expiresAt)<=now()))
+   throw Object.assign(Error('Use o e-mail vinculado à licença ativa desta instalação'),{status:403});
+  return state;
+ }
+ async function requestRecovery({email}={}){
+  const state=await accountForRecovery(email);
+  const answer=await remote('/v1/password-recovery/request',{method:'POST',body:{
+    email:state.accountEmail,installationId:state.installationId
+  }});
+  if(answer.accepted!==true)throw Object.assign(Error('Central não confirmou a solicitação'),{status:503});
+  // Existing central may still use admin-assisted OTP. Do not claim email sent.
+  return {accepted:true,delivery:typeof answer.message==='string'?'manual':'email'};
+ }
+ async function verifyRecovery({email,code}={}){
+  const state=await accountForRecovery(email);
+  if(!/^[0-9]{6}$/.test(String(code||'')))
+   throw Object.assign(Error('Código de seis dígitos inválido'),{status:400});
+  const answer=await remote('/v1/password-recovery/verify',{method:'POST',body:{
+   email:state.accountEmail,installationId:state.installationId,code:String(code)
+  }});
+  if(answer.verified!==true||answer.accountEmail!==state.accountEmail||
+     answer.installationId!==state.installationId)
+    throw Object.assign(Error('Central não confirmou a recuperação'),{status:403});
+  return {verified:true};
+ }
+ return Object.freeze({required:true,status,activate,requestRecovery,verifyRecovery});
 }

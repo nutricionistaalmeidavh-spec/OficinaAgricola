@@ -27,7 +27,32 @@
       <label>Usuário<input name="username" autocomplete="username" required></label>
       <label>Senha<input name="password" type="password" autocomplete="current-password" required></label>
       <button class="btn primary" type="submit">Entrar</button>
+      <button type="button" id="forgotPasswordBtn" class="btn sm" hidden>Esqueci minha senha</button>
       <p id="loginError" class="error" role="alert" aria-live="assertive"></p>
+    </form>
+    <form id="recoveryRequestForm" class="login-card hidden" autocomplete="off">
+      <div class="login-brand"><div class="brand-mark">AO</div>
+        <div><small>SEGURANÇA DA CONTA</small><h1>Recuperar acesso</h1>
+          <p>Informe o e-mail vinculado à licença desta instalação. Enviaremos um código válido por 15 minutos.</p></div>
+      </div>
+      <label>E-mail da licença<input name="email" type="email" autocomplete="email" required></label>
+      <button class="btn primary" type="submit">Enviar código por e-mail</button>
+      <button type="button" class="btn sm" id="recoveryBackBtn">Voltar ao login</button>
+      <p id="recoveryRequestError" class="error" role="alert" aria-live="assertive"></p>
+    </form>
+    <form id="recoveryConfirmForm" class="login-card hidden" autocomplete="off">
+      <div class="login-brand"><div class="brand-mark">AO</div>
+        <div><small>RECUPERAÇÃO DE ACESSO</small><h1>Definir nova senha</h1>
+          <p>Digite o código recebido no e-mail e crie uma senha para o administrador.</p></div>
+      </div>
+      <label>Código de 6 dígitos<input name="code" inputmode="numeric" maxlength="6" minlength="6" pattern="[0-9]{6}" required></label>
+      <label>Nova senha<input name="password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required></label>
+      <label>Confirmar nova senha<input name="confirmPassword" type="password" autocomplete="new-password" minlength="12" maxlength="128" required></label>
+      <small>Use 12 caracteres ou mais, incluindo maiúscula, minúscula, número e símbolo.</small>
+      <button class="btn primary" type="submit">Alterar senha e entrar</button>
+      <p id="recoveryDeliveryNote" role="status" aria-live="polite" class="muted"></p>
+      <button type="button" class="btn sm" id="recoveryResendBtn">Solicitar outro código</button>
+      <p id="recoveryConfirmError" class="error" role="alert" aria-live="assertive"></p>
     </form>
     <form id="licenseForm" class="login-card hidden" autocomplete="off">
       <div class="login-brand">
