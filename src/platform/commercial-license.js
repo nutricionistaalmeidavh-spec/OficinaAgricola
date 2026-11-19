@@ -130,7 +130,7 @@ export function createOficinaCommercialLicense({
  }
  async function verifyRecovery({email,code}={}){
   const state=await accountForRecovery(email);
-  if(!/^\\d{6}$/.test(String(code||'')))
+  if(!/^[0-9]{6}$/.test(String(code||'')))
    throw Object.assign(Error('Código de seis dígitos inválido'),{status:400});
   const answer=await remote('/v1/password-recovery/verify',{method:'POST',body:{
    email:state.accountEmail,installationId:state.installationId,code:String(code)
