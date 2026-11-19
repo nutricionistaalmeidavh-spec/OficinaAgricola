@@ -4,6 +4,7 @@ import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
 import {mapLegacyNativeRoute} from '../src/platform/native-api-route-map.js';
 import {createAsyncWorkshopHandler} from '../src/platform/async-workshop-handler.js';
+import {createPostgresUnifiedGateway} from '../src/platform/postgres-unified-gateway.js';
 import {createAsyncWorkshopDocuments} from '../src/platform/async-workshop-documents.js';
 
 const kinds=['quote','work-order','delivery','receipt'];
@@ -77,4 +78,31 @@ test('printing and previewing documents do not depend on popup windows',async()=
  await context.window.OficinaDocuments.printHtml('<html><body>OS</body></html>');
  assert.equal(mockFrame.contentWindow.printed,true);
  assert.doesNotMatch(source,/window\.open\s*\(/);
+});
+
+test('browser GET quote document reaches PostgreSQL native renderer without fallback 501',async()=>{
+ const user='a'.repeat(48),serviceToken='s'.repeat(48),events=[];
+ const registry={
+  async validateSession(t){if(t!==user)throw Object.assign(Error('Invalid session'),{status:401});
+   return {id:4,name:'Operador',role:'ADMIN'};},
+  async requireUnitMembership(id,unitId){assert.equal(id,4);assert.equal(unitId,1);
+   return {id:1,companyId:1,role:'ADMIN'};},
+  async listUserUnits(){return [];}
+ };
+ const services={
+  async validateSession(){return {role:'ADMIN'};},
+  async provisionGatewaySession(){return {ok:true};},
+  async renderWorkOrderDocument(osId,kind){events.push([osId,kind]);return '<!doctype html><html><body>Orçamento em PostgreSQL</body></html>';}
+ };
+ const backend=createAsyncWorkshopHandler({serviceToken,services});
+ const gateway=createPostgresUnifiedGateway({
+  registry,serviceToken,tenantHandlerForUnit:async()=>backend
+ });
+ const response=await gateway(new Request('http://localhost:3344/api/work-orders/17/documents/quote',{
+  headers:{authorization:'Bearer '+user,'x-oficina-unit':'1'}
+ }));
+ assert.equal(response.status,200);
+ assert.match(response.headers.get('content-type'),/text\/html/);
+ assert.match(await response.text(),/Orçamento em PostgreSQL/);
+ assert.deepEqual(events,[[17,'quote']]);
 });
