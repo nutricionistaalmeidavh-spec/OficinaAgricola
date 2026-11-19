@@ -83,3 +83,21 @@ test('self-hosted free edition does not depend on Cloudflare to use ordinary log
  }));
  assert.equal(response.status,404);
 });
+
+
+test('Central Cloudflare 503 on email recovery is not presented as PostgreSQL outage',async()=>{
+ const simulatedLicense={...licenseControl,requestRecovery:async()=>{
+  throw Object.assign(new Error('Falha no envio de e-mail pela Central Cloudflare'),{status:503});
+ }};
+ const app=createPostgresUnifiedGateway({
+  registry,licenseControl:simulatedLicense,serviceToken:'T'.repeat(48),tenantHandlerForUnit:async()=>{}
+ });
+ const response=await app(new Request('http://127.0.0.1:3344/api/auth/recovery/request',{
+  method:'POST',headers:{'content-type':'application/json',origin:'http://127.0.0.1:3344'},
+  body:JSON.stringify({email:'owner@example.com'})
+ }));
+ assert.equal(response.status,503);
+ const payload=await response.json();
+ assert.match(payload.error,/e-mail|código|Cloudflare/i);
+ assert.doesNotMatch(payload.error,/PostgreSQL/i);
+});
