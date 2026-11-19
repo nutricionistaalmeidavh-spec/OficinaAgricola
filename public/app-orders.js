@@ -348,7 +348,13 @@ function receivePaymentOptions(id,pending){
   $('#choosePaymentPlan').onclick=()=>billingPlanModal(id,pending);
 }
 function paymentModal(id,pending){const requestId=globalThis.crypto?.randomUUID?.()||`os-receipt-${Date.now()}-${Math.random().toString(36).slice(2)}`;showModal('Registrar pagamento conferido',`<form class="form-stack"><p class="muted">Registre somente valores já recebidos. Pix, cartão e transferência devem ser conferidos no banco ou na maquininha.</p><label>Valor (R$)<input name="amount" type="number" step="0.01" max="${pending/100}" value="${pending/100}" required></label><label>Forma<select name="method"><option>PIX</option><option>DINHEIRO</option><option>CARTAO</option><option>TRANSFERENCIA</option><option>BOLETO</option></select></label><label>Observação<input name="note"></label><label class="sales-payment-verification sale-verify-label"><input type="checkbox" name="verifiedManualReceipt" id="verifiedManualReceipt" required> Confirmo que o pagamento foi efetivamente recebido e conferido</label><button class="btn primary" type="submit">Confirmar recebimento</button></form>`,async fd=>{if(fd.get("verifiedManualReceipt")!=="on")throw new Error("Pagamento não conferido. Confirme o recebimento antes de registrar.");const o=formObj(fd);await api(`/api/work-orders/${id}/receipts`,{method:'POST',body:{requestId,amountCents:Math.round(Number(o.amount)*100),method:o.method,note:o.note}});toast('Pagamento registrado');await openWorkOrder(id)})}
-async function openDocument(id,kind){try{const doc=await api(`/api/work-orders/${id}/documents/${kind}`,{raw:true});const url=URL.createObjectURL(new Blob([doc],{type:'text/html'}));window.open(url,'_blank','noopener');setTimeout(()=>URL.revokeObjectURL(url),60000)}catch(e){toast(e.message,true)}}
+async function openDocument(id,kind){
+ try{
+  const doc=await api(`/api/work-orders/${id}/documents/${kind}`,{raw:true});
+  if(!window.OficinaDocuments)throw Error('Visualizador de documentos indisponível');
+  window.OficinaDocuments.previewHtml(doc,{quote:'Orçamento','work-order':'Ordem de Serviço',delivery:'Entrega',receipt:'Recibo'}[kind]||'Documento');
+ }catch(error){toast(error.message,true)}
+}
 
 
 
@@ -516,23 +522,14 @@ async function displayBillingPlan(plan,workOrderId){
  if(back)back.onclick=()=>openWorkOrder(workOrderId).catch(error=>toast(error.message,true));
 }
 
-// A janela é aberta sincronamente pela ação do operador para evitar popup bloqueado.
-// Nunca imprime automaticamente; exige clique explícito em "Imprimir".
+// O Electron bloqueia popups por segurança. A impressão usa um iframe local
+// associado à ação explícita do operador, sem abrir janelas externas.
 async function printWorkOrderDocument(id,kind){
-  const printWindow=window.open('about:blank','_blank');
-  if(!printWindow){toast('Permita a abertura de janelas para imprimir.',true);return;}
-  printWindow.document.body.textContent='Preparando documento para impressão...';
-  try{
-    const doc=await api(`/api/work-orders/${id}/documents/${kind}`,{raw:true});
-    if(printWindow.closed)return;
-    printWindow.addEventListener('load',()=>{
-      if(!printWindow.closed){printWindow.focus();printWindow.print();}
-    },{once:true});
-    printWindow.document.open();
-    printWindow.document.write(doc);
-    printWindow.document.close();
-  }catch(error){
-    printWindow.close();
-    toast('Falha ao preparar impressão: '+error.message,true);
-  }
+ try{
+  const html=await api(`/api/work-orders/${id}/documents/${kind}`,{raw:true});
+  if(!window.OficinaDocuments)throw Error('Serviço de impressão indisponível');
+  await window.OficinaDocuments.printHtml(html);
+ }catch(error){
+  toast('Falha ao preparar impressão: '+error.message,true);
+ }
 }

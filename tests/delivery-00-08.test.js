@@ -14,7 +14,7 @@ test('entregas 00-08 permanecem isoladas e sem dependência SaaS de runtime', as
     read('src/server-assistencia.js'),
     read('public/index.html'),
     read('public/sw.js'),
-    read('src/documents.js'),
+    read('src/platform/document-html.js'),
     read('README.md'),
   ]);
   const pkg = JSON.parse(pkgText);
