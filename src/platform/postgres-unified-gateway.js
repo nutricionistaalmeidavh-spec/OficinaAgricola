@@ -101,7 +101,7 @@ export function createPostgresUnifiedGateway({
      const password=input.password,code=String(input.code||'');
      if(typeof password!=='string'||password.length<12||password.length>128||
         !/[a-z]/.test(password)||!/[A-Z]/.test(password)||
-        !/[0-9]/.test(password)||! /[^a-zA-Z0-9]/.test(password)||
+        !/[0-9]/.test(password)||!/[^a-zA-Z0-9]/.test(password)||
         password!==input.confirmPassword)
        fail('A senha deve ter 12 a 128 caracteres, maiúscula, minúscula, número e símbolo, com confirmação idêntica',400);
      if(!/^[0-9]{6}$/.test(code))fail('Código de seis dígitos inválido',400);
