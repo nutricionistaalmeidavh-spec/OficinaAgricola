@@ -161,6 +161,25 @@ export function createPostgresTenantRegistry(port){
      return safeUser(created);
    });
  }
+ async function recoverInitialAdminPassword(password){
+   // Only the original platform administrator can recover an email-linked
+   // commercial installation. OTP validation happens before this method.
+   const encoded=passwordHash(password);
+   return port.transaction(async tx=>{
+     await tx.run('SELECT pg_advisory_xact_lock(812315654)');
+     const owners=await tx.all(
+       "SELECT u.id,u.username FROM tenant_platform_admins p JOIN users u ON u.id=p.user_id WHERE u.active=1 AND u.role='ADMIN' FOR UPDATE OF u"
+     );
+     const total=await tx.first('SELECT COUNT(*) AS n FROM tenant_platform_admins');
+     if(owners.length!==1||Number(total.n)!==1)
+       fail('Recuperação exige um único administrador titular ativo',409);
+     const owner=owners[0],userId=id(owner.id),changed=now();
+     await tx.run('UPDATE users SET password_hash=?,updated_at=? WHERE id=?',[encoded,changed,userId]);
+     await tx.run('DELETE FROM sessions WHERE user_id=?',[userId]);
+     await audit(tx,userId,'ADMIN_PASSWORD_RECOVERED',1,1,userId,{channel:'licensed-email'});
+     return {updated:true,username:owner.username};
+   });
+ }
  async function login({username:handle,password,remoteAddress='unknown'}={}){
    const address=throttle(remoteAddress);
    const handleValue=String(handle??'').trim().toLowerCase();
@@ -368,7 +387,7 @@ export function createPostgresTenantRegistry(port){
     [id(companyId),capped]);
  }
  return Object.freeze({
-  initialize,bootstrapAdmin,login,validateSession,logout,setupRequired,isPlatformAdmin,listUserUnits,
+  initialize,bootstrapAdmin,login,recoverInitialAdminPassword,validateSession,logout,setupRequired,isPlatformAdmin,listUserUnits,
   listCompanyUnits,getPublicUnit,getTenantStorageBinding,claimTenantStorageBinding,
   requireUnitMembership:(userId,unitId)=>member(port,userId,unitId),
   requireCompanyAdmin:(userId,companyId)=>companyAdmin(port,userId,companyId),
