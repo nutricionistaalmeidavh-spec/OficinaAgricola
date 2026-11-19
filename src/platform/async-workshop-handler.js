@@ -186,7 +186,7 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
      return json(await services.transitionWorkOrder({
        ...await dataFrom(request),workOrderId:Number(status[1])
      }));
-   const workOrderDocument=path.match(/^\/v1\/orders\/([1-9]\\d*)\/documents\/(work-order|quote|delivery|receipt)$/);
+   const workOrderDocument=path.match(/^\/v1\/orders\/([1-9]\d*)\/documents\/(work-order|quote|delivery|receipt)$/);
    if(workOrderDocument&&method==='GET'){
      const html=await services.renderWorkOrderDocument(
        Number(workOrderDocument[1]),workOrderDocument[2]);
