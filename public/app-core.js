@@ -399,6 +399,7 @@ async function boot(){
     // Runtime legado de QA retorna 404; a edição livre continua seu primeiro acesso.
     try{
       const license=await api('/api/license/status');
+      $('#forgotPasswordBtn').hidden=!(license.required&&license.active);
       if(license.required&&!license.active){state.token='';return showLicense()}
     }catch(error){if(error.status!==404)throw error;}
     const setup=await api('/api/setup/status');
@@ -414,16 +415,33 @@ async function boot(){
     void resumePendingCommands();
   }catch{showLogin()}
 }
+function hideRecoveryForms(){
+  $('#recoveryRequestForm').classList.add('hidden');
+  $('#recoveryConfirmForm').classList.add('hidden');
+}
+function showRecovery(){
+  $('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');
+  $('#loginForm').classList.add('hidden');$('#licenseForm').classList.add('hidden');
+  $('#setupForm').classList.add('hidden');hideRecoveryForms();
+  $('#recoveryRequestForm').classList.remove('hidden');
+}
+function showRecoveryConfirm(){
+  $('#recoveryRequestForm').classList.add('hidden');
+  $('#recoveryConfirmForm').classList.remove('hidden');
+}
 function showLicense(){
+  hideRecoveryForms();
    $('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');
    $('#loginForm').classList.add('hidden');$('#setupForm').classList.add('hidden');
    $('#licenseForm').classList.remove('hidden');
  }
  function showSetup(){
+  hideRecoveryForms();
   $('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');
   $('#loginForm').classList.add('hidden');$('#licenseForm').classList.add('hidden');$('#setupForm').classList.remove('hidden');
 }
 function showLogin(){
+  hideRecoveryForms();
   $('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');
   $('#setupForm').classList.add('hidden');$('#licenseForm').classList.add('hidden');$('#loginForm').classList.remove('hidden');
 }
