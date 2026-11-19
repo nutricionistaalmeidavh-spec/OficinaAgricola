@@ -71,9 +71,11 @@ export function createPostgresUnifiedGateway({
  publicOrigin=normalizePublicOrigin(publicOrigin);
  const control=createPostgresRegistryControlHandler({registry,allowAdminBootstrap});
  return async function gateway(request,options={}){
+  let requestPath='';
   try{
    assertPostgresSameOrigin(request);
    const u=new URL(request.url),path=u.pathname,method=request.method.toUpperCase();
+   requestPath=path;
    if(path==='/api/health'&&method==='GET')
      return json({ok:true,engine:'postgres',operationalApiReady:true});
    if(path==='/api/license/status'&&method==='GET')
@@ -280,7 +282,15 @@ export function createPostgresUnifiedGateway({
   }catch(error){
    const status=Number.isInteger(error?.status)&&error.status>=400&&error.status<600
      ?error.status:503;
-   return json({error:status===503||status===502?'Serviço PostgreSQL temporariamente indisponível':error.message},status);
+   const recoveryUpstreamUnavailable=(status===502||status===503)&&
+     (requestPath==='/api/auth/recovery/request'||requestPath==='/api/auth/recovery/confirm');
+   const message=recoveryUpstreamUnavailable
+     ? requestPath.endsWith('/request')
+       ? 'Falha no envio do código de recuperação por e-mail. Verifique a conexão e tente novamente.'
+       : 'Serviço de validação do código de recuperação temporariamente indisponível. Tente novamente.'
+     : status===503||status===502
+       ? 'Serviço PostgreSQL temporariamente indisponível':error.message;
+   return json({error:message},status);
   }
  };
 }
