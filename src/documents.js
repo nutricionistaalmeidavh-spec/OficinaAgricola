@@ -15,8 +15,13 @@ function documentData(db,workOrderId){
 }
 
 export function renderDocument(db,workOrderId,kind='work-order'){
+  return renderDocumentFromData(documentData(db,workOrderId),kind);
+}
+
+// Pure, shared renderer: SQLite legacy and native PostgreSQL read-models use
+// the exact same escaped HTML layout without any database fallback.
+export function renderDocumentFromData({os,company,customer,machine,quote,receipts=[]},kind='work-order'){
   const allowed=new Set(['quote','work-order','delivery','receipt']); if(!allowed.has(kind)) throw new Error('Documento inválido');
-  const {os,company,customer,machine,quote,receipts}=documentData(db,workOrderId);
   const titles={quote:'Orçamento', 'work-order':'Ordem de Serviço', delivery:'Resumo de Entrega', receipt:'Recibo'};
   const rows=quote?.items?.map(i=>`<tr><td>${esc(i.description)}</td><td>${esc(i.kind.replaceAll('_',' '))}</td><td>${esc(i.quantity)}</td><td>${money(i.unit_price_cents)}</td><td>${money(i.total_cents)}</td></tr>`).join('')||'';
   const receiptRows=receipts.map(r=>`<tr><td>${date(r.received_at)}</td><td>${esc(r.method)}</td><td>${money(r.amount_cents)}</td></tr>`).join('');
