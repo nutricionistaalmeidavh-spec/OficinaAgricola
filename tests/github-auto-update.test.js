@@ -106,3 +106,12 @@ test('edição comercial exige SHA256 específico do instalador comercial',async
     /SHA256/i
   );
 });
+
+
+test('verifica nova release ao abrir e novamente a cada no máximo cinco minutos',()=>{
+ const updater=readFileSync('electron/updater.js','utf8');
+ assert.match(updater,/const CHECK_INTERVAL_MS=5\*60\*1000;/);
+ assert.match(updater,/setInterval\(\(\)=>void check\(\),CHECK_INTERVAL_MS\)/);
+ assert.match(updater,/void check\(\);/);
+ assert.match(updater,/if\(!app\.isPackaged\|\|process\.platform!=='win32'/);
+});
