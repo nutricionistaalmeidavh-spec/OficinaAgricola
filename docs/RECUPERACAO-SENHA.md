@@ -18,6 +18,18 @@ A senha nova só existe no PostgreSQL privado da máquina do cliente. A Central 
 
 ## Infraestrutura comercial opcional
 
-A automação de envio utiliza `send_email` no Worker Cloudflare da Central, remetente `welcome@artisys.dev`. Para enviar a qualquer endereço, o Cloudflare Email Service exige Workers Paid e domínio de envio configurado/verificado. A conta do Worker precisa autorizar Email Sending e ter SPF/DKIM validados. Não há compra nem credencial silenciosa do runtime. Sem o binding, o endpoint recusa envio com HTTP 503 em vez de simular sucesso.
+Fluxo sem ponte de segredos entre contas:
 
-Checklist antes de publicar o Worker: build de prévia e produção aprovados, `EMAIL` presente nas configurações do Worker, domínio `artisys.dev` liberado para envio, teste de uma conta autorizada com código entregue, confirmação única no PostgreSQL real, tentativa expirada e revogação de sessões. Testar os dois instaladores NSIS Windows e preservar os dados após atualização.
+1. O instalador comercial envia e-mail + identificador da instalação à Central de Licenças `pdv-artisys` na conta Cloudflare `sistema.artisys@gmail.com`.
+2. A Central confirma a licença ativa no D1, emite OTP de seis dígitos por 15 minutos, guarda somente o digest e cria uma assinatura HMAC de uso restrito para o envio.
+3. A Central chama via HTTPS o Worker `oficina-password-mailer.nutricionistaalmeidavh.workers.dev`, da conta `nutricionistaalmeidavh@gmail.com`, que tem o Cloudflare Email Sending.
+4. Antes de enviar, esse Worker pede autorização ao endpoint `/v1/password-recovery/relay-authorize` da Central; a assinatura HMAC, o vínculo da licença e o OTP são validados, e uma marca `relayed_at` atômica impede múltiplos envios com o mesmo bilhete.
+5. O Worker envia o código ao e-mail da licença; o Oficina recebe a confirmação via Cloudflare e permite definir a nova senha no PostgreSQL local. O código não retorna ao cliente pela API.
+6. O core gratuito não faz nenhuma dessas solicitações e funciona totalmente offline/self-hosted.
+
+Não é necessário SMTP Hostinger, senha da caixa ou token compartilhado entre as duas contas Cloudflare. O envio pela conta pessoal utiliza o serviço Cloudflare Email Sending já disponível; não altera DNS nem contrata outro serviço. Em caso de indisponibilidade, o atendimento pode gerar código na Central administrada, sem alterar dados locais.
+
+## Segurança e QA
+
+Validar a publicação do Worker da Central e o Worker de envio, o recebimento real de uma mensagem de teste, token expirada e de uso único, rejeição de assinatura adulterada e vínculo incorreto, bem como invalidar sessões antigas no PostgreSQL após alteração da senha. Não distribuir atualização ao cliente até checar o teste real e o instalador comercial.
+
