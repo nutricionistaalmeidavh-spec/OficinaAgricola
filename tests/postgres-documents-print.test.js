@@ -40,7 +40,7 @@ test('PostgreSQL-native documents render the existing quote and receipts from ca
  assert.match(rendered,/Oficina Central/);
  assert.match(rendered,/Cliente &amp; Cia/);
  assert.match(rendered,/Troca &lt;óleo&gt;/);
- assert.match(rendered,/R\\$\\s*199,00/);
+ assert.match(rendered,/R\$\s*199,00/);
  assert.equal(statements.filter(([sql])=>sql.includes('FROM work_orders')).length,1);
  assert.equal((await docs.renderWorkOrderDocument(17,'receipt')).includes('PIX'),true);
 });
@@ -57,7 +57,7 @@ test('native document endpoint returns HTML and respects authenticated tenant ro
  const rejected=await request(false);assert.equal(rejected.status,401);assert.equal(count,0);
  const result=await request(true);
  assert.equal(result.status,200);
- assert.match(result.headers.get('content-type'),/text\\/html/);
+ assert.match(result.headers.get('content-type'),/text\/html/);
  assert.match(await result.text(),/Orçamento/);
  assert.equal(count,1);
 });
@@ -76,5 +76,5 @@ test('printing and previewing documents do not depend on popup windows',async()=
  assert.equal(typeof context.window.OficinaDocuments.printHtml,'function');
  await context.window.OficinaDocuments.printHtml('<html><body>OS</body></html>');
  assert.equal(mockFrame.contentWindow.printed,true);
- assert.doesNotMatch(source,/window\\.open\\s*\\(/);
+ assert.doesNotMatch(source,/window\.open\s*\(/);
 });
