@@ -1,7 +1,7 @@
 (function(document,window){
  'use strict';
  // Document HTML is rendered and escaped by the canonical SQL backend.
- // Printing within a sandboxed frame avoids window.open(), which the Electron
+ // Printing within a sandboxed frame avoids popup windows, which the Electron
  // desktop intentionally denies for user safety.
  const preparedFrame=(html,label)=>{
    const frame=document.createElement('iframe');
