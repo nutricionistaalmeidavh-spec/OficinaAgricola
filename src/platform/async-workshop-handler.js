@@ -186,6 +186,16 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
      return json(await services.transitionWorkOrder({
        ...await dataFrom(request),workOrderId:Number(status[1])
      }));
+   const workOrderDocument=path.match(/^\/v1\/orders\/([1-9]\\d*)\/documents\/(work-order|quote|delivery|receipt)$/);
+   if(workOrderDocument&&method==='GET'){
+     const html=await services.renderWorkOrderDocument(
+       Number(workOrderDocument[1]),workOrderDocument[2]);
+     return new Response(html,{status:200,headers:{
+       'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store',
+       'X-Content-Type-Options':'nosniff',
+       'Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"
+     }});
+   }
    const quote=path.match(/^\/v1\/orders\/([1-9]\d*)\/quote$/);
    if(quote&&method==='GET')
      return json(await services.getQuote(Number(quote[1])));
