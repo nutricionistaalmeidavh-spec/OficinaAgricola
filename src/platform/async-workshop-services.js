@@ -8,6 +8,7 @@ import {createAsyncWorkshopFiscal} from './async-workshop-fiscal.js';
 import {resolveNfseRoute} from './nfse-routing.js';
 import {createAsyncWorkshopFinance} from './async-workshop-finance.js';
 import {createAsyncWorkshopOrders} from './async-workshop-orders.js';
+import {createAsyncWorkshopDocuments} from './async-workshop-documents.js';
 import {createAsyncWorkshopInventory} from './async-workshop-inventory.js';
 import {createAsyncWorkshopStocktakes} from './async-workshop-stocktake.js';
 import {normalizeGtin} from './inventory-gtin.js';
@@ -529,6 +530,7 @@ export function createAsyncWorkshopServices(port,{fiscalProvider=null,objectStor
    ...createAsyncWorkshopFiscal(port,{provider:fiscalProvider}),
    ...createAsyncWorkshopFinance(port),
    ...createAsyncWorkshopOrders(port,{createWorkOrder,transitionWorkOrder,getWorkOrder}),
+   ...createAsyncWorkshopDocuments(port),
    ...createAsyncWorkshopInventory(port),
    ...createAsyncWorkshopStocktakes(port),
    ...createAsyncWorkshopProcurement(port),
