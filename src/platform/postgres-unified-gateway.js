@@ -96,7 +96,7 @@ export function createPostgresUnifiedGateway({
      const email=String(input.email||'').trim().toLowerCase();
      if(path.endsWith('/request')){
        const answer=await licenseControl.requestRecovery({email});
-       return json({accepted:answer.accepted===true},202);
+       return json({accepted:answer.accepted===true,delivery:answer.delivery==='manual'?'manual':'email'},202);
      }
      const password=input.password,code=String(input.code||'');
      if(typeof password!=='string'||password.length<12||password.length>128||
