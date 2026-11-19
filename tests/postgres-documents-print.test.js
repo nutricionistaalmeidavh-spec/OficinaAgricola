@@ -87,7 +87,7 @@ test('browser GET quote document reaches PostgreSQL native renderer without fall
    return {id:4,name:'Operador',role:'ADMIN'};},
   async requireUnitMembership(id,unitId){assert.equal(id,4);assert.equal(unitId,1);
    return {id:1,companyId:1,role:'ADMIN'};},
-  async listUserUnits(){return [];}
+  async listUserUnits(){return [{id:1,companyId:1,role:'ADMIN'}];}
  };
  const services={
   async validateSession(){return {role:'ADMIN'};},
