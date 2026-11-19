@@ -10,7 +10,8 @@ test('P1 impressão de OS e documentos usa ação explícita, com layout A4',()=
  assert.match(template,/@media print/);
  assert.match(orders,/data-print=/);
  assert.match(orders,/function printWorkOrderDocument/);
- assert.match(orders,/\.print\(\)/);
+ assert.match(printer,/\.print\(\)/);
+ assert.doesNotMatch(printer,/window\.open\s*\(/);
 });
 
 test('P1: seletores de documentos e impressão são coleções; abertura da OS não interrompe ações',()=>{
