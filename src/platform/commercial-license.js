@@ -126,7 +126,8 @@ export function createOficinaCommercialLicense({
     email:state.accountEmail,installationId:state.installationId
   }});
   if(answer.accepted!==true)throw Object.assign(Error('Central não confirmou a solicitação'),{status:503});
-  return {accepted:true};
+  // Existing central may still use admin-assisted OTP. Do not claim email sent.
+  return {accepted:true,delivery:typeof answer.message==='string'?'manual':'email'};
  }
  async function verifyRecovery({email,code}={}){
   const state=await accountForRecovery(email);
