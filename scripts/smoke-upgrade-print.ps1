@@ -19,7 +19,13 @@ if (-not (Get-PrinterDriver -Name 'Microsoft Print To PDF' -ErrorAction Silently
 Add-PrinterPort -Name $destination
 Add-Printer -Name 'Oficina QA PDF' -DriverName 'Microsoft Print To PDF' -PortName $destination
 (Get-CimInstance Win32_Printer -Filter "Name='Oficina QA PDF'") | Invoke-CimMethod -MethodName SetDefaultPrinter | Out-Null
-python -m pip install --disable-pip-version-check playwright==1.51.0 pywinauto==0.6.9 pypdf==5.4.0
+$tesseract = Join-Path $env:ProgramFiles 'Tesseract-OCR/tesseract.exe'
+if (-not (Test-Path $tesseract)) {
+  choco install tesseract -y --no-progress
+  if ($LASTEXITCODE -ne 0) { throw 'Instalação do OCR para validação falhou' }
+}
+$env:OFICINA_QA_TESSERACT = $tesseract
+python -m pip install --disable-pip-version-check playwright==1.51.0 pywinauto==0.6.9 PyMuPDF==1.26.5
 if ($LASTEXITCODE -ne 0) { throw 'Dependências do teste Windows indisponíveis' }
 python scripts/windows-upgrade-print.py $root $previous $current $destination $version
 if ($LASTEXITCODE -ne 0) { throw 'Validação do upgrade e PDF falhou' }

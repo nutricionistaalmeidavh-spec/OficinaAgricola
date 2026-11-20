@@ -178,6 +178,7 @@ jobs:
         run: |
           ./scripts/smoke-upgrade-print.ps1
       - name: Guardar orçamento PDF de teste
+        if: always() && hashFiles('qa-output/orcamento-windows.pdf') != ''
         uses: actions/upload-artifact@v4
         with:
           name: oficina-orcamento-impresso

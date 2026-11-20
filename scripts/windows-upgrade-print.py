@@ -3,7 +3,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
-from io import BytesIO
+import re
 import ssl
 import subprocess
 import sys
@@ -13,7 +13,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from playwright.sync_api import sync_playwright
-from pypdf import PdfReader
+import pymupdf
 from pywinauto import Desktop
 
 root, previous, candidate, pdf = map(Path, sys.argv[1:5])
@@ -148,10 +148,22 @@ try:
             time.sleep(.3)
         else:
             raise TimeoutError('O spooler não concluiu o PDF em 90 segundos')
-        reader = PdfReader(BytesIO(printed))
-        text = ' '.join(p.extract_text() for p in reader.pages)
-        for expected in (customer_name, item, '150,00'):
-            assert expected in text, (expected, text)
+        # The Windows PDF driver can flatten type into images/paths. Verify
+        # what the customer actually sees by reading rendered pages with OCR.
+        with pymupdf.open(stream=printed, filetype='pdf') as doc:
+            assert len(doc) >= 1
+            words = []
+            for n, sheet in enumerate(doc):
+                image = root / f'printed-{n}.png'
+                sheet.get_pixmap(dpi=300).save(image)
+                read = subprocess.check_output([os.environ['OFICINA_QA_TESSERACT'],
+                    str(image), 'stdout', '-l', 'eng', '--psm', '6'], encoding='utf-8')
+                words.append(read)
+            visible = ' '.join(' '.join(words).split())
+            print('Visible PDF content:', visible)
+            for expected in (customer_name, item):
+                assert expected.casefold() in visible.casefold(), expected
+            assert re.search(r'150[,.]00', visible), visible
         print('PASS commercial upgrade, existing OS, native Windows PDF:', hashlib.sha256(printed).hexdigest())
 finally:
     stop_app(app)
