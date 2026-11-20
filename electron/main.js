@@ -1,8 +1,10 @@
-import { app, BrowserWindow, dialog, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { readFileSync } from 'node:fs';
 import {startDesktopUpdates} from './updater.js';
+
+import {printDocument} from './print-document.js';
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) app.quit();
@@ -98,6 +100,7 @@ function createWindow(url) {
     backgroundColor: '#f4f7f5',
     autoHideMenuBar: true,
     webPreferences: {
+      preload: join(app.getAppPath(), 'electron', 'document-preload.cjs'),
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
@@ -149,6 +152,22 @@ app.whenReady().then(async () => {
   const root = dataRoot();
   app.setPath('userData', join(root, 'electron'));
   const url = await startPostgresDesktop();
+  let printing = false;
+  ipcMain.handle('oficina:print-document', async (event, html) => {
+    const owner = mainWindow;
+    const frame = event.senderFrame;
+    if (!owner || event.sender !== owner.webContents || !frame ||
+        frame !== owner.webContents.mainFrame || new URL(frame.url).origin !== new URL(url).origin)
+      throw Error('Origem de impressão inválida.');
+    if (typeof html !== 'string' || !html.trim()) throw Error('Documento vazio.');
+    if (printing) throw Error('Já existe uma impressão em andamento.');
+    printing = true;
+    try {
+      return await printDocument(BrowserWindow, owner, html);
+    } finally {
+      printing = false;
+    }
+  });
   createWindow(url);
   startDesktopUpdates({getWindow:()=>mainWindow,isCommercial:commercialEditionRequired()});
 

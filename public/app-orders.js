@@ -522,8 +522,6 @@ async function displayBillingPlan(plan,workOrderId){
  if(back)back.onclick=()=>openWorkOrder(workOrderId).catch(error=>toast(error.message,true));
 }
 
-// O Electron bloqueia popups por segurança. A impressão usa um iframe local
-// associado à ação explícita do operador, sem abrir janelas externas.
 async function printWorkOrderDocument(id,kind){
  try{
   const html=await api(`/api/work-orders/${id}/documents/${kind}`,{raw:true});
