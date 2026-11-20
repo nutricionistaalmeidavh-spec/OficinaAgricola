@@ -55,7 +55,7 @@ test('CANON UI: etiquetas são definidas na fonte, sem relabel pós-render',()=>
   const extension=read('public/app-assistencia.js');
   const orders=read('public/app-orders.js');
   assert.doesNotMatch(extension,/relabelAssistenciaModal|assistenciaBaseRenderMachines/);
-  assert.match(orders,/<h3>Equipamento<\/h3>/);
+  assert.match(orders,/documentCardHeading\('Equipamento','work-order'/);
   assert.match(read('public/app-journey.js'),/<label>Veículo \/ equipamento<select/);
 });
 

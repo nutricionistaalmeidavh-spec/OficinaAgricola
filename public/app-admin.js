@@ -39,10 +39,12 @@ async function renderSettings(){
     ['users','Equipe e acessos','Contas e permissões da equipe'],
     ['setup','Preparação do sistema','Acompanhe os passos para começar a trabalhar']
   ];
+  if(window.oficinaUpdates)links.unshift(['updates','Atualizações','Versão instalada e novas versões']);
   const navigation=links.map(([id,title,description])=>'<button type="button" class="btn settings-jump" data-settings-target="'+id+'"><strong>'+title+'</strong><small>'+description+'</small></button>').join('');
   setContent(`<div class="settings-page">
     <p class="muted">Gerencie os dados da oficina e encontre rapidamente as configurações que precisa.</p>
     <div class="settings-links" aria-label="Áreas de configuração">${navigation}</div>
+    ${window.oficinaUpdates?`<section class="card" id="settings-updates"><div class="card-head"><h2>Atualizações</h2><button class="btn" type="button" id="checkDesktopUpdate">Verificar atualizações</button></div><p id="desktopVersion"></p><p role="status" id="desktopUpdateStatus"></p></section>`:''}
     <section class="card" id="settings-company"><div class="card-head"><h2>Minha oficina</h2></div>
       ${isAdmin?'':'<p class="muted" role="status">Somente administradores podem alterar estes dados. Você está visualizando as informações cadastradas.</p>'}
       <form id="companyForm" class="form-stack">
@@ -64,6 +66,25 @@ async function renderSettings(){
     </section>
     <section class="card" id="settings-setup"><h2>Preparação do sistema</h2><p class="muted">O checklist de primeiro acesso mostra o que falta configurar para começar a operar.</p><button class="btn" type="button" id="settingsSetupOpen">Ver preparação do sistema</button></section>
   </div>`);
+  const check=$('#checkDesktopUpdate');
+  if(check){
+    const version=$('#desktopVersion'),status=$('#desktopUpdateStatus');
+    const display=info=>{
+      version.textContent='Versão instalada: '+info.version;
+      status.textContent=({current:'Seu sistema está atualizado.',available:'Versão '+info.latest+' disponível.',
+        error:'Não foi possível verificar a atualização. Confira a conexão e tente novamente.',
+        unchecked:'Aguardando verificação.'})[info.state];
+    };
+    check.disabled=true;
+    window.oficinaUpdates.status().then(display).catch(()=>{status.textContent='Versão indisponível.';}).finally(()=>{check.disabled=false;});
+    check.onclick=async()=>{
+      check.disabled=true;
+      status.textContent='Verificando atualizações…';
+      try{display(await window.oficinaUpdates.check());}
+      catch{status.textContent='Não foi possível consultar a versão. Tente novamente.';}
+      finally{check.disabled=false;}
+    };
+  }
   const f=$('#companyForm');
   if(isAdmin)f.onsubmit=async e=>{e.preventDefault();if(state.pageSaving)return;state.pageSaving=true;const button=$('button[type=submit]',f);button.disabled=true;try{await api('/api/company',{method:'PATCH',body:formObj(new FormData(f))});state.pageDirty=false;toast('Empresa atualizada');await refreshCurrentPage()}catch(error){toast(error.message,true)}finally{state.pageSaving=false;button.disabled=false}};
   const nu=$('#newUser');if(nu)nu.onclick=userModal;

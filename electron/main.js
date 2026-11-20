@@ -153,12 +153,16 @@ app.whenReady().then(async () => {
   app.setPath('userData', join(root, 'electron'));
   const url = await startPostgresDesktop();
   let printing = false;
-  ipcMain.handle('oficina:print-document', async (event, html) => {
+  function trustedWindow(event){
     const owner = mainWindow;
     const frame = event.senderFrame;
     if (!owner || event.sender !== owner.webContents || !frame ||
         frame !== owner.webContents.mainFrame || new URL(frame.url).origin !== new URL(url).origin)
-      throw Error('Origem de impressão inválida.');
+      throw Error('Origem da janela inválida.');
+    return owner;
+  }
+  ipcMain.handle('oficina:print-document', async (event, html) => {
+    const owner=trustedWindow(event);
     if (typeof html !== 'string' || !html.trim()) throw Error('Documento vazio.');
     if (printing) throw Error('Já existe uma impressão em andamento.');
     printing = true;
@@ -169,7 +173,9 @@ app.whenReady().then(async () => {
     }
   });
   createWindow(url);
-  startDesktopUpdates({getWindow:()=>mainWindow,isCommercial:commercialEditionRequired()});
+  const updates=startDesktopUpdates({getWindow:()=>mainWindow,isCommercial:commercialEditionRequired()});
+  ipcMain.handle('oficina:update-status',event=>{trustedWindow(event);return updates.status();});
+  ipcMain.handle('oficina:check-update',event=>{trustedWindow(event);return updates.check();});
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0 && serverUrl) createWindow(serverUrl);
