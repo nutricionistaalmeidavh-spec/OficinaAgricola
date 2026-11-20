@@ -69,9 +69,25 @@ def start_app():
 
 
 def stop_app(app):
-    subprocess.run(['powershell', '-NoProfile', '-Command',
-                    f'(Get-Process -Id {app.pid}).CloseMainWindow()'], check=True)
-    app.wait(timeout=45)
+    # The health endpoint can answer before Electron has shown its main window.
+    # A published newer release can also open a native dialog on the old install.
+    deadline = time.monotonic() + 45
+    while app.poll() is None and time.monotonic() < deadline:
+        for window in Desktop(backend='uia').windows(process=app.pid):
+            for button in window.descendants(control_type='Button'):
+                if button.window_text() == 'Mais tarde' and button.is_enabled():
+                    button.invoke()
+                    break
+        subprocess.run(['powershell', '-NoProfile', '-Command',
+                        f'(Get-Process -Id {app.pid} -ErrorAction SilentlyContinue).CloseMainWindow()'],
+                       capture_output=True)
+        try:
+            app.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            continue
+    if app.poll() is None:
+        raise TimeoutError('Fechamento normal do Oficina excedeu 45 segundos')
+
 
 
 def confirm_print():
@@ -129,8 +145,19 @@ try:
         form.locator('[name=username]').fill(admin['username'])
         form.locator('[name=password]').fill(admin['password'])
         form.locator('[type=submit]').click()
+        page.locator('[data-page="settings"]:visible').first.click()
+        page.locator('#checkDesktopUpdate').wait_for()
+        page.wait_for_function("v => document.querySelector('#desktopVersion')?.textContent.includes(v)", arg=version)
+        page.locator('#checkDesktopUpdate').click()
+        page.get_by_text('Seu sistema está atualizado.', exact=True).wait_for()
+        page.locator('#settings-updates').screenshot(path=str(pdf.parent / 'atualizacoes.png'))
         page.locator('[data-page="work-orders"]:visible').first.click()
         page.locator(f'[data-os="{order["id"]}"]:visible').first.click()
+        for kind in ('work-order', 'quote', 'delivery', 'receipt'):
+            button = page.locator(f'.detail-block [data-print="{kind}"]')
+            button.wait_for(state='visible')
+            assert button.count() == 1 and button.locator('svg').count() == 1, kind
+        page.locator('#modalBody').screenshot(path=str(pdf.parent / 'documentos-os.png'))
         # Drive the separate Gerar PDF button, including saving the downloaded bytes.
         downloads = root / 'downloads'
         downloads.mkdir()

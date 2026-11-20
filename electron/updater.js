@@ -25,17 +25,23 @@ function installOnExit(installer){
 export function startDesktopUpdates({getWindow,isCommercial=false}){
   // Ambos os canais recebem atualizações somente da mesma edição.
   if(!app.isPackaged||process.platform!=='win32'||process.arch!=='x64')return;
-  let busy=false;
+  let status={version:app.getVersion(),state:'unchecked'};
+  let pendingCheck=null;
   let closingForUpdate=false;
 
-  async function check(){
-    if(busy||closingForUpdate)return;
-    busy=true;
+  function check(){
+    if(closingForUpdate)return Promise.resolve(status);
+    if(!pendingCheck)pendingCheck=checkOnce().finally(()=>{pendingCheck=null;});
+    return pendingCheck;
+  }
+
+  async function checkOnce(){
     let userRequestedDownload=false;
     const window=getWindow();
     try{
       const update=await checkGitHubUpdate(app.getVersion(),{isCommercial});
-      if(!update||!window||window.isDestroyed())return;
+      status={version:app.getVersion(),state:update?'available':'current',latest:update?.version};
+      if(!update||!window||window.isDestroyed())return status;
       const question=await dialog.showMessageBox(window,{
         type:'info',
         title:'Atualização disponível · ArtiSys Oficina',
@@ -43,7 +49,7 @@ export function startDesktopUpdates({getWindow,isCommercial=false}){
         detail:'O instalador oficial será baixado do GitHub e validado com SHA256. Seus dados da oficina continuarão no computador.',
         buttons:['Baixar atualização','Mais tarde'],defaultId:0,cancelId:1,noLink:true
       });
-      if(question.response!==0)return;
+      if(question.response!==0)return status;
       userRequestedDownload=true;
       window.setProgressBar(0);
       const installer=await downloadVerifiedUpdate(update,
@@ -53,7 +59,7 @@ export function startDesktopUpdates({getWindow,isCommercial=false}){
           }
         });
       if(!window.isDestroyed())window.setProgressBar(-1);
-      if(!getWindow()||getWindow().isDestroyed())return;
+      if(!getWindow()||getWindow().isDestroyed())return status;
       const answer=await dialog.showMessageBox(getWindow(),{
         type:'question',
         title:'Atualização pronta · ArtiSys Oficina',
@@ -61,7 +67,7 @@ export function startDesktopUpdates({getWindow,isCommercial=false}){
         detail:'Salve qualquer edição em andamento. O programa será fechado, atualizará o instalador NSIS e será reaberto automaticamente. O banco PostgreSQL e os arquivos locais não serão removidos.',
         buttons:['Instalar e reiniciar','Depois'],defaultId:0,cancelId:1,noLink:true
       });
-      if(answer.response!==0)return;
+      if(answer.response!==0)return status;
       closingForUpdate=true;
       app.once('quit',()=>{
         try{installOnExit(installer);}
@@ -69,6 +75,7 @@ export function startDesktopUpdates({getWindow,isCommercial=false}){
       });
       app.quit(); // before-quit do main encerra o PostgreSQL antes do instalador
     }catch(error){
+      status={version:app.getVersion(),state:'error'};
       console.warn('[updater] atualização indisponível:',error?.message||error);
       const active=getWindow();
       // Falha de conexão na checagem periódica não abre modal nem bloqueia offline.
@@ -83,11 +90,12 @@ export function startDesktopUpdates({getWindow,isCommercial=false}){
       }
     }finally{
       if(window&&!window.isDestroyed())window.setProgressBar(-1);
-      busy=false;
     }
+    return status;
   }
   const timer=setInterval(()=>void check(),CHECK_INTERVAL_MS);
   timer.unref?.();
   app.once('will-quit',()=>clearInterval(timer));
   void check();
+  return {status:()=>status,check};
 }

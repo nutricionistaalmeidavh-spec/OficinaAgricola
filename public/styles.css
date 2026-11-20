@@ -115,3 +115,9 @@ button.first-access-action:focus-visible,.first-access-button:focus-visible,.fir
   .first-access-shortcut-actions{grid-template-columns:1fr}
 }
 @media (prefers-reduced-motion:reduce){.first-access-progress>span{transition:none}}
+
+.os-document-heading,.os-document-actions{display:flex;align-items:center;gap:.5rem}
+.os-document-heading{justify-content:space-between;margin-bottom:.6rem}
+.os-document-heading h3{margin:0}
+.os-document-actions .btn{display:grid;place-items:center;min-width:44px;min-height:44px;padding:.5rem}
+.os-document-actions svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
