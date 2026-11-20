@@ -171,6 +171,18 @@ jobs:
             }
             $env:LOCALAPPDATA = $originalLocal
           }
+      - name: Atualizar comercial 1.0.11 e imprimir orçamento no Microsoft Print to PDF
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ./scripts/smoke-upgrade-print.ps1
+      - name: Guardar orçamento PDF de teste
+        uses: actions/upload-artifact@v4
+        with:
+          name: oficina-orcamento-impresso
+          path: qa-output/orcamento-windows.pdf
+          if-no-files-found: error
       - name: Confirmar tag da main e versão do instalador
         if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
