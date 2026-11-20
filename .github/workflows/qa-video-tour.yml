@@ -1,0 +1,66 @@
+name: QA Playwright - Video Tour Primeiro Acesso
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/qa-tour-primeiro-acesso.mjs'
+      - '.github/workflows/qa-video-tour.yml'
+      - 'public/**'
+      - 'src/**'
+      - 'tests/first-access-wizard.test.js'
+
+permissions:
+  contents: read
+
+jobs:
+  tour-video:
+    name: Tour completo - ${{ matrix.viewport }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        viewport: [desktop, mobile]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: oficina_ci
+          POSTGRES_PASSWORD: ci-only-disposable
+          POSTGRES_DB: oficina_tour
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U oficina_ci -d oficina_tour"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+          cache: npm
+      - name: Dependencias self-hosted e navegador
+        run: |
+          npm ci
+          npm install --no-save --package-lock=false playwright@1.62.1
+          npx playwright install --with-deps chromium
+      - name: Verificar contrato do primeiro acesso
+        run: node --test tests/first-access-wizard.test.js
+      - name: Gravar tour de ponta a ponta em PostgreSQL descartavel
+        env:
+          POSTGRES_TEST_URL: postgresql://oficina_ci:ci-only-disposable@127.0.0.1:5432/oficina_tour
+        run: node scripts/qa-tour-primeiro-acesso.mjs ${{ matrix.viewport }} "$PWD/qa-artifacts/tour-${{ matrix.viewport }}"
+      - name: Guardar video, capturas, erros e logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oficina-tour-${{ matrix.viewport }}-${{ github.run_number }}
+          path: qa-artifacts/tour-${{ matrix.viewport }}/
+          retention-days: 7
+          if-no-files-found: warn
