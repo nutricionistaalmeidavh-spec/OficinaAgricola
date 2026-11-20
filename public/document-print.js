@@ -1,8 +1,7 @@
 (function(document,window){
  'use strict';
  // Document HTML is rendered and escaped by the canonical SQL backend.
- // Printing within a sandboxed frame avoids popup windows, which the Electron
- // desktop intentionally denies for user safety.
+ // The desktop bridge prints the same HTML that the browser previews.
  const preparedFrame=(html,label)=>{
    const frame=document.createElement('iframe');
    frame.setAttribute('title',label);
@@ -12,6 +11,7 @@
    return frame;
  };
  function printHtml(html){
+   if(window.oficinaPrinter)return window.oficinaPrinter.printDocument(html);
    return new Promise((resolve,reject)=>{
      const frame=preparedFrame(html,'Documento para impressão');
      frame.style.cssText='position:fixed;left:0;top:0;width:1px;height:1px;border:0;opacity:0;pointer-events:none';
@@ -59,7 +59,16 @@
    const onKey=e=>{if(e.key==='Escape')closePreview();};
    const closePreview=()=>{document.removeEventListener('keydown',onKey);veil.remove()};
    close.onclick=closePreview;
-   print.onclick=()=>{try{frame.contentWindow?.focus();frame.contentWindow?.print();}catch(error){console.error('Impressão:',error.message)}};
+   const status=document.createElement('span');
+   status.setAttribute('role','alert');
+   print.onclick=async()=>{
+     print.disabled=true;
+     status.textContent='';
+     try{await printHtml(html);}
+     catch(error){status.textContent='Falha na impressão: '+error.message;}
+     finally{print.disabled=false;}
+   };
+   toolbar.appendChild(status);
    actions.appendChild(print);actions.appendChild(close);
    toolbar.appendChild(title);toolbar.appendChild(actions);
    veil.appendChild(toolbar);veil.appendChild(frame);
