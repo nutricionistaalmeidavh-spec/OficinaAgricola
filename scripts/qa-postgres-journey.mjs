@@ -35,7 +35,7 @@ try{
   }
   if(!ready)throw Error('Gateway PostgreSQL não iniciou');
   browser=await chromium.launch({headless:true});context=await browser.newContext({viewport});page=await context.newPage();
-  page.on('pageerror',error=>errors.push(error.message));
+  page.on('pageerror',error=>errors.push(String(error.stack||error.message)));
   await page.goto(base);await page.locator('#setupForm').waitFor({state:'visible'});
   await screenshot('01-primeiro-acesso');
   for(const [name,value] of Object.entries({name:'Gestor QA PostgreSQL',username:'gestorqa',password:'QAOnly@2026!Strong',confirmPassword:'QAOnly@2026!Strong'}))await page.locator('#setupForm [name="'+name+'"]').fill(value);

@@ -37,6 +37,7 @@ async function renderSettings(){
   const links=[
     ['company','Minha oficina','Dados cadastrais e perfil de atendimento'],
     ['users','Equipe e acessos','Contas e permissões da equipe'],
+    ['checklists','Modelos de checklist','Entrada, revisão, controle de qualidade e entrega'],
     ['setup','Preparação do sistema','Acompanhe os passos para começar a trabalhar']
   ];
   const navigation=links.map(([id,title,description])=>'<button type="button" class="btn settings-jump" data-settings-target="'+id+'"><strong>'+title+'</strong><small>'+description+'</small></button>').join('');
@@ -62,11 +63,13 @@ async function renderSettings(){
       <p class="muted">Administrador gerencia a oficina; Atendimento registra operações; Técnico executa serviços; Financeiro acompanha as finanças.</p>
       ${isAdmin?(users.length?users.map(settingsUserRow).join(''):'<div class="empty">Nenhum usuário cadastrado.</div>'):'<p class="muted">A lista de usuários é restrita aos administradores.</p>'}
     </section>
+    <section class="card" id="settings-checklists"><div class="card-head"><h2>Modelos de checklist</h2></div><p class="muted">Personalize inspeções de entrada, revisão, execução, segurança e entrega. Histórico de OS preservado.</p>${isAdmin?'<button type="button" class="btn primary" id="settingsChecklistManager">Gerenciar modelos</button>':'<p class="muted">Somente administradores podem alterar os modelos.</p>'}</section>
     <section class="card" id="settings-setup"><h2>Preparação do sistema</h2><p class="muted">O checklist de primeiro acesso mostra o que falta configurar para começar a operar.</p><button class="btn" type="button" id="settingsSetupOpen">Ver preparação do sistema</button></section>
   </div>`);
   const f=$('#companyForm');
   if(isAdmin)f.onsubmit=async e=>{e.preventDefault();if(state.pageSaving)return;state.pageSaving=true;const button=$('button[type=submit]',f);button.disabled=true;try{await api('/api/company',{method:'PATCH',body:formObj(new FormData(f))});state.pageDirty=false;toast('Empresa atualizada');await refreshCurrentPage()}catch(error){toast(error.message,true)}finally{state.pageSaving=false;button.disabled=false}};
   const nu=$('#newUser');if(nu)nu.onclick=userModal;
+  const cm=$('#settingsChecklistManager');if(cm)cm.onclick=()=>void openChecklistTemplatesManager().catch(e=>toast(e.message,true));
   if(isAdmin)document.querySelectorAll('#settings-users [data-user-action]').forEach(button=>{
     const user=users.find(item=>Number(item.id)===Number(button.dataset.userId));
     if(!user)return;
