@@ -69,9 +69,25 @@ def start_app():
 
 
 def stop_app(app):
-    subprocess.run(['powershell', '-NoProfile', '-Command',
-                    f'(Get-Process -Id {app.pid}).CloseMainWindow()'], check=True)
-    app.wait(timeout=45)
+    # The health endpoint can answer before Electron has shown its main window.
+    # A published newer release can also open a native dialog on the old install.
+    deadline = time.monotonic() + 45
+    while app.poll() is None and time.monotonic() < deadline:
+        for window in Desktop(backend='uia').windows(process=app.pid):
+            for button in window.descendants(control_type='Button'):
+                if button.window_text() == 'Mais tarde' and button.is_enabled():
+                    button.invoke()
+                    break
+        subprocess.run(['powershell', '-NoProfile', '-Command',
+                        f'(Get-Process -Id {app.pid} -ErrorAction SilentlyContinue).CloseMainWindow()'],
+                       capture_output=True)
+        try:
+            app.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            continue
+    if app.poll() is None:
+        raise TimeoutError('Fechamento normal do Oficina excedeu 45 segundos')
+
 
 
 def confirm_print():

@@ -171,7 +171,7 @@ jobs:
             }
             $env:LOCALAPPDATA = $originalLocal
           }
-      - name: Atualizar comercial 1.0.12 e imprimir orçamento no Microsoft Print to PDF
+      - name: Atualizar comercial 1.0.13 e imprimir orçamento no Microsoft Print to PDF
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
