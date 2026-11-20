@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from io import BytesIO
 import ssl
 import subprocess
 import sys
@@ -134,15 +135,24 @@ try:
             page.locator('[data-print=quote]').click()
         assert reply.value.status == 200 and item in reply.value.text()
         confirm_print()
-        for _ in range(100):
-            if pdf.is_file() and pdf.read_bytes().rstrip().endswith(b'%%EOF'):
-                break
+        # The spooler can create the output with an exclusive handle before
+        # writing the last PDF page. Read only after the job releases it.
+        deadline = time.monotonic() + 90
+        while time.monotonic() < deadline:
+            try:
+                printed = pdf.read_bytes()
+                if printed.rstrip().endswith(b'%%EOF'):
+                    break
+            except (FileNotFoundError, PermissionError):
+                pass
             time.sleep(.3)
-        reader = PdfReader(pdf)
+        else:
+            raise TimeoutError('O spooler não concluiu o PDF em 90 segundos')
+        reader = PdfReader(BytesIO(printed))
         text = ' '.join(p.extract_text() for p in reader.pages)
         for expected in (customer_name, item, '150,00'):
             assert expected in text, (expected, text)
-        print('PASS commercial upgrade, existing OS, native Windows PDF:', hashlib.sha256(pdf.read_bytes()).hexdigest())
+        print('PASS commercial upgrade, existing OS, native Windows PDF:', hashlib.sha256(printed).hexdigest())
 finally:
     stop_app(app)
     authority.shutdown()
