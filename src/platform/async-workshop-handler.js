@@ -186,6 +186,12 @@ export function createAsyncWorkshopHandler({services,serviceToken,migrate=null,p
      return json(await services.transitionWorkOrder({
        ...await dataFrom(request),workOrderId:Number(status[1])
      }));
+   const pdfOrder=path.match(/^\/v1\/orders\/([1-9]\d*)\/documents\/work-order\/pdf$/);
+   if(pdfOrder&&method==='GET'){
+     const pdf=await services.workOrderPdf(Number(pdfOrder[1]));
+     return new Response(pdf,{headers:{'Content-Type':'application/pdf','Cache-Control':'no-store',
+       'X-Content-Type-Options':'nosniff'}});
+   }
    const workOrderDocument=path.match(/^\/v1\/orders\/([1-9]\d*)\/documents\/(work-order|quote|delivery|receipt)$/);
    if(workOrderDocument&&method==='GET'){
      const html=await services.renderWorkOrderDocument(

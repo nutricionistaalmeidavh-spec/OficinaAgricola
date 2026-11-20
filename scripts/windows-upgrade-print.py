@@ -131,6 +131,24 @@ try:
         form.locator('[type=submit]').click()
         page.locator('[data-page="work-orders"]:visible').first.click()
         page.locator(f'[data-os="{order["id"]}"]:visible').first.click()
+        # Drive the separate Gerar PDF button, including saving the downloaded bytes.
+        downloads = root / 'downloads'
+        downloads.mkdir()
+        cdp = browser.new_browser_cdp_session()
+        cdp.send('Browser.setDownloadBehavior', {'behavior': 'allow', 'downloadPath': str(downloads)})
+        with page.expect_response(lambda r: r.url.endswith('/documents/work-order/pdf')) as export:
+            page.locator('#pdfOS').click()
+        assert export.value.status == 200 and export.value.headers['content-type'].startswith('application/pdf')
+        deadline = time.monotonic() + 45
+        target = downloads / f'OS-{order["os_number"]}.pdf'
+        while not target.exists() and time.monotonic() < deadline:
+            time.sleep(.25)
+        with pymupdf.open(target) as document:
+            text = ' '.join(sheet.get_text() for sheet in document)
+            for expected in ('ORDEM DE SERVIÇO', customer_name, item, '150,00', 'ASSINATURAS'):
+                assert expected in text, (expected, text)
+        (pdf.parent / 'os-gerar-pdf.pdf').write_bytes(target.read_bytes())
+        print('PASS Gerar PDF: downloaded original OS, customer, item, total and signatures')
         with page.expect_response(lambda r: r.url.endswith('/documents/quote')) as reply:
             page.locator('[data-print=quote]').click()
         assert reply.value.status == 200 and item in reply.value.text()
