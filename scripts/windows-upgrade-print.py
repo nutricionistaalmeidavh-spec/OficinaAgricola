@@ -155,7 +155,8 @@ try:
         page.locator(f'[data-os="{order["id"]}"]:visible').first.click()
         for kind in ('work-order', 'quote', 'delivery', 'receipt'):
             button = page.locator(f'.detail-block [data-print="{kind}"]')
-            assert button.count() == 1 and button.locator('svg').count() == 1
+            button.wait_for(state='visible')
+            assert button.count() == 1 and button.locator('svg').count() == 1, kind
         page.locator('#modalBody').screenshot(path=str(pdf.parent / 'documentos-os.png'))
         # Drive the separate Gerar PDF button, including saving the downloaded bytes.
         downloads = root / 'downloads'
