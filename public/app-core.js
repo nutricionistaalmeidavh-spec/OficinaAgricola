@@ -329,7 +329,13 @@ function showModal(title,html,onSubmit,{entityKey=null}={}){
       }
       toast(err.message,true);
     }
-    finally{if(btn)btn.disabled=false;form.removeAttribute('aria-busy');if(state.modalToken===token&&modalSession)modalSession.busy=false}
+    finally{
+      if(btn)btn.disabled=false;
+      form.removeAttribute('aria-busy');
+      // O callback pode atualizar o mesmo formulário com novo token (ex.: contagem física).
+      // Liberar apenas a mesma entidade; nunca desbloquear um modal diferente.
+      if(modalSession&&(state.modalToken===token||state.modalKey===key))modalSession.busy=false;
+    }
   };
 }
 function closeModal(){
