@@ -1,5 +1,7 @@
 import {renderDocumentFromData} from './document-html.js';
 
+import {renderWorkOrderPdf} from './work-order-pdf.js';
+
 // Read-only document projections sourced from the same tenant's canonical SQL.
 // No SQLite fallback, network dependency or mutation of customers' records.
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
@@ -22,11 +24,11 @@ export function createAsyncWorkshopDocuments(port){
  if(!port||typeof port.first!=='function'||typeof port.all!=='function'||
     !['postgres','sqlite','d1'].includes(port.engine))
   throw Error('Renderer exige SQL por tenant');
- async function renderWorkOrderDocument(workOrderId,kind='work-order'){
+ async function loadDocument(workOrderId,kind){
   if(!['quote','work-order','delivery','receipt'].includes(kind))
     fail('Tipo de documento não suportado',404);
   const id=orderId(workOrderId);
-  const os=await port.first('SELECT * FROM work_orders WHERE id=?',[id]);
+  const os=await port.first('SELECT w.*,t.name AS technician_name FROM work_orders w LEFT JOIN technicians t ON t.id=w.technician_id WHERE w.id=?',[id]);
   if(!os)fail('Ordem de serviço não encontrada',404);
   const company=await port.first('SELECT * FROM company_settings WHERE id=1');
   if(!company)fail('Dados da oficina indisponíveis',409);
@@ -35,13 +37,23 @@ export function createAsyncWorkshopDocuments(port){
   const items=quoteRow
     ?await port.all('SELECT * FROM quote_items WHERE quote_id=? ORDER BY id',[quoteRow.id])
     :[];
-  const receipts=await port.all(
-    'SELECT * FROM receipts WHERE work_order_id=? AND reversed_at IS NULL ORDER BY received_at',[id]);
-  return renderDocumentFromData({
+  return {
    os,company,customer:decodeSnapshot(os.snapshot_customer,'cliente'),
    machine:decodeSnapshot(os.snapshot_machine,'equipamento'),
-   quote:quoteRow?{...quoteRow,items}:null,receipts
-  },kind);
+   quote:quoteRow?{...quoteRow,items}:null
+  };
  }
- return Object.freeze({renderWorkOrderDocument});
+ async function renderWorkOrderDocument(workOrderId,kind='work-order'){
+  const data=await loadDocument(workOrderId,kind);
+  const receipts=kind==='receipt'?await port.all(
+    'SELECT * FROM receipts WHERE work_order_id=? AND reversed_at IS NULL ORDER BY received_at',[data.os.id]):[];
+  return renderDocumentFromData({...data,receipts},kind);
+ }
+ async function workOrderPdf(workOrderId){
+  const data=await loadDocument(workOrderId,'work-order');
+  const parts=await port.all(`SELECT p.description,w.quantity FROM work_order_parts w
+   JOIN parts p ON p.id=w.part_id WHERE w.work_order_id=? AND w.reversed_at IS NULL ORDER BY w.id`,[data.os.id]);
+  return renderWorkOrderPdf({...data,parts});
+ }
+ return Object.freeze({renderWorkOrderDocument,workOrderPdf});
 }
