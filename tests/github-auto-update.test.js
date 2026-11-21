@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {ReadableStream} from 'node:stream/web';
-import {compareVersions, selectUpdate, parseChecksum, downloadVerifiedUpdate, UPDATE_REPOSITORY} from '../electron/update-service.js';
+import {checkGitHubUpdate, compareVersions, selectUpdate, parseChecksum, downloadVerifiedUpdate, UPDATE_REPOSITORY} from '../electron/update-service.js';
 
 const tag='v1.0.1';
 const filename='ArtiSys-Oficina-Setup-1.0.1-Windows-x64.exe';
@@ -114,4 +114,14 @@ test('verifica nova release ao abrir e novamente a cada no máximo cinco minutos
  assert.match(updater,/setInterval\(\(\)=>void check\(\),CHECK_INTERVAL_MS\)/);
  assert.match(updater,/void check\(\);/);
  assert.match(updater,/if\(!app\.isPackaged\|\|process\.platform!=='win32'/);
+});
+
+test('consulta distingue versão atual, pacote disponível e consulta inconclusiva',async()=>{
+  const consult=(current,data)=>checkGitHubUpdate(current,{fetchImpl:async()=>({
+    ok:true,status:200,json:async()=>data
+  })});
+  assert.equal(await consult('1.0.1',release),null);
+  assert.equal((await consult('1.0.0',release)).version,'1.0.1');
+  await assert.rejects(consult('1.0.0',{...release,assets:[]}),/Pacote/);
+  await assert.rejects(checkGitHubUpdate('1.0.1',{fetchImpl:async()=>({ok:false,status:404})}),/404/);
 });

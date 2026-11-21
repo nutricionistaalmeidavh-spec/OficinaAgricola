@@ -72,9 +72,14 @@ export async function checkGitHubUpdate(currentVersion,{fetchImpl=globalThis.fet
     headers:{Accept:'application/vnd.github+json','User-Agent':'ArtiSys-Oficina-Updater'},
     signal:AbortSignal.timeout(15000)
   });
-  if(response.status===404)return null; // primeiro release ainda não foi publicado
   if(!response.ok)throw Error('GitHub Releases indisponível: HTTP '+response.status);
-  return selectUpdate(await response.json(),currentVersion,{isCommercial});
+  const release=await response.json();
+  if(release.draft||release.prerelease||!/^v\d+\.\d+\.\d+$/.test(release.tag_name))
+    throw Error('Versão publicada indisponível');
+  if(compareVersions(release.tag_name,currentVersion)<=0)return null;
+  const update=selectUpdate(release,currentVersion,{isCommercial});
+  if(!update)throw Error('Pacote de atualização desta edição indisponível');
+  return update;
 }
 
 export async function downloadVerifiedUpdate(update,directory,{fetchImpl=globalThis.fetch,onProgress=()=>{}}={}){
