@@ -18,7 +18,7 @@ export function buildPdf(pages){
   const xrefOffset=offset;let xref=`xref\n0 ${objects.length}\n0000000000 65535 f \n`;for(let i=1;i<objects.length;i++)xref+=`${String(offsets[i]).padStart(10,'0')} 00000 n \n`;xref+=`trailer\n<< /Size ${objects.length} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;chunks.push(Buffer.from(xref,'latin1'));return Buffer.concat(chunks);
 }
 
-export function renderWorkOrderPdf({os,company,customer,machine,quote,parts}){
+export function renderWorkOrderPdf({os,company,customer,machine,quote,parts,receipts=[]},kind='work-order'){
   const pages=[]; let commands=[]; let y=800;
   const textLine=(value,{x=48,size=10,bold=false,gap=14}={})=>{if(y<65)newPage();commands.push(`BT /${bold?'F2':'F1'} ${size} Tf ${x} ${y} Td (${pdfSafe(value)}) Tj ET`);y-=gap};
   const rule=()=>{commands.push(`0.85 G 48 ${y} m 547 ${y} l S`);y-=14};
@@ -29,12 +29,19 @@ export function renderWorkOrderPdf({os,company,customer,machine,quote,parts}){
   textLine(company.name,{size:18,bold:true,gap:22});
   textLine([company.document,company.phone].filter(Boolean).join('  |  '),{size:9,gap:12});
   if(company.address)textLine(company.address,{size:9,gap:16});
-  rule(); textLine(`ORDEM DE SERVIÇO #${os.os_number}`,{size:15,bold:true,gap:22});
+  rule(); textLine(`${{'work-order':'ORDEM DE SERVIÇO',quote:'ORÇAMENTO',delivery:'RESUMO DE ENTREGA',receipt:'RECIBO'}[kind]} #${os.os_number}`,{size:15,bold:true,gap:22});
   field('Entrada',date(os.entered_at)); field('Status',os.status.replaceAll('_',' ')); field('Prioridade',os.priority);
   section('Cliente'); field('Nome',customer.name); field('Documento',customer.document); field('Telefone',customer.phone); if(customer.address)field('Endereço',customer.address);
   section('Equipamento'); field('Equipamento',[machine.type,machine.brand,machine.model].filter(Boolean).join(' ')); field('Ano',machine.year); field('Série',machine.serialNumber); field('Identificação interna',machine.internalId);
+  if(kind==='delivery'||kind==='work-order'){
   section('Serviço'); field('Problema relatado',os.problem_reported); field('Diagnóstico',os.diagnosis); field('Técnico',os.technician_name); field('Previsão de entrega',date(os.estimated_delivery));
-  if(quote?.items?.length){section('Serviços e itens do orçamento');for(const item of quote.items){field(item.kind.replaceAll('_',' '),`${item.description} | ${item.quantity} x ${money(item.unit_price_cents)} = ${money(item.total_cents)}`)}textLine(`Subtotal: ${money(quote.subtotal_cents)}`,{bold:true});textLine(`Desconto: ${money(quote.discount_cents)}`);textLine(`TOTAL: ${money(quote.total_cents)}`,{size:12,bold:true,gap:18})}
+  }
+  if(kind==='receipt'){
+    section('Recebimentos');
+    for(const receipt of receipts)field(date(receipt.received_at),receipt.method+' - '+money(receipt.amount_cents));
+    if(!receipts.length)textLine('Nenhum recebimento registrado.');
+  }
+  if(kind!=='receipt'&&quote?.items?.length){section('Serviços e itens do orçamento');for(const item of quote.items){field(item.kind.replaceAll('_',' '),`${item.description} | ${item.quantity} x ${money(item.unit_price_cents)} = ${money(item.total_cents)}`)}textLine(`Subtotal: ${money(quote.subtotal_cents)}`,{bold:true});textLine(`Desconto: ${money(quote.discount_cents)}`);textLine(`TOTAL: ${money(quote.total_cents)}`,{size:12,bold:true,gap:18})}
   if(parts.length){section('Peças utilizadas');for(const p of parts)field('Peça',`${p.description} | Qtd. ${p.quantity}`)}
   section('Assinaturas');y-=18;textLine('________________________________________        ________________________________________',{size:9,gap:14});textLine('Cliente / responsável                                      Responsável técnico',{size:9,gap:18});
   rule();textLine('Documento gerado localmente pelo ArtiSys Oficina.',{size:8,gap:10});

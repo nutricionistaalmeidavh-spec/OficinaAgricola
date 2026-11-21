@@ -4,13 +4,12 @@ async function enhanceWorkOrderModal(id,os){
   const bar=document.createElement('div'); bar.className='detail-block'; bar.style.marginBottom='14px';
   const canEdit=['ADMIN','ATENDIMENTO','TECNICO'].includes(state.user?.role);
   const canDuplicate=['ADMIN','ATENDIMENTO'].includes(state.user?.role);
-  bar.innerHTML=`<div class="card-head"><div><h3 style="margin:0">Ações da OS</h3><small class="muted">Correções ficam registradas no histórico</small></div><div class="action-row">${canEdit?'<button class="btn sm primary" id="editFullOS">Editar OS</button>':''}${canDuplicate?'<button class="btn sm" id="duplicateOS">Duplicar OS</button>':''}${canDuplicate&&os.status==='AGUARDANDO_APROVACAO'?'<button class="btn sm" id="approvalLinkOS">Link de aprovação</button>':''}<button class="btn sm" id="historyOS">Histórico</button><button class="btn sm soft" id="pdfOS">Gerar PDF</button></div></div>`;
+  bar.innerHTML=`<div class="card-head"><div><h3 style="margin:0">Ações da OS</h3><small class="muted">Correções ficam registradas no histórico</small></div><div class="action-row">${canEdit?'<button class="btn sm primary" id="editFullOS">Editar OS</button>':''}${canDuplicate?'<button class="btn sm" id="duplicateOS">Duplicar OS</button>':''}${canDuplicate&&os.status==='AGUARDANDO_APROVACAO'?'<button class="btn sm" id="approvalLinkOS">Link de aprovação</button>':''}<button class="btn sm" id="historyOS">Histórico</button></div></div>`;
   host.prepend(bar);
   if($('#editFullOS'))$('#editFullOS').onclick=()=>editFullWorkOrder(id);
   if($('#duplicateOS'))$('#duplicateOS').onclick=()=>duplicateWorkOrderUi(id);
   if($('#approvalLinkOS'))$('#approvalLinkOS').onclick=()=>openQuoteApproval(id,os.os_number);
   $('#historyOS').onclick=()=>showWorkOrderHistory(id);
-  $('#pdfOS').onclick=()=>downloadWorkOrderPdf(id,os.os_number);
 }
 
 function localDateTimeValue(value){
@@ -53,10 +52,10 @@ async function showWorkOrderHistory(id){
   showModal(`Histórico da OS #${os.os_number}`,`<div class="list">${rows||'<div class="empty">Nenhuma alteração registrada.</div>'}</div>`);
 }
 
-async function downloadWorkOrderPdf(id,number){
+async function downloadWorkOrderPdf(id,number,kind){
   try{
-    const bytes=await api(`/api/work-orders/${id}/documents/work-order/pdf`,{binary:true});
-    const blob=new Blob([bytes],{type:'application/pdf'}); const url=URL.createObjectURL(blob); const a=document.createElement('a');a.href=url;a.download=`OS-${number}.pdf`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);toast('PDF da OS gerado');
+    const bytes=await api(`/api/work-orders/${id}/documents/${kind}/pdf`,{binary:true});
+    const blob=new Blob([bytes],{type:'application/pdf'}); const url=URL.createObjectURL(blob); const a=document.createElement('a');a.href=url;a.download=`${{'work-order':'OS',quote:'Orcamento',delivery:'Entrega',receipt:'Recibo'}[kind]}-${number}.pdf`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);toast('PDF gerado');
   }catch(e){toast(e.message,true)}
 }
 

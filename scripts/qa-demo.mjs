@@ -115,7 +115,11 @@ try{
 
 
   await page.locator('.os-card').first().click();
-  await page.getByRole('button',{name:'Gerar PDF'}).waitFor({state:'visible'});
+  for (const kind of ['work-order', 'quote', 'delivery', 'receipt']) {
+    const card = page.locator('.detail-block').filter({has: page.locator(`[data-print="${kind}"]`)});
+    await card.getByRole('button', {name: /^Imprimir /}).waitFor({state: 'visible'});
+    await card.getByRole('button', {name: /^Baixar PDF de /}).waitFor({state: 'visible'});
+  }
   await page.getByRole('button',{name:'Histórico'}).waitFor({state:'visible'});
   await page.getByRole('button',{name:'Editar OS'}).waitFor({state:'visible'});
   await sleep(1000);

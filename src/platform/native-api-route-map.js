@@ -42,7 +42,7 @@ const ROUTES=[
  'POST /api/work-orders/:id/status /v1/orders/:id/status TECH status',
  'GET /api/work-orders/:id/history /v1/orders/:id/history ALL',
  'GET /api/work-orders/:id/quote /v1/orders/:id/quote ALL',
- 'GET /api/work-orders/:id/documents/work-order/pdf /v1/orders/:id/documents/work-order/pdf ALL',
+ 'GET /api/work-orders/:id/documents/:kind/pdf /v1/orders/:id/documents/:kind/pdf ALL',
  'GET /api/work-orders/:id/documents/:kind /v1/orders/:id/documents/:kind ALL',
  'PUT /api/work-orders/:id/quote /v1/orders/:id/quote OFFICE',
  'POST /api/work-orders/:id/quote/submit /v1/orders/:id/quote/submit OFFICE',
