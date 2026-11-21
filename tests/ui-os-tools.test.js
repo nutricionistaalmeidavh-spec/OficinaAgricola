@@ -15,7 +15,7 @@ test('OS actions expose editing, audit history, duplication and native PDF downl
   assert.match(js, /Editar OS/);
   assert.match(js, /Duplicar OS/);
   assert.match(js, /Histórico/);
-  assert.match(js, /Gerar PDF/);
-  assert.match(js, /documents\/work-order\/pdf/);
+  assert.match(await read('public/app-orders.js'), /data-pdf=/);
+  assert.match(js, /documents\/\$\{kind\}\/pdf/);
   assert.match(js, /canEdit=\['ADMIN','ATENDIMENTO','TECNICO'\]/);
 });

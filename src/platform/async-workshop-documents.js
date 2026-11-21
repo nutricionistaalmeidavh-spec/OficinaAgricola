@@ -49,11 +49,12 @@ export function createAsyncWorkshopDocuments(port){
     'SELECT * FROM receipts WHERE work_order_id=? AND reversed_at IS NULL ORDER BY received_at',[data.os.id]):[];
   return renderDocumentFromData({...data,receipts},kind);
  }
- async function workOrderPdf(workOrderId){
-  const data=await loadDocument(workOrderId,'work-order');
-  const parts=await port.all(`SELECT p.description,w.quantity FROM work_order_parts w
-   JOIN parts p ON p.id=w.part_id WHERE w.work_order_id=? AND w.reversed_at IS NULL ORDER BY w.id`,[data.os.id]);
-  return renderWorkOrderPdf({...data,parts});
+ async function workOrderPdf(workOrderId,kind='work-order'){
+  const data=await loadDocument(workOrderId,kind);
+  const parts=kind==='work-order'?await port.all(`SELECT p.description,w.quantity FROM work_order_parts w
+   JOIN parts p ON p.id=w.part_id WHERE w.work_order_id=? AND w.reversed_at IS NULL ORDER BY w.id`,[data.os.id]):[];
+  const receipts=kind==='receipt'?await port.all('SELECT * FROM receipts WHERE work_order_id=? AND reversed_at IS NULL ORDER BY received_at',[data.os.id]):[];
+  return renderWorkOrderPdf({...data,parts,receipts},kind);
  }
  return Object.freeze({renderWorkOrderDocument,workOrderPdf});
 }
