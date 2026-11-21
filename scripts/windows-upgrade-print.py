@@ -163,19 +163,29 @@ try:
         downloads.mkdir()
         cdp = browser.new_browser_cdp_session()
         cdp.send('Browser.setDownloadBehavior', {'behavior': 'allow', 'downloadPath': str(downloads)})
-        with page.expect_response(lambda r: r.url.endswith('/documents/work-order/pdf')) as export:
-            page.locator('#pdfOS').click()
-        assert export.value.status == 200 and export.value.headers['content-type'].startswith('application/pdf')
-        deadline = time.monotonic() + 45
-        target = downloads / f'OS-{order["os_number"]}.pdf'
-        while not target.exists() and time.monotonic() < deadline:
-            time.sleep(.25)
-        with pymupdf.open(target) as document:
-            text = ' '.join(sheet.get_text() for sheet in document)
-            for expected in ('ORDEM DE SERVIÇO', customer_name, item, '150,00', 'ASSINATURAS'):
-                assert expected in text, (expected, text)
-        (pdf.parent / 'os-gerar-pdf.pdf').write_bytes(target.read_bytes())
-        print('PASS Gerar PDF: downloaded original OS, customer, item, total and signatures')
+        documents = (
+            ('work-order', 'OS', 'ORDEM DE SERVIÇO', (item, '150,00')),
+            ('quote', 'Orcamento', 'ORÇAMENTO', (item, '150,00')),
+            ('delivery', 'Entrega', 'RESUMO DE ENTREGA', (item,)),
+            ('receipt', 'Recibo', 'RECIBO', ('Nenhum recebimento registrado.',)),
+        )
+        for kind, prefix, title, details in documents:
+            card = page.locator('.detail-block').filter(has=page.locator(f'[data-print="{kind}"]'))
+            button = card.locator(f'[data-pdf="{kind}"]')
+            assert button.count() == 1 and button.locator('svg').count() == 1, kind
+            with page.expect_response(lambda r: r.url.endswith(f'/documents/{kind}/pdf')) as export:
+                button.click()
+            assert export.value.status == 200 and export.value.headers['content-type'].startswith('application/pdf')
+            deadline = time.monotonic() + 45
+            target = downloads / f'{prefix}-{order["os_number"]}.pdf'
+            while not target.exists() and time.monotonic() < deadline:
+                time.sleep(.25)
+            with pymupdf.open(target) as document:
+                text = ' '.join(sheet.get_text() for sheet in document)
+                for expected in (title, customer_name, 'ASSINATURAS', *details):
+                    assert expected in text, (kind, expected, text)
+            (pdf.parent / f'{prefix.lower()}-gerar-pdf.pdf').write_bytes(target.read_bytes())
+            print(f'PASS downloaded {kind} PDF with correct content')
         with page.expect_response(lambda r: r.url.endswith('/documents/quote')) as reply:
             page.locator('[data-print=quote]').click()
         assert reply.value.status == 200 and item in reply.value.text()

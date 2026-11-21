@@ -4,11 +4,11 @@ $ErrorActionPreference = 'Stop'
 $root = Join-Path $env:RUNNER_TEMP 'oficina-upgrade-print'
 New-Item -ItemType Directory -Force $root, 'qa-output' | Out-Null
 $destination = Join-Path (Resolve-Path 'qa-output') 'orcamento-windows.pdf'
-$old = 'ArtiSys-Oficina-Setup-1.0.13-Windows-x64-Commercial.exe'
-gh release download v1.0.13 --pattern $old --dir $root
+$old = 'ArtiSys-Oficina-Setup-1.0.14-Windows-x64-Commercial.exe'
+gh release download v1.0.14 --pattern $old --dir $root
 if ($LASTEXITCODE -ne 0) { throw 'Download da versão anterior falhou' }
 $previous = Join-Path $root $old
-if ((Get-FileHash $previous).Hash -ne 'bed181671029dbf18d0b7c7e653e48e9724c17f072f0eb9f3a035c607ed10155') { throw 'Checksum anterior inválido' }
+if ((Get-FileHash $previous).Hash -ne '28ff09b098c5b6e1141337761b43d29a79bd1f30bfc380c9f4763b3f1128804a') { throw 'Checksum anterior inválido' }
 $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
 $current = (Resolve-Path "dist-electron/ArtiSys-Oficina-Setup-$version-Windows-x64-Commercial.exe").Path
 Start-Service Spooler
