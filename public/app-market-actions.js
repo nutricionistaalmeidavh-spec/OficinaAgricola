@@ -7,5 +7,5 @@ function bindMarketActions(context){
  marketUnitActions(admin,units);
  marketReferenceActions(office);
  marketApprovalActions(office);
- if(office)$('[data-crm-complete]').forEach(b=>b.onclick=()=>showModal('Concluir contato','<form class="form-stack"><label>Resultado<textarea required name="outcome" maxlength="1000"></textarea></label><button class="btn primary">Concluir</button></form>',async fd=>{await api('/api/crm/tasks/'+b.dataset.crmComplete+'/complete',{method:'POST',body:{...formObj(fd),requestId:newCommandId()}});toast('Contato concluído');await refreshCurrentPage()}));
+ if(office)$$('[data-crm-complete]').forEach(b=>b.onclick=()=>showModal('Concluir contato','<form class="form-stack"><label>Resultado<textarea required name="outcome" maxlength="1000"></textarea></label><button class="btn primary">Concluir</button></form>',async fd=>{await api('/api/crm/tasks/'+b.dataset.crmComplete+'/complete',{method:'POST',body:{...formObj(fd),requestId:newCommandId()}});toast('Contato concluído');await refreshCurrentPage()}));
 }
